@@ -1,0 +1,124 @@
+<meta charset="utf-8" />
+<title>Phase 1 — Coding Fundamentals</title>
+
+<style>
+  /* Styling is now INSIDE this file so the preview always loads it. */
+  body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    background: #1e1e1e;
+    color: #eaeaea;
+  }
+  h1 { color: #7fd1ff; }
+  button { font-size: 16px; padding: 8px 16px; cursor: pointer; }
+  #output div, #battleLog div { padding: 2px 0; }
+  hr { border-color: #444; margin: 24px 0; }
+</style>
+
+<h1>Phase 1 — The 7 Concepts</h1>
+<p>Each line below is produced by the code in this file. Read the code and the
+   output side by side. Then try the challenges I gave you.</p>
+
+<div id="output"></div>
+
+<hr />
+<button id="fightButton">Run the mini-battle</button>
+<div id="battleLog"></div>
+
+<script>
+// =====================================================================
+//  PHASE 1 — THE 7 CONCEPTS, each shown with a game example.
+//  The script now lives INSIDE this file so the preview always runs it.
+// =====================================================================
+
+// A tiny helper: print("something") shows a line in the OUTPUT box.
+const outputBox = document.getElementById("output");
+function print(text) {
+  const line = document.createElement("div");
+  line.textContent = text;
+  outputBox.appendChild(line);
+}
+
+// 1. VARIABLES — a named box that holds one value.
+let unitName = "Stick Figure";
+let health = 1;
+let attack = 1;
+print("1. VARIABLES → name: " + unitName + ", health: " + health + ", attack: " + attack);
+
+// 2. OBJECTS — bundle related values together. This is how we'll
+//    represent every stick figure in the real game.
+let unit = { name: "Stick Figure", hp: 1, attack: 1, x: 3, y: 5, team: "player1" };
+print("2. OBJECT → this unit has " + unit.hp + " hp and stands at x=" + unit.x + ", y=" + unit.y);
+
+// 3. ARRAYS — a list of things. Our game keeps ALL units in one array.
+let units = [
+  { name: "P1 unit", hp: 1, attack: 1, team: "player1" },
+  { name: "P1 unit", hp: 1, attack: 1, team: "player1" },
+  { name: "P2 unit", hp: 1, attack: 1, team: "player2" },
+];
+print("3. ARRAY → there are " + units.length + " units on the board");
+
+// 4. FUNCTIONS — a named set of steps you can run whenever you want.
+function describe(someUnit) {
+  return someUnit.name + " (" + someUnit.hp + " hp, team " + someUnit.team + ")";
+}
+print("4. FUNCTION → " + describe(units[0]));
+
+// 5. LOOPS — do the same thing to every item in a list.
+print("5. LOOP → listing every unit:");
+for (let i = 0; i < units.length; i++) {
+  print("     - " + describe(units[i]));
+}
+
+// 6. IF / ELSE — make a decision. This is the core of auto-combat.
+function attackResult(target) {
+  if (target.hp <= target.attack) {
+    return target.name + " dies!";
+  } else {
+    return target.name + " survives.";
+  }
+}
+print("6. IF/ELSE → " + attackResult(units[2]));
+
+// 7. EVENTS — run code when the player does something (like a click).
+const battleLog = document.getElementById("battleLog");
+const fightButton = document.getElementById("fightButton");
+
+fightButton.addEventListener("click", function () {
+  battleLog.textContent = ""; // clear previous run
+
+  // Two teams, each a list (array) of unit objects.
+  let team1 = [{ name: "Blue", hp: 1, attack: 1 }, { name: "Blue", hp: 1, attack: 1 }];
+  let team2 = [{ name: "Red", hp: 1, attack: 1 }, { name: "Red", hp: 1, attack: 1 }];
+
+  let roundNumber = 1;
+  // Keep fighting while BOTH teams still have units.
+  while (team1.length > 0 && team2.length > 0) {
+    let a = team1[0];
+    let b = team2[0];
+
+    b.hp = b.hp - a.attack; // team1's front hits team2's front
+    a.hp = a.hp - b.attack; // team2's front hits team1's front
+
+    let logLine = document.createElement("div");
+    logLine.textContent = "Round " + roundNumber + ": Blue and Red trade hits.";
+    battleLog.appendChild(logLine);
+
+    if (b.hp <= 0) team2.shift(); // remove a dead unit
+    if (a.hp <= 0) team1.shift();
+
+    roundNumber = roundNumber + 1;
+  }
+
+  // Announce the winner.
+  let result = document.createElement("div");
+  if (team1.length > 0) {
+    result.textContent = "🏆 Blue team wins with " + team1.length + " unit(s) left!";
+  } else if (team2.length > 0) {
+    result.textContent = "🏆 Red team wins with " + team2.length + " unit(s) left!";
+  } else {
+    result.textContent = "🤝 It's a draw!";
+  }
+  battleLog.appendChild(result);
+});
+</script>

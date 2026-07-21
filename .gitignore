@@ -1,0 +1,16 @@
+# === Operating-system junk (Windows / macOS create these automatically) ===
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# === Editor / IDE settings that are personal to one machine ===
+*.swp
+*~
+.vscode/
+
+# === Claude Code per-machine settings (keep launch.json shared, hide the local one) ===
+.claude/settings.local.json
+
+# === Dependencies / build output (none today, here for the future) ===
+node_modules/
+dist/

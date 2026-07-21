@@ -1,0 +1,260 @@
+  body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    background: #1e1e1e;
+    color: #eaeaea;
+    text-align: center;
+  }
+  h1 { color: #7fd1ff; }
+
+  /* The board is a grid. We set the number of columns in JavaScript below,
+     but the look of each cell is defined here. */
+  #board {
+    display: inline-grid;          /* lay children out in a grid */
+    gap: 2px;                      /* space between cells */
+    margin-top: 0;
+    background: #333;              /* shows through the gaps as grid lines */
+    padding: 2px;
+    border-radius: 6px;
+  }
+
+  /* Row / column number labels around the board. */
+  .coord-label {
+    display: flex; align-items: center; justify-content: center;
+    color: #bbb; font-size: 12px; user-select: none;
+  }
+
+  .cell {
+    width: 56px;
+    height: 56px;
+    background: #2b2b2b;
+    display: flex;
+    flex-direction: column;       /* stack the figure above its stats */
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
+  .stat { font-size: 10px; color: #f0f0f0; margin-top: 1px; }
+
+  /* Health bar under each unit. The dark track is a fixed width; the colored
+     fill inside is set to hp/maxHp % in render(). Redrawn every tick, so it
+     "steps" down as a unit takes damage. */
+  .hpbar {
+    width: 42px; height: 5px; margin: 2px 0 0;
+    background: #111; border: 1px solid #000; border-radius: 3px;
+    overflow: hidden;                 /* keep the fill inside the rounded corners */
+  }
+  .hpbar-fill { height: 100%; border-radius: 2px; }
+
+  /* Mana bar (casting Phase 4): a thinner blue bar UNDER the health bar, shown only for
+     caster units. Fill = mana/manaMax %, redrawn every tick so it climbs as the mage
+     regens and snaps back to empty on a cast. */
+  .manabar {
+    width: 42px; height: 3px; margin: 1px 0 0;
+    background: #111; border: 1px solid #000; border-radius: 3px;
+    overflow: hidden;
+  }
+  .manabar-fill { height: 100%; border-radius: 2px; background: #4fc3f7; }
+
+  /* Shield bar (casting, Riley 2026-07-15): a TALLER steel-white bar with the exact shield NUMBER
+     centered ON it, rendered only when a unit carries a shield pool (rank-5 Ward / Ace of Diamonds'
+     Aegis). Taller than the thin HP/mana bars so it reads as its OWN element, and the number lives
+     on the bar (not the HP stat line) so armor is unmistakably separate from health. Steel-white
+     fill = a distinct hue from the mana-blue bar and the green/yellow/red HP. Fill width =
+     shield/maxHp clamped at 100%. */
+  .shieldbar {
+    position: relative;                 /* the number is absolutely centered over the fill */
+    width: 42px; height: 12px; margin: 1px 0 0;
+    background: #111; border: 1px solid #000; border-radius: 3px;
+    overflow: hidden;
+  }
+  .shieldbar-fill { height: 100%; border-radius: 2px; background: #cfd8dc; }
+  /* The exact shield value, centered ON the steel bar. Dark text with a steel-white glow so it
+     stays legible over the light fill AND over the dark empty track when the shield is low. */
+  .shield-amt {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: bold; color: #10171a; line-height: 1;
+    text-shadow: 0 0 2px #cfd8dc, 0 0 2px #cfd8dc, 0 0 2px #cfd8dc;
+  }
+
+  /* Cast flashes (Phase 4). Both are single-tick glows toggled by a tick-stamp in render:
+     .casting = the mage lighting up blue as it discharges mana; .spell-hit = the orange
+     fire burst on a unit the spell lands on. Distinct hues from unique/fused/strike. */
+  .cell.casting   { box-shadow: inset 0 0 0 2px #4fc3f7, 0 0 11px 2px rgba(79, 195, 247, 0.95); }
+  .cell.spell-hit { box-shadow: inset 0 0 0 2px #ff7043, 0 0 10px 2px rgba(255, 87, 34, 0.95); }
+  /* Cleric heal (Slice 2): a green pulse on the mended ally the tick it's healed. */
+  .cell.healed    { box-shadow: inset 0 0 0 2px #66bb6a, 0 0 11px 2px rgba(102, 187, 106, 0.95); }
+  /* STUN (casting): a purple ring on a frozen unit while stunUntil is in the future.
+     Distinct hue from cast-blue / spell-orange / heal-green / trap-amber. */
+  .cell.stunned   { box-shadow: inset 0 0 0 2px #ce93d8, 0 0 11px 2px rgba(186, 104, 200, 0.95); }
+
+  /* The two players' home rows get a subtle tint so you can tell them apart.
+     Player 2 sits on top, Player 1 on the bottom (like a chess board). */
+  .cell.player2-zone { background: #3a2b2b; }  /* faint red */
+  .cell.player1-zone { background: #2b303a; }  /* faint blue */
+
+  /* A cell that HOLDS a unit gets a stronger team color. */
+  .cell.unit-player1 { background: #2b4a7a; }  /* Player 1 = blue */
+  .cell.unit-player2 { background: #7a2b2b; }  /* Player 2 = red */
+
+  #turnStatus { font-size: 18px; font-weight: bold; margin-top: 18px; }
+  #message { color: #ffcf6b; min-height: 20px; }  /* warnings show here */
+
+  #startButton {
+    font-size: 18px; padding: 10px 24px; margin-top: 8px;
+    cursor: pointer; color: #fff; background: #2e7d32;
+    border: none; border-radius: 6px;
+  }
+  #startButton:disabled { background: #555; cursor: default; }
+
+  #resetButton {
+    font-size: 18px; padding: 10px 24px; margin: 8px 0 0 8px;
+    cursor: pointer; color: #fff; background: #37474f;
+    border: none; border-radius: 6px;
+  }
+
+  #nextButton {
+    font-size: 18px; padding: 10px 24px; margin: 8px 0 0 8px;
+    cursor: pointer; color: #fff; background: #1565c0;
+    border: none; border-radius: 6px;
+  }
+
+  #roundInfo { font-size: 17px; color: #9ecbff; margin: 6px 0 2px; font-weight: bold; }
+
+  /* Board flanked by side chip badges. */
+  .arena { display: inline-flex; align-items: stretch; gap: 18px; margin-top: 12px; }
+  .side-chips {
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-align: left;
+  }
+  .chip-badge {
+    border: 2px solid #555; border-radius: 8px; padding: 8px 14px; min-width: 120px;
+  }
+  .chip-badge .chip-amount { font-size: 22px; font-weight: bold; color: #ffd76b; margin-top: 2px; }
+  .chip-badge.p1 { border-color: #2b4a7a; background: #1c2636; }  /* blue = Player 1 */
+  .chip-badge.p2 { border-color: #7a2b2b; background: #351f1f; }  /* red = Player 2 */
+
+  /* Live damage tracker — the balance instrument (right of the chips/buttons). */
+  #dmgPanel {
+    min-width: 190px; text-align: left; font-size: 13px;
+    border: 1px solid #444; border-radius: 8px; padding: 10px 12px;
+    background: #161a22; align-self: stretch;
+    max-height: 640px; overflow-y: auto;   /* scroll if the sections get tall */
+  }
+  .dmg-title {
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: #8b93a3; margin: 4px 0 6px;
+  }
+  .dmg-title + .dmg-team { margin-top: 0; }
+  .dmg-team { border-left: 3px solid #555; padding: 4px 0 4px 8px; margin: 8px 0; }
+  .dmg-team.p1 { border-color: #4a78c0; }
+  .dmg-team.p2 { border-color: #c05a5a; }
+  .dmg-name { font-weight: bold; margin-bottom: 2px; }
+  .dmg-line { display: flex; justify-content: space-between; color: #c7ccd6; }
+  .dmg-line b { color: #fff; font-variant-numeric: tabular-nums; }
+  /* Session suit bars */
+  .dmg-bar-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .dmg-bar-suit { width: 14px; text-align: center; font-size: 15px; }
+  .dmg-bar-track { flex: 1; height: 8px; background: #2a2f3a; border-radius: 4px; overflow: hidden; }
+  .dmg-bar-fill { display: block; height: 100%; border-radius: 4px; transition: width .2s; }
+  .dmg-bar-num { min-width: 46px; text-align: right; color: #c7ccd6; font-variant-numeric: tabular-nums; }
+  /* Card rows need a wider label than a single suit symbol ("10♣", "Q♠"). */
+  .dmg-card-lbl { min-width: 30px; text-align: center; font-size: 13px; font-weight: bold; }
+  .dmg-empty { color: #6b7280; font-size: 12px; padding: 2px 0; }
+
+  /* Round Start / Next / Reset stacked in the middle of the right column. */
+  .side-buttons { display: flex; flex-direction: column; gap: 8px; }
+  .side-buttons button { width: 100%; }
+  .side-buttons #startButton,
+  .side-buttons #nextButton,
+  .side-buttons #resetButton { margin: 0; }
+
+  .intro { max-width: 640px; margin: 0 auto; }
+
+  /* Phase E: the shared community flop in the center. */
+  #flop-area { margin: 14px 0 4px; }
+  .flop-label { font-size: 13px; color: #9ecbff; margin-bottom: 6px; }
+  #flop-cards { display: inline-flex; gap: 6px; justify-content: center; }
+  .flop-card { border-color: #caa14a; }   /* gold edge marks a community card */
+  .flop-back { background: #2b3a4a; border-color: #4a6a8a; }
+  .flop-back .cfig { color: #7fa8cf; }
+
+  .legend { margin-top: 16px; font-size: 14px; color: #aaa; }
+  .swatch {
+    display: inline-block; width: 12px; height: 12px;
+    vertical-align: middle; margin: 0 4px 0 12px; border-radius: 2px;
+  }
+
+  /* Card hands, drawn fresh each round (one card type for now). */
+  .hands { margin-top: 22px; }
+  .hand-row { margin: 6px 0; }
+  .hand-label {
+    display: inline-block; min-width: 160px; text-align: right;
+    margin-right: 10px; color: #aaa; font-size: 14px; vertical-align: middle;
+  }
+  .cards { display: inline-flex; gap: 5px; vertical-align: middle; flex-wrap: wrap; }
+  .card {
+    width: 46px; height: 58px; border-radius: 5px;
+    background: #f5f5f5; color: #222; border: 1px solid #888;
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .card .cfig  { font-size: 15px; line-height: 1.1; font-weight: bold; }
+  .card .cstat { font-size: 9px; color: #333; line-height: 1.2; }
+
+  /* Phase E: a card marked to hold for next round. */
+  .card.held {
+    border: 2px solid #d4af37;                 /* gold outline */
+    box-shadow: 0 0 6px rgba(212, 175, 55, 0.8);
+    cursor: pointer;
+  }
+  .card .chold { font-size: 8px; color: #8a6d00; font-weight: bold; }
+
+  /* Phase 1: UNIQUE "legendary" cards (J/Q/K/A specials). Purple glow so they read
+     as legendary and stay distinct from the GOLD held/flop borders. On a board cell
+     the glow is an INSET box-shadow (not a border) so the cell keeps its exact size. */
+  .card.unique { border: 2px solid #b06cff; box-shadow: 0 0 7px rgba(176, 108, 255, 0.9); }
+  .cell.unique { box-shadow: inset 0 0 0 2px #b06cff, 0 0 7px rgba(176, 108, 255, 0.9); }
+
+  /* FUSION: a "made hand" (7-2) — GREEN glow, distinct from gold held + purple unique. */
+  .card.fused { border: 2px solid #2ecc71; box-shadow: 0 0 7px rgba(46, 204, 113, 0.9); }
+  .cell.fused { box-shadow: inset 0 0 0 2px #2ecc71, 0 0 7px rgba(46, 204, 113, 0.9); }
+  /* While dragging a card over a valid fuse partner, dash its border as a hint. */
+  .card.fuse-target { outline: 2px dashed #2ecc71; outline-offset: 1px; }
+
+  /* King of Clubs airstrike: a marked enemy square, awaiting the strike at Round Start. */
+  .cell.strike-mark { box-shadow: inset 0 0 0 2px #ff5252, 0 0 6px rgba(255, 82, 82, 0.85); }
+
+  /* Rank 8 Trapline: a live trap cell, tinted by the OWNER team (blue = player1's,
+     red = player2's). A dashed inset ring reads as a hazard without hiding a unit. */
+  .cell.trap-player1 { box-shadow: inset 0 0 0 2px rgba(79, 195, 247, 0.8), 0 0 6px rgba(79, 195, 247, 0.6); }
+  .cell.trap-player2 { box-shadow: inset 0 0 0 2px rgba(255, 138, 138, 0.8), 0 0 6px rgba(255, 138, 138, 0.6); }
+  /* A live trap's ✵ glyph: bigger + a slow pulse so it catches the eye on the board. */
+  .cell .trap-glyph  { font-size: 26px; color: #ffe082; line-height: 1;
+                       text-shadow: 0 0 5px rgba(255, 214, 0, 0.8); animation: trapPulse 1s ease-in-out infinite; }
+  @keyframes trapPulse { 0%,100% { opacity: 0.55; transform: scale(0.9); }
+                         50%      { opacity: 1;    transform: scale(1.15); } }
+  /* The moment a trap SPRINGS: a bright amber burst on the victim's cell (FLASH_TICKS long). */
+  .cell.trap-sprung { box-shadow: inset 0 0 0 3px #ffca28, 0 0 13px 3px rgba(255, 179, 0, 0.95); }
+
+  /* Phase D: draw & discard pile "spots" (same size as a card). */
+  .pile {
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    width: 46px; height: 58px; border-radius: 5px; margin-right: 5px;
+    vertical-align: middle; border: 1px solid #666; font-size: 9px;
+  }
+  .pile.draw    { background: #34506b; color: #dbe7f3; }
+  .pile.discard { background: #3a3a3a; color: #cccccc; margin-right: 12px; }
+  .pile .pile-count { font-size: 15px; font-weight: bold; }
+
+  #synergies { margin-top: 16px; font-size: 13px; }
+  .synergy-row { margin: 4px 0; }
+  .synergy-label { color: #888; margin-right: 6px; }
+  .synergy-chip {
+    display: inline-block; border: 1px solid #555; border-radius: 4px;
+    padding: 2px 8px; margin: 2px 4px; background: #262626; color: #ddd;
+  }

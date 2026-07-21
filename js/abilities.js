@@ -1,0 +1,1018 @@
+// abilities.js — the ability-hook system (Phase 0 of "unique cards").
+// A unit carries an `abilities` list; the combat engine calls named hooks at key
+// moments, and every ability that implements that hook runs. This lets FUTURE
+// cards add unique effects as DATA + a small kit here, WITHOUT editing the combat
+// loop each time. Depends on: nothing (handlers read only the unit + the ctx).
+//
+// Design split (decided in Phase 0): STATS (attack, hp, range, attackSpeed,
+// critChance) are plain numbers the loop reads. ABILITIES are triggered EFFECTS
+// that fire on an event via the hooks below. Today only lifesteal is an ability;
+// crit/fast/range stay stats.
+
+// PHALANX pack-scaling (Batch A of "unit identity"): how many cards of `unit`'s
+// rank sit in its team's poker POOL (its fielded units + the shared flop — the
+// same count the poker synergies use). Always ≥ 1, because the unit's own pool
+// entry counts — so (packCount(unit) - 1) = the EXTRA copies beyond itself.
+// Berserk / Giant Slayer / Bulwark / Poison all read this ONCE at round start and
+// bake a scaled number onto the unit (like applySynergies), so a copy dying
+// mid-fight never weakens the survivors.
+function packCount(unit) {
+  return rankCounts(pokerPool(unit.team))[unit.rank] || 1;
+}
+
+// ROLE split (Riley 2026-07-15): is `suit` a RANGED suit? Decided by the SUIT's BASE range
+// (♣/♠ = 3 = ranged; ♥/♦ = 1 = melee), NOT a unit's final range — so a Q♥ buffed to range 2,
+// or an Ace of Clubs at range 16, still counts by its suit's role. Drives rank abilities that
+// come in melee vs ranged flavors (rank 6's Hellfire: a projectile for ♣/♠, a self-aura for ♥/♦).
+function isRangedSuit(suit) {
+  return SUITS[suit].range > 1;
+}
+
+// A card's rank abilities AFTER the role filter: an entry with no `role` applies to every suit
+// (shared passives like rank 6's Executioner); an entry tagged role:"melee"/"ranged" only lands
+// on the matching half. Shared by unitAbilities (what the unit actually runs) and rankAbilityText
+// (so a ♥6's tooltip advertises its aura, not the ♣/♠ projectile it can't cast).
+function rankAbilitiesFor(card) {
+  return (RANK_ABILITIES[card.rank] || []).filter(function (a) {
+    if (!a.role) return true;
+    return a.role === (isRangedSuit(card.suit) ? "ranged" : "melee");
+  });
+}
+
+// Put `stacks` of poison on `victim` from `shooter`: bump the victim's poison total
+// (drained per tick in combatStep) and stamp the shooter's plague-transfer fraction,
+// keeping the biggest if two poisoners tagged it. Shared by the normal poison-on-hit
+// AND rank 9's Poison Volley so a pierced unit rots exactly like a directly-hit one.
+function applyPoison(shooter, victim, stacks) {
+  if (!victim || victim.hp <= 0 || stacks <= 0) return;
+  victim.poison = (victim.poison || 0) + stacks;
+  const t = shooter.poisonTransfer || 0;
+  if (t > (victim.poisonTransfer || 0)) victim.poisonTransfer = t;
+}
+
+// STUN primitive (casting, Riley 2026-07-15): freeze `victim` for `ticks` — unlike SLOW
+// (which only lengthens the move cooldown), a stunned unit takes NO turn at all: it can't
+// move, can't auto-attack, and can't cast (combatStep checks u.stunUntil in both the acting
+// loop and the mana/cast pass). A tick-stamp on the victim, like slowUntil/invulnUntil;
+// KEEP THE LONGER of an existing stun and the new one so a second, shorter stun can't cut a
+// long one short. No caster fires it YET — this is the plumbing the 7s Slot Machine (and any
+// future stun cast) will call, exactly like the mana/cast pass was built before any spell.
+function applyStun(victim, ticks) {
+  if (!victim || victim.hp <= 0 || ticks <= 0) return;
+  victim.stunUntil = Math.max(victim.stunUntil || 0, tickCount + ticks);
+}
+
+// The kit library. Each kit is keyed by `kind` and implements one or more hooks.
+// Hooks available so far:
+//   onDealDamage(unit, ctx, ability) — right after `unit` lands damage on a
+//       target. ctx = { target, damage }.
+//   onKill(unit, ctx, ability) — right after `unit`'s hit drops a target to 0 HP.
+//       ctx = { target } (the unit that just died). Fires once per kill.
+//   onDeath(unit, ctx, ability) — when `unit` ITSELF drops to 0 HP, fired in
+//       combatStep just before the dead are cleared. ctx = {}. Fires once, for
+//       ANY cause of death (a hit, a redirected hit, or poison).
+// (onAttack, onRoundStart, onDamaged also exist; onCast fires from the mana/cast pass
+//  in combatStep when a caster's mana bar fills — see combat.js. New hooks get added
+//  here and wired into the engine as future cards need them.)
+const ABILITIES = {
+  // Diamonds' lifesteal: heal the attacker for the damage it just dealt, capped
+  // at its max HP. Migrated UNCHANGED from the old hard-coded check in combat.js.
+  lifesteal: {
+    onDealDamage: function (unit, ctx) {
+      unit.hp = Math.min(unit.maxHp, unit.hp + ctx.damage);
+    },
+  },
+
+  // Rank 3 — Thorns: when hit, reflect a PERCENTAGE of the damage taken back at the
+  // attacker, so a big hit stings more — the Target Dummy's whole point. RAW hp
+  // subtraction (not an attack), so it does NOT re-fire onDamaged and two thorns units
+  // can't ping-pong forever. Skips fully-soaked/zero hits (nothing to reflect).
+  thorns: {
+    // HP scaling (Batch A, replaced the old count-of-3s Phalanx): at fight start
+    // the reflect % grows with the wall's MAX HP — `reflectPer100Hp` added per 100
+    // max HP on top of the `reflect` base, capped at `reflectMax`. Runs AFTER
+    // applySynergies, so hearts/diamonds HP buffs (and DUMMY_HP_MULT) push the
+    // reflect up "for free" — the tankier the wall, the meaner it bites. Baked
+    // ONCE onto unit.thornsReflect, so losing HP mid-fight doesn't weaken it.
+    onRoundStart: function (unit, ctx, ability) {
+      let pct = ability.reflect + (unit.maxHp / 100) * (ability.reflectPer100Hp || 0);
+      if (ability.reflectMax !== undefined) pct = Math.min(pct, ability.reflectMax);
+      unit.thornsReflect = pct;
+    },
+    onDamaged: function (unit, ctx, ability) {
+      if (ctx.attacker && ctx.damage > 0) {
+        // Use the Phalanx-scaled value if it was baked (onRoundStart ran); else the
+        // base reflect (e.g. the 1v1 sim skips round-start prep).
+        const pct = (unit.thornsReflect !== undefined) ? unit.thornsReflect : ability.reflect;
+        const reflected = Math.round(ctx.damage * pct);
+        ctx.attacker.hp = ctx.attacker.hp - reflected;
+        // Reflected damage: the thorns holder (unit) is the dealer, the attacker the victim.
+        recordDamage(unit, ctx.attacker, reflected);
+      }
+    },
+  },
+
+  // 2-3 FUSION "Dirty Diaper" (Berserk × Thorns): a reflect wall whose spikes get
+  // SHARPER every hit it eats — Berserk's "stronger when hurt" spent on the Thorns
+  // reflect % instead of on attack. onRoundStart bakes the STARTING reflect exactly
+  // like Thorns (base + per-100-max-HP, capped). onDamaged reflects at the current
+  // sharpness, THEN ramps it up by `rampPerHit` toward `rampCap`. It authored-away
+  // the rank-3 Target Dummy marker, so it is NOT inert — it keeps a (taxed) body.
+  dirtyDiaper: {
+    onRoundStart: function (unit, ctx, ability) {
+      let pct = ability.reflect + (unit.maxHp / 100) * (ability.reflectPer100Hp || 0);
+      if (ability.reflectMax !== undefined) pct = Math.min(pct, ability.reflectMax);
+      unit.thornsReflect = pct;
+    },
+    onDamaged: function (unit, ctx, ability) {
+      if (!ctx.attacker || !(ctx.damage > 0)) return;
+      // Reflect at the CURRENT sharpness (fall back to base if round-start prep was
+      // skipped, e.g. the 1v1 sim). Raw HP subtraction, like Thorns — no re-trigger.
+      const pct = (unit.thornsReflect !== undefined) ? unit.thornsReflect : ability.reflect;
+      const reflected = Math.round(ctx.damage * pct);
+      ctx.attacker.hp = ctx.attacker.hp - reflected;
+      recordDamage(unit, ctx.attacker, reflected);
+      // ...then get spikier for next time (the Berserk ramp), capped at rampCap.
+      const cap = (ability.rampCap !== undefined) ? ability.rampCap : Infinity;
+      unit.thornsReflect = Math.min(cap, pct + (ability.rampPerHit || 0));
+    },
+  },
+
+  // Rank 3 — Target Dummy: a MARKER (no combat hook). Its presence flags the card as
+  // INERT: makeCardOf zeroes its attack + boosts its HP (DUMMY_HP_MULT), and combatStep
+  // skips its whole turn (no move, no attack). All a dummy does is soak hits and reflect
+  // Thorns — read via cardIsInert (below), like the other non-hook markers.
+  targetDummy: {},
+
+  // Rank 2 — Berserk: each time it's hurt, gain a share of its STARTING attack
+  // (captured once, so the growth is linear rather than compounding). The ramp is
+  // INFINITE by design — every hit survived is more attack, so the 2♦ is the
+  // natural carry (lifesteal keeps it alive to keep ramping).
+  // PHALANX pack-scaling: at fight start, each EXTRA 2 in the pool (a) adds
+  // `hpPerExtra` of this unit's max HP — a tougher berserker survives more hits,
+  // and every hit is more attack — and (b) raises the per-hit gain by
+  // `gainPerExtra`, baked onto unit.berserkGain. Runs AFTER applySynergies, so
+  // the HP bonus multiplies the already-buffed number.
+  berserk: {
+    onRoundStart: function (unit, ctx, ability) {
+      const extras = packCount(unit) - 1;
+      if (ability.hpPerExtra && extras > 0) {
+        const bonus = Math.round(unit.maxHp * ability.hpPerExtra * extras);
+        unit.hp = unit.hp + bonus;
+        unit.maxHp = unit.maxHp + bonus;
+      }
+      unit.berserkGain = ability.gain + (ability.gainPerExtra || 0) * extras;
+    },
+    onDamaged: function (unit, ctx, ability) {
+      if (unit.baseAttack === undefined) unit.baseAttack = unit.attack;
+      // The pack-scaled gain if round-start baked it; else the base gain (e.g.
+      // the 1v1 sim path that skips round-start prep).
+      const gain = (unit.berserkGain !== undefined) ? unit.berserkGain : ability.gain;
+      unit.attack = unit.attack + Math.round(unit.baseAttack * gain);
+    },
+  },
+
+  // Rank 4 — Giant Slayer: bonus damage vs targets with MORE max HP than itself
+  // (it "punches up"). Plays differently per suit for free — brutal on a glassy
+  // 4♠/4♣, tame on a tanky 4♥ whose own maxHP is already high.
+  // PHALANX pack-scaling: the bonus climbs by `bonusPerExtra` per EXTRA 4 in the
+  // pool, capped at `bonusMax`, baked onto unit.slayerBonus at fight start.
+  giantSlayer: {
+    onRoundStart: function (unit, ctx, ability) {
+      let bonus = ability.bonus + (ability.bonusPerExtra || 0) * (packCount(unit) - 1);
+      if (ability.bonusMax !== undefined) bonus = Math.min(bonus, ability.bonusMax);
+      unit.slayerBonus = bonus;
+    },
+    onAttack: function (unit, ctx, ability) {
+      if (ctx.target.maxHp > unit.maxHp) {
+        // The pack-scaled bonus if baked; else the base (the 1v1 sim path).
+        const bonus = (unit.slayerBonus !== undefined) ? unit.slayerBonus : ability.bonus;
+        ctx.damage = Math.round(ctx.damage * (1 + bonus));
+      }
+    },
+  },
+
+  // Rank 5 — Slippery: chance to dodge an incoming hit entirely (sets ctx.dodged,
+  // which attackTarget checks to cancel the whole attack).
+  slippery: {
+    onIncomingHit: function (unit, ctx, ability) {
+      if (Math.random() < ability.chance) ctx.dodged = true;
+    },
+  },
+
+  // Rank 6 — Executioner: EXECUTES targets already LOW on HP (the mirror of Giant
+  // Slayer, which punches up — this one finishes the wounded). If the target is at
+  // or below `threshold` of its max HP before the hit, the hit is flagged as an
+  // execute; attackTarget then makes the damage EXACTLY lethal, punching through
+  // Bulwark's reduction and the Aegis shield. An execute can still be dodged or
+  // blanked by invulnerability — those cancel the whole attack before this runs.
+  executioner: {
+    onAttack: function (unit, ctx, ability) {
+      if (ctx.target.hp <= ctx.target.maxHp * ability.threshold) ctx.execute = true;
+    },
+  },
+
+  // Rank 7 — Gambler: every hit rolls a random multiplier between a FLOOR and
+  // `max` (leans into the game's poker/gambling theme). Batch B ramp: each landed
+  // hit raises the floor by `rampPerHit`, from `min` up to `max` — a gambler on a
+  // heater whose worst roll keeps improving until every hit is a guaranteed
+  // haymaker. The floor lives on the unit (unit.gamblerMin), so it resets when
+  // units rebuild next round. onAttack only fires for hits that will land (dodge
+  // and invulnerability cancel the attack before it), so whiffs don't ramp.
+  // FULLY ramped, each damaging hit has `stealChance` to pickpocket chips from
+  // the enemy player — the first ability to touch the ECONOMY mid-combat. The 7♦
+  // steals `diamondBonus` more (the wealth suit).
+  gambler: {
+    onAttack: function (unit, ctx, ability) {
+      if (unit.gamblerMin === undefined) unit.gamblerMin = ability.min;
+      const factor = unit.gamblerMin + Math.random() * (ability.max - unit.gamblerMin);
+      ctx.damage = Math.round(ctx.damage * factor);
+      ctx.rollFactor = factor;   // expose the roll so a later kit can read it (6-7 Jackpot)
+      unit.gamblerMin = Math.min(ability.max, unit.gamblerMin + (ability.rampPerHit || 0));
+    },
+    onDealDamage: function (unit, ctx, ability) {
+      // The steal: only once fully ramped, only on a hit that actually cost HP
+      // (a shield-soaked 0 pays nothing), and only what the victim can afford.
+      if (unit.gamblerMin === undefined || unit.gamblerMin < ability.max) return;
+      if (!(ctx.damage > 0)) return;
+      if (Math.random() >= ability.stealChance) return;
+      const enemy = (unit.team === "player1") ? "player2" : "player1";
+      let amount = ability.stealAmount + (unit.suit === "diamonds" ? (ability.diamondBonus || 0) : 0);
+      amount = Math.min(amount, chips[enemy] || 0);
+      if (amount <= 0) return;
+      chips[enemy] = chips[enemy] - amount;
+      chips[unit.team] = (chips[unit.team] || 0) + amount;
+      if (!SIM_MODE) updateChipInfo();   // chip badges live-update mid-fight
+    },
+  },
+
+  // 6-7 FUSION "Double or Nothing" (Gambler × Executioner): rides the Gambler kit
+  // (listed BEFORE this one, so it has already stashed its rolled multiplier on
+  // ctx.rollFactor) and turns a JACKPOT roll — rollFactor at or above `jackpotAt` —
+  // into a guaranteed execute, lethal through Bulwark and shields like rank 6's
+  // Executioner. The normal low-HP Executioner (also listed) still fires on its own.
+  // As the Gambler's floor ramps, jackpots (and thus executes) grow more frequent.
+  jackpotExecute: {
+    onAttack: function (unit, ctx, ability) {
+      if (ctx.rollFactor !== undefined && ctx.rollFactor >= ability.jackpotAt) {
+        ctx.execute = true;
+      }
+    },
+  },
+
+  // Rank 8 — Bulwark: flat damage reduction on incoming hits. Sets ctx.reduce,
+  // which attackTarget subtracts AFTER crit/bonuses (floored at 1 so a shield is
+  // never full immunity). Great vs many small hits, weak vs one big one.
+  // PHALANX pack-scaling: the reduction climbs by `reducePerExtra` per EXTRA 8 in
+  // the pool, baked onto unit.bulwarkReduce at fight start. No cap needed — the
+  // engine's floor-at-1 means a wall of 8s gets very sturdy but never immune.
+  bulwark: {
+    onRoundStart: function (unit, ctx, ability) {
+      unit.bulwarkReduce = ability.reduce + (ability.reducePerExtra || 0) * (packCount(unit) - 1);
+    },
+    onIncomingHit: function (unit, ctx, ability) {
+      // The pack-scaled reduction if baked; else the base (the 1v1 sim path).
+      const reduce = (unit.bulwarkReduce !== undefined) ? unit.bulwarkReduce : ability.reduce;
+      ctx.reduce = (ctx.reduce || 0) + reduce;
+    },
+  },
+
+  // Rank 9 — Poison: hits apply poison STACKS to the target (stored on the victim
+  // as u.poison, total damage-per-tick). The draining happens in combat.js's
+  // combatStep each tick — the status lives on the victim, not on its own ability
+  // list, so it can't be a victim-side hook. Ignores HP scaling → great vs tanks.
+  // PHALANX pack-scaling: each stack applied is worth `stackPerExtra` more per
+  // EXTRA 9 in the pool, baked onto unit.poisonStack at fight start.
+  // PLAGUE rank-up (Batch B): with `transferAt`+ nines in the pool, this unit's
+  // poison JUMPS when its victim dies — the fraction is baked here, stamped onto
+  // each victim on hit, and combatStep's transfer block does the jumping (the
+  // status lives on the victim, so the engine owns the death moment).
+  poison: {
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);
+      unit.poisonStack = ability.stackDamage + (ability.stackPerExtra || 0) * (count - 1);
+      unit.poisonTransfer = (ability.transferAt !== undefined && count >= ability.transferAt)
+        ? (ability.transferPct || 0) : 0;
+    },
+    onDealDamage: function (unit, ctx, ability) {
+      // The pack-scaled stack if baked; else the base (the 1v1 sim path).
+      const stack = (unit.poisonStack !== undefined) ? unit.poisonStack : ability.stackDamage;
+      applyPoison(unit, ctx.target, stack);
+    },
+  },
+
+  // POISON VOLLEY (rank 9's cast — the first PIERCING spell). Fires from the mana/cast
+  // pass when the bar (attack-charged) fills and an enemy sits within castRange. The arrow
+  // flies from the shooter THROUGH the aimed target and onward, poisoning it plus every
+  // enemy behind it on the straight 8-direction ray (up to a pack-scaled `pierce` depth —
+  // baked in onRoundStart). Each struck unit takes `poisonStack × stackMult` stacks via the
+  // shared applyPoison (so it also inherits the plague-jump). No direct damage — the DoT is
+  // the payload. Reuses `poisonStack`, which poison.onRoundStart already baked on this unit.
+  poisonVolley: {
+    onRoundStart: function (unit, ctx, ability) {
+      const cap = (ability.pierceMax !== undefined) ? ability.pierceMax : Infinity;
+      unit.volleyPierce = Math.min(cap, ability.pierce + (ability.piercePerExtra || 0) * (packCount(unit) - 1));
+    },
+    onCast: function (unit, ctx, ability) {
+      const target = ctx.target;
+      if (!target) return;
+      const maxPierce = (unit.volleyPierce !== undefined) ? unit.volleyPierce : ability.pierce;
+      const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
+      const stacks = Math.round(base * (ability.stackMult || 1));
+      const line = unitsAlongLine(unit, target, maxPierce);
+      for (let i = 0; i < line.length; i++) {
+        applyPoison(unit, line[i], stacks);
+        line[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the arrow strikes
+      }
+    },
+  },
+
+  // MIASMA (rank 9's MELEE cast — a self-centered POISON nova, casting, Riley 2026-07-15).
+  // The melee ♥/♦ 9s can't loose the ranged Poison Volley line, so they exhale it instead: on a
+  // full (attack-mana) bar, poison EVERY enemy within `radius` of the caster for `poisonStack ×
+  // stackMult` stacks. The exact twin of the rank-6 burnAura but with applyPoison instead of
+  // dealSpellDamage — so it reuses enemiesNear, the `poisonStack` baked by poison.onRoundStart
+  // (same as Poison Volley), AND the plague-jump (applyPoison stamps the shooter's transfer onto
+  // each victim). Pure dispatch, zero engine change. castTargeting "self" fires it with no aim —
+  // the melee 9 is already in the cloud. stackMult is lower than the Volley's: it rots a ring.
+  poisonNova: {
+    onCast: function (unit, ctx, ability) {
+      const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
+      const stacks = Math.round(base * (ability.stackMult || 1));
+      const foes = enemiesNear(unit, ability.radius || 1);
+      for (let i = 0; i < foes.length; i++) {
+        applyPoison(unit, foes[i], stacks);
+        foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the cloud touches
+      }
+    },
+  },
+
+  // Ace of Diamonds — Aegis: on a kill, bank a shield worth a fraction of the
+  // slain unit's MAX HP. The shield is a damage pool on the unit (u.shield) that
+  // combat.js drains before HP. Uses the victim's maxHp (its full "health" stat),
+  // not its leftover HP, so the reward doesn't shrink just because you softened it
+  // up first. Stacks across kills → a diamond Ace that keeps killing gets tanky.
+  shieldOnKill: {
+    onKill: function (unit, ctx, ability) {
+      unit.shield = (unit.shield || 0) + Math.round(ctx.target.maxHp * ability.fraction);
+    },
+  },
+
+  // Ace of Hearts — Necromancer: on a kill, pull one RANDOM card off the owner's
+  // bench (hands[team]) and spawn it as a unit on the nearest empty cell. It moves
+  // to `played` so it's tracked/discarded like any board card. Silently does nothing
+  // if the bench is empty or the board is full. The summon is a BONUS body — it is
+  // added straight to `units` and never checks the round's unit cap.
+  summonOnKill: {
+    onKill: function (unit, ctx, ability) {
+      const bench = hands[unit.team];
+      if (!bench || bench.length === 0) return;         // nothing left to raise
+      const cell = nearestEmptyCell(unit.x, unit.y);
+      if (cell === null) return;                        // nowhere to put it
+      const idx = Math.floor(Math.random() * bench.length);
+      const card = bench.splice(idx, 1)[0];             // pull a random bench card
+      played[unit.team].push(card);                     // now a board card (discarded at round end)
+      units.push(buildUnit(card, cell.x, cell.y, unit.team));
+    },
+  },
+
+  // King of Clubs — Airstrike: a PLACEMENT marker (no combat hook). Its presence on
+  // the board grants marks (read by strikeAllowance); the strike itself resolves in
+  // gameflow's resolveStrikes at Round Start. Listed so it's a real kit / tooltip.
+  airstrike: {},
+
+  // Queen of Spades — The Black Lady: a HAND marker (no combat hook). Read by
+  // handTax at round end to bleed chips from a player still holding her. Harmless if
+  // she's placed as a unit (no hooks fire); the penalty only applies from the hand.
+  houseTax: {},
+
+  // Jack of Diamonds — Highwayman: a PLAYED-card marker (no combat hook). Read by
+  // teamLootMult at round end to fatten the winner's chip steal. He only has to be
+  // fielded (played) that round — he needn't survive the fight to have done the job.
+  loot: {},
+
+  // Queens of Diamonds & Clubs — Extinguish: a FIELDED marker (no combat hook). Read
+  // by isSuitExtinguished in synergies.js to switch off an enemy suit's flush buff.
+  extinguish: {},
+
+  // Jack of Clubs — Cleave: on every hit, splash a fraction of the damage to enemies
+  // within `radius` cells of the TARGET. Raw HP subtraction (like Thorns/Poison) so
+  // it can't re-trigger on-hit effects or recurse; splash kills are cleared by
+  // combatStep's normal filter. The primary target already took the full hit.
+  cleave: {
+    onDealDamage: function (unit, ctx, ability) {
+      const splash = Math.round(ctx.damage * ability.cleaveMult);
+      if (splash <= 0) return;
+      for (let i = 0; i < units.length; i++) {
+        const u = units[i];
+        if (u.team === unit.team || u === ctx.target) continue;   // enemies only, not the primary
+        const dist = Math.max(Math.abs(u.x - ctx.target.x), Math.abs(u.y - ctx.target.y));
+        if (dist <= ability.radius) {
+          u.hp = u.hp - splash;
+          recordDamage(unit, u, splash);   // cleave splash counts too
+        }
+      }
+    },
+  },
+
+  // FIREBALL (casting Phase 2 — the first spell). Fires from the mana/cast pass in
+  // combat.js when a mage's bar is full and a target sits within castRange. It nukes the
+  // target for `spellPower` × the caster's CURRENT attack (so a fireball rides the same
+  // rank/suit/synergy scaling as everything else), then splashes the same amount to every
+  // enemy within `radius` cells of the target (Chebyshev, like Cleave). radius 0 = single
+  // target. `splashMult` (default 1) tunes the splash down if wanted. All damage goes
+  // through dealSpellDamage — shields/invuln/redirect + the victim's Thorns/Berserk, but
+  // no crit and no lifesteal. Balance knobs: spellPower, radius, splashMult, + the mana
+  // profile (manaMax/manaRegen/manaStart) on the card that sets cast cadence.
+  fireball: {
+    onCast: function (unit, ctx, ability) {
+      const target = ctx.target;
+      if (!target) return;
+      const dmg = Math.round(unit.attack * (ability.spellPower || 1));
+      dealSpellDamage(unit, target, dmg);
+      const radius = ability.radius || 0;
+      if (radius <= 0) return;
+      const splash = Math.round(dmg * (ability.splashMult !== undefined ? ability.splashMult : 1));
+      for (let i = 0; i < units.length; i++) {
+        const u = units[i];
+        if (u.team === unit.team || u === target || u.hp <= 0) continue;   // enemies only, not the primary
+        const dist = Math.max(Math.abs(u.x - target.x), Math.abs(u.y - target.y));
+        if (dist <= radius) dealSpellDamage(unit, u, splash);
+      }
+    },
+  },
+
+  // HELLFIRE AURA (rank 6's MELEE cast — the first self-centered NOVA, casting, Riley 2026-07-15).
+  // The melee ♥/♦ 6s can't lob the ranged Hellfire projectile, so they radiate it instead: on a
+  // full (attack-mana) bar, scorch EVERY enemy within `radius` of the caster for `spellPower` ×
+  // its current attack. Reuses enemiesNear (the self-centered mirror of unitsAlongLine) + the
+  // shared dealSpellDamage (shields/invuln/redirect + Thorns/Berserk, no crit/lifesteal — exactly
+  // like Hellfire), so this kit is pure dispatch with zero engine change. castTargeting "self"
+  // fires it the instant the bar fills — the melee devil is already surrounded, so no aim needed.
+  // spellPower is deliberately lower than the projectile's: it pays for hitting a whole ring.
+  burnAura: {
+    onCast: function (unit, ctx, ability) {
+      const dmg = Math.round(unit.attack * (ability.spellPower || 0.6));
+      const foes = enemiesNear(unit, ability.radius || 1);
+      for (let i = 0; i < foes.length; i++) {
+        dealSpellDamage(unit, foes[i], dmg);
+        foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each scorched cell
+      }
+    },
+  },
+
+  // TRAPLINE (rank 8, casting Slice 1 — the first "self"-targeting cast). The 8s stay
+  // Bulwark tanks but ALSO lay a line of single-use traps one cell TOWARD the enemy each
+  // time their (deliberately slow) mana bar fills. onRoundStart bakes the pack-scaled
+  // numbers ONCE — more 8s pooled → a WIDER line and a LONGER slow — so a dying copy
+  // never weakens the survivors (same pattern as Bulwark/Poison). onCast just drops the
+  // cells. The trap's actual bite (minimal damage + slow, then consume) lives in
+  // combatStep's trap pass, because the hazard sits on the BOARD, not on a unit.
+  trapline: {
+    onRoundStart: function (unit, ctx, ability) {
+      const extras = packCount(unit) - 1;                   // extra 8s in the pool
+      let width = ability.lineWidth + (ability.widthPerExtra || 0) * extras;
+      if (ability.widthMax !== undefined) width = Math.min(width, ability.widthMax);
+      unit.trapWidth = width;
+      unit.trapDamage = ability.damage + (ability.damagePerExtra || 0) * extras;
+      unit.trapSlow = ability.slowTicks + (ability.slowPerExtra || 0) * extras;
+    },
+    onCast: function (unit, ctx, ability) {
+      // "In front" = one row toward the enemy: player1 sits low and pushes UP (-y),
+      // player2 sits high and pushes DOWN (+y).
+      const forward = unit.team === "player1" ? -1 : 1;
+      const ty = unit.y + forward;
+      if (ty < 0 || ty >= ROWS) return;                     // caster on the far edge → no room
+      const width  = (unit.trapWidth  !== undefined) ? unit.trapWidth  : ability.lineWidth;
+      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.damage;
+      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.slowTicks;
+      // Center the line on the caster's column: width 1 → just ahead; 3 → ±1; 5 → ±2.
+      // dropTrap handles off-board + same-team-dedup, so this just walks the columns.
+      const half = Math.floor((width - 1) / 2);
+      for (let dx = -half; dx <= width - 1 - half; dx++) {
+        dropTrap(unit.team, unit.x + dx, ty, damage, slow);
+      }
+    },
+  },
+
+  // CALTROPS (rank 8's RANGED cast — the anti-DIVE self-ring, casting, Riley 2026-07-15). The
+  // ranged ♣/♠ 8s can't use Trapline usefully — they sit at the BACK, so its "one row forward"
+  // traps land in their own empty territory. Caltrops instead lays traps in a RING around the
+  // caster (the cells within `radius`, Chebyshev), a defensive perimeter that bites anything
+  // diving the backline tank. Same trap-zoning identity as Trapline, just placed where a
+  // backliner actually needs it. Reuses the WHOLE trap system: dropTrap (bounds + same-team
+  // dedup) and combatStep's trap pass (damage + slow, then consume) — zero engine change. Bakes
+  // pack-scaled damage/slow at round start exactly like Trapline (more 8s pooled → nastier
+  // ring). Regen-mana on the same slow clock as Trapline so the perimeter can't carpet the board.
+  caltrops: {
+    onRoundStart: function (unit, ctx, ability) {
+      const extras = packCount(unit) - 1;                   // extra 8s in the pool
+      unit.trapDamage = ability.damage + (ability.damagePerExtra || 0) * extras;
+      unit.trapSlow = ability.slowTicks + (ability.slowPerExtra || 0) * extras;
+    },
+    onCast: function (unit, ctx, ability) {
+      const r = ability.radius || 1;                        // radius 1 = the 8 cells hugging it
+      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.damage;
+      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.slowTicks;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx === 0 && dy === 0) continue;               // not the caster's own cell
+          dropTrap(unit.team, unit.x + dx, unit.y + dy, damage, slow);
+        }
+      }
+    },
+  },
+
+  // CLERIC (Queen of Clubs, casting Slice 2 — the first "ally"-targeting cast and the first
+  // NON-damage spell). Its mana fills from SWINGING (manaPerAttack), so a club's fast attack
+  // speed — and any attack-speed buff — makes her heal MORE often. The cast pass picks the
+  // most-wounded ally in castRange (ctx.target) and holds the bar if nobody's hurt; this
+  // handler just restores HP = healPower × the Cleric's current attack (so the mend rides
+  // her rank/suit/synergy scaling like everything else), capped at the ally's maxHp.
+  cleric: {
+    // HEALER-FIRST (Riley 2026-07-15): she hits SOFT so she's a support, not a carry.
+    // Reduce her attack ONCE at round start (like Midas/Warlord scale theirs), AFTER
+    // applySynergies so it trims her already-buffed number. Her heal is decoupled — a
+    // bumped healPower keeps mends strong even though attack is low (heal reads this
+    // reduced attack during combat: healPower 5.0 × ~96 ≈ her old ~480).
+    onRoundStart: function (unit, ctx, ability) {
+      if (ability.attackMult !== undefined) {
+        unit.attack = Math.round(unit.attack * ability.attackMult);
+      }
+    },
+    onCast: function (unit, ctx, ability) {
+      const target = ctx.target;
+      if (!target) return;
+      const amount = Math.round(unit.attack * (ability.healPower || 1));
+      heal(unit, target, amount);
+    },
+  },
+
+  // WARD (rank 5's cast — a "self"-targeting SHIELD, casting, Riley 2026-07-15). On a full
+  // (regen) bar it banks a shield worth `shieldFrac` of its OWN max HP onto u.shield — the
+  // SAME damage pool the Ace of Diamonds' Aegis uses, which attackTarget/dealSpellDamage
+  // already drain before HP. So this reuses the shield mechanic wholesale: zero engine change,
+  // just a new source that fills it. Scales with maxHp, so the tanky ♥5 wards hardest. The
+  // blue cast-flash (set by the mana/cast pass) is its visual — no extra flash needed.
+  wardCast: {
+    onCast: function (unit, ctx, ability) {
+      unit.shield = (unit.shield || 0) + Math.round(unit.maxHp * (ability.shieldFrac || 0.5));
+    },
+  },
+
+  // HASTE (rank 4's cast — a "self"-targeting ATTACK-SPEED buff, casting, Riley 2026-07-15).
+  // On a full (attack-mana) bar it multiplies its own attackSpeed by (1 + `speedMult`), a
+  // STACKING ramp like Berserk's attack growth — but capped at `speedMax` because attack-mana
+  // makes it a snowball (faster swings → more mana → more casts). Reads/writes only the plain
+  // attackSpeed stat the combat loop already uses to pace attacks, so no engine change.
+  hasteCast: {
+    onCast: function (unit, ctx, ability) {
+      const cap = (ability.speedMax !== undefined) ? ability.speedMax : Infinity;
+      unit.attackSpeed = Math.min(cap, unit.attackSpeed * (1 + (ability.speedMult || 0)));
+    },
+  },
+
+  // CHARGE (rank 4's MELEE rider — a "self" move-speed burst, casting, Riley 2026-07-15). The
+  // melee ♥/♦ 4s keep the same Haste attack-speed cast the ranged 4s get, and ALSO gain this:
+  // a bump to `moveSteps` (how many steps the unit takes per move-tick — default 1, read in
+  // combatStep's movement branch), so a hasted melee 4 CLOSES the gap faster instead of only
+  // swinging faster. Ramps `stepGain` per cast, capped at `stepMax`, exactly like Haste ramps
+  // attackSpeed. It has NO `cast`/mana profile of its own — it rides the Haste bar: runAbilityHook
+  // fires EVERY ability's onCast when the bar fills (it doesn't check the `cast` flag), so Charge
+  // discharges alongside Haste on one bar. Move speed matters because base movement is already
+  // every-tick (MOVE_COOLDOWN_TICKS 0), so the only way to be faster is extra steps per tick.
+  chargeCast: {
+    onCast: function (unit, ctx, ability) {
+      const cap = (ability.stepMax !== undefined) ? ability.stepMax : Infinity;
+      unit.moveSteps = Math.min(cap, (unit.moveSteps || 1) + (ability.stepGain || 1));
+    },
+  },
+
+  // ADRENALINE (rank 2's cast — a "self" survival burst, casting, Riley 2026-07-15). On a full
+  // (attack-mana) bar it HEALS itself for `healFrac` of max HP (via the shared heal(), so it
+  // gets the green pulse) AND ramps its ATTACK by `atkGain` of its STARTING attack. Scales
+  // DAMAGE, not speed (Riley 2026-07-15) — uses the SAME captured-base pattern as Berserk
+  // (`unit.baseAttack` grabbed once, added to linearly so it's not compounding), and the two
+  // share that base so their ramps stack cleanly. Pairs with Berserk: getting hit grows attack,
+  // Adrenaline grows it again on cast AND keeps the body alive to keep both ramps paying off.
+  adrenaline: {
+    onCast: function (unit, ctx, ability) {
+      if (ability.healFrac) heal(unit, unit, Math.round(unit.maxHp * ability.healFrac));
+      if (ability.atkGain) {
+        if (unit.baseAttack === undefined) unit.baseAttack = unit.attack;   // capture starting attack once (shared with Berserk)
+        unit.attack = unit.attack + Math.round(unit.baseAttack * ability.atkGain);
+      }
+    },
+  },
+
+  // SLOT MACHINE (rank 7's cast — the "spin", casting, Riley 2026-07-15). The Gambler rank gains a
+  // hybrid ATTACK-mana cast that, each time the bar fills, SPINS one random reel from `slots` and
+  // fires it — leaning all the way into the poker/gambling theme. Every reel reuses a primitive that
+  // ALREADY EXISTS (dealSpellDamage / chainTargets / applyStun / applyPoison / heal), so this kit is
+  // PURE DISPATCH — zero combat-loop change. Enemy reels use ctx.target (nearest enemy in castRange,
+  // castTargeting "enemy"); the Heal reel finds its OWN most-wounded ally. `unit.lastSpin` records the
+  // result for a future on-caster label. A whiffed heal (nobody hurt) is just a bad spin — on-theme.
+  slotMachine: {
+    onCast: function (unit, ctx, ability) {
+      const slots = ability.slots || [];
+      if (slots.length === 0) return;
+      const slot = slots[Math.floor(Math.random() * slots.length)];   // uniform spin
+      unit.lastSpin = slot.effect;
+      const target = ctx.target;                                      // nearest enemy in range (may be null)
+      switch (slot.effect) {
+        case "hellfire":   // single-target nuke (dealSpellDamage flashes the impact itself)
+          if (!target) return;
+          dealSpellDamage(unit, target, Math.round(unit.attack * (slot.spellPower || 2)));
+          break;
+        case "chain": {     // bouncing bolt, damage decays each hop
+          if (!target) return;
+          const line = chainTargets(unit, target, slot.jumps || 3, slot.jumpRange || 3);
+          const base = Math.round(unit.attack * (slot.spellPower || 1.5));
+          const falloff = (slot.falloff !== undefined) ? slot.falloff : 0.7;
+          for (let i = 0; i < line.length; i++) {
+            dealSpellDamage(unit, line[i], Math.round(base * Math.pow(falloff, i)));
+          }
+          break;
+        }
+        case "stun":        // freeze the target (Phase 1's stun primitive; the .stunned purple glow shows)
+          if (!target) return;
+          applyStun(target, slot.ticks || 8);
+          target.spellHitUntil = tickCount + FLASH_TICKS;
+          break;
+        case "plague":      // dump poison stacks (inherits the drain + plague-jump)
+          if (!target) return;
+          applyPoison(unit, target, slot.stacks || 20);
+          target.spellHitUntil = tickCount + FLASH_TICKS;
+          break;
+        case "heal": {      // mend the most-wounded ally in range (self ok); a no-op if nobody's hurt
+          const ally = lowestHpAllyInRange(unit, unit.castRange);
+          if (ally) heal(unit, ally, Math.round(unit.attack * (slot.healPower || 4)));
+          break;
+        }
+      }
+    },
+  },
+
+  // King of Spades — Warlord's Levy: at the start of each fight, scale its attack
+  // by a flat % per LOW card (rank 2-5) its team has PLAYED all game
+  // (weakCardsPlayed). Cumulative and UNCAPPED — a "field cheap bodies to feed the
+  // King" build. Runs at round start AFTER synergies, so it multiplies the
+  // already-buffed attack. `perCard` is the balance knob.
+  warlordLevy: {
+    onRoundStart: function (unit, ctx, ability) {
+      const count = weakCardsPlayed[unit.team] || 0;
+      unit.attack = Math.round(unit.attack * (1 + ability.perCard * count));
+    },
+  },
+
+  // King of Diamonds — Midas King: at the start of each fight, scale its attack by
+  // its owner's CHIP stack relative to `baseline` (the neutral start). Above the
+  // baseline he ramps (snowball for the chip leader), below it he weakens — but a
+  // `floor` keeps him from ever falling under that fraction of his attack. Runs at
+  // round start AFTER synergies, so it multiplies the already-buffed attack.
+  midasKing: {
+    onRoundStart: function (unit, ctx, ability) {
+      const gold = chips[unit.team] || 0;
+      const mult = Math.max(ability.floor, 1 + (gold - ability.baseline) * ability.perChip);
+      unit.attack = Math.round(unit.attack * mult);
+    },
+  },
+
+  // One-Eyed Jacks — Bower: at fight start, buff every unit of `buffSuit` on BOTH
+  // teams (no team filter — that's the "affects both boards" part). Whichever knobs
+  // the card carries get applied: atkMult (attack), hpMult (hp AND maxHp, so the
+  // health bar and tankiness both grow), speedMult (attack speed). Runs after
+  // synergies, so it stacks on top of any flush/poker buffs. Multiple copies stack.
+  bower: {
+    onRoundStart: function (unit, ctx, ability) {
+      for (let i = 0; i < units.length; i++) {
+        const u = units[i];
+        if (u.suit !== ability.buffSuit) continue;
+        if (ability.atkMult) u.attack = Math.round(u.attack * (1 + ability.atkMult));
+        if (ability.hpMult) {
+          u.hp = Math.round(u.hp * (1 + ability.hpMult));
+          u.maxHp = Math.round(u.maxHp * (1 + ability.hpMult));
+        }
+        if (ability.speedMult) u.attackSpeed = u.attackSpeed * (1 + ability.speedMult);
+      }
+    },
+  },
+
+  // Queen of Hearts — Royal Guard: a PASSIVE marker (no combat hook). While her
+  // King of Hearts lives, the damage pipeline (royalSink, read in attackTarget)
+  // reroutes every hit she'd take onto him. Listed here so the ability is a real
+  // kit and shows in tooltips; the redirect itself lives in the engine.
+  royalGuard: {},
+
+  // King of Hearts — Royal Vow: on HIS death, grant his Queen of Hearts partner a
+  // window of invulnerability (an invulnUntil tick-stamp the engine respects). The
+  // window covers ~1.5s — see the hearts-13 config note for the tick math.
+  royalVow: {
+    onDeath: function (unit, ctx, ability) {
+      const partner = livingPartner(unit, ability.partnerRank);
+      if (partner) partner.invulnUntil = tickCount + ability.invulnTicks;
+    },
+  },
+
+  // Rank 10 — Rally (Batch C rework, was team-wide attack): an ADJACENCY aura.
+  // At fight start, buff every ally within `radius` cells (Chebyshev, same as
+  // range/movement) — NOT itself, NOT enemies. Which stat depends on this 10's
+  // SUIT (the `suits` map on the ability entry): ♥ HP, ♠ crit, ♣ attack speed,
+  // ♦ grants the lifesteal ability outright. Runs after synergies bake, so the
+  // buffs multiply already-buffed numbers; baked ONCE from placement positions
+  // (units wander mid-fight but the rally is the pre-battle speech). PHALANX
+  // pack-scaling: magnitudes × (1 + `perExtra` per extra 10 in the pool); the ♦
+  // grant is binary, so extra 10♦s pay in board coverage, not strength. Two
+  // rally auras overlapping the same ally stack (both fire their own hook).
+  rally: {
+    onRoundStart: function (unit, ctx, ability) {
+      const eff = (ability.suits || {})[unit.suit];
+      if (!eff) return;
+      const scale = 1 + (ability.perExtra || 0) * (packCount(unit) - 1);
+      for (let i = 0; i < units.length; i++) {
+        const ally = units[i];
+        if (ally.team !== unit.team || ally === unit) continue;
+        const dist = Math.max(Math.abs(ally.x - unit.x), Math.abs(ally.y - unit.y));
+        if (dist > ability.radius) continue;
+        if (eff.hpMult) {
+          const mult = 1 + eff.hpMult * scale;
+          ally.hp = Math.round(ally.hp * mult);
+          ally.maxHp = Math.round(ally.maxHp * mult);
+        }
+        if (eff.critBonus) {
+          // critChance is a baked STAT (attackTarget falls back to the suit's
+          // base crit when it's unset) — resolve that base, then add.
+          const base = (ally.critChance !== undefined) ? ally.critChance : (SUITS[ally.suit].crit || 0);
+          ally.critChance = base + eff.critBonus * scale;
+        }
+        if (eff.speedMult) ally.attackSpeed = ally.attackSpeed * (1 + eff.speedMult * scale);
+        if (eff.grantLifesteal) {
+          // Grant at most one copy — a diamond ally already has lifesteal, and
+          // two entries would heal twice per hit.
+          let has = false;
+          for (let j = 0; j < ally.abilities.length; j++) {
+            if (ally.abilities[j].kind === "lifesteal") { has = true; break; }
+          }
+          if (!has) ally.abilities.push({ kind: "lifesteal" });
+        }
+      }
+    },
+  },
+
+  // 10-2 FUSION "The Brunson" (Rally × Berserk) — the Berserk ramp RADIATES. On each
+  // hit it takes, the banner gains `gain` of its OWN starting attack (Berserk, base
+  // captured once so the ramp is linear not compounding) AND every ally within
+  // `radius` gains `allyGain` of THEIR starting attack — the squad fights harder as
+  // the banner bleeds. Uses CURRENT positions (a live battlefield reaction), unlike
+  // the fusion's other half, the rank-10 Rally, which bakes from PLACEMENT spots at
+  // round start. Uncapped like Berserk (balance watch under heavy focus-fire).
+  warpath: {
+    onDamaged: function (unit, ctx, ability) {
+      if (!(ctx.damage > 0)) return;   // only real hits sound the war cry
+      // Self ramp (Berserk).
+      if (unit.baseAttack === undefined) unit.baseAttack = unit.attack;
+      unit.attack = unit.attack + Math.round(unit.baseAttack * ability.gain);
+      // Radiate a smaller share to nearby allies (each ramps off ITS own base).
+      for (let i = 0; i < units.length; i++) {
+        const ally = units[i];
+        if (ally.team !== unit.team || ally === unit) continue;
+        const dist = Math.max(Math.abs(ally.x - unit.x), Math.abs(ally.y - unit.y));
+        if (dist > ability.radius) continue;
+        if (ally.baseAttack === undefined) ally.baseAttack = ally.attack;
+        ally.attack = ally.attack + Math.round(ally.baseAttack * ability.allyGain);
+      }
+    },
+  },
+};
+
+// A card's (or unit's) unique legendary entry, or null. Works on anything with a
+// `suit` and `rank` — cards AND units both carry those. Keyed by "suit-rank".
+function uniqueOf(card) {
+  return UNIQUE_CARDS[card.suit + "-" + card.rank] || null;
+}
+
+// A card's FULL ability list = its suit's + its rank's + its unique's abilities.
+// Used when a card becomes a unit (placement.js).
+function unitAbilities(card) {
+  const suitAbilities = SUITS[card.suit].abilities || [];
+  // A FUSED card (a "made hand") inherits its ONE suit family PLUS BOTH parts'
+  // rank abilities — that doubled ability load is why its stats are taxed (see
+  // FUSABLE_HANDS). It has no unique legendary layer.
+  if (card.fused) {
+    const entry = FUSABLE_HANDS[card.fusedKey];
+    // A fusion with an authored `abilities` kit (Dirty Diaper, Double or Nothing)
+    // is BESPOKE — its listed abilities REPLACE the staple below, so the fusion can
+    // be a NEW thing (escalating thorns) instead of both parents concatenated. It
+    // still rides its ONE suit family.
+    if (entry && entry.abilities) {
+      return suitAbilities.concat(entry.abilities);
+    }
+    // Legacy staple (7-2): inherit BOTH parts' rank abilities, stacked together. Each part's
+    // list is role-filtered by the FUSED card's own suit (rankAbilitiesFor reads card.rank, so
+    // pass a {rank, suit} shim) — a fused body has one suit, so it takes that suit's role flavor.
+    let rankAbilities = [];
+    card.parts.forEach(function (p) {
+      rankAbilities = rankAbilities.concat(rankAbilitiesFor({ rank: p.rank, suit: card.suit }));
+    });
+    return suitAbilities.concat(rankAbilities);
+  }
+  const rankAbilities = rankAbilitiesFor(card);
+  const uniq = uniqueOf(card);
+  const uniqueAbilities = uniq ? (uniq.abilities || []) : [];
+  return suitAbilities.concat(rankAbilities).concat(uniqueAbilities);
+}
+
+// The made-hand chip bonus a team earns for FUSED cards it PLAYED this round —
+// the fused hand's economy identity (bigger than the loose 7-2's SEVEN_TWO_BONUS).
+// Summed + data-driven off FUSABLE_HANDS, so copies stack. Read by finishRound.
+function fusedHandBonus(team) {
+  let total = 0;
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i].fused) total += FUSABLE_HANDS[cards[i].fusedKey].bonusChips;
+  }
+  return total;
+}
+
+// PLACEMENT rule: does this card carry an ability that lets it ignore the own-zone
+// restriction? Read straight from the card (before it becomes a unit) so
+// placement.js can check it the moment it's dropped. See canPlaceAt.
+function cardCanPlaceAnywhere(card) {
+  const list = unitAbilities(card);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].placement === "anywhere") return true;
+  }
+  return false;
+}
+
+// BEHAVIOR rule: is this card/unit an INERT "target dummy" (rank 3)? It never
+// attacks or moves — makeCardOf zeroes its attack + boosts HP, buildUnit stamps
+// `inert` on the unit, and combatStep skips its turn. Works on a card OR a unit
+// (both have suit+rank), like cardCanPlaceAnywhere / cardCannotDiscard.
+function cardIsInert(card) {
+  const list = unitAbilities(card);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].kind === "targetDummy") return true;
+  }
+  return false;
+}
+
+// CASTING rule (pure mana-regen, Phase 1): a card's CAST ability — the ability marked
+// `cast:true` that fires on the onCast hook and carries the mana profile (manaMax /
+// manaRegen / manaStart / castRange). null if the card has none. Read like cardIsInert,
+// off the full ability list, so buildUnit can stamp the unit's mana fields from it. A
+// unit is a "caster" iff this returns non-null.
+function castAbilityOf(card) {
+  const list = unitAbilities(card);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].cast) return list[i];
+  }
+  return null;
+}
+
+// DISPOSAL rule: does this card carry an ability that forbids discarding it? A
+// "hot potato" (Queen of Spades) — left unheld she is NOT discarded but force-kept
+// into the next hand, so the only way out of your hand is to PLAY her. Read straight
+// from the card (like cardCanPlaceAnywhere) so nextRound can check it while she's in hand.
+function cardCannotDiscard(card) {
+  const list = unitAbilities(card);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].undiscardable) return true;
+  }
+  return false;
+}
+
+// The display name(s) of a card's rank abilities, for card/unit tooltips ("" if none). Takes
+// the whole card/unit (needs suit+rank) and role-filters via rankAbilitiesFor, so a ♥6 lists
+// "Hellfire Aura" while a ♣6 lists "Hellfire" — each card describes only the kit it can run.
+function rankAbilityText(card) {
+  return rankAbilitiesFor(card).map(function (a) { return a.name; }).join(", ");
+}
+
+// Build the hover tooltip for a card OR a unit (both have suit/rank/range). One
+// shared place so the board and the hand always describe a card the same way, and
+// legendaries automatically get a ★ line without touching two files.
+function figureTitle(obj) {
+  // A fused "made hand" (7-2): name the two parts it inherits and its abilities.
+  // obj may be a card (carries `parts`/`fusedKey`) or a unit (carries them on `card`).
+  if (obj.fused) {
+    const src = obj.parts ? obj : obj.card;
+    const entry = FUSABLE_HANDS[src.fusedKey];
+    const partStr = src.parts.map(function (p) { return rankLabel(p.rank) + SUITS[p.suit].symbol; }).join(" + ");
+    const abilNames = unitAbilities(src).map(function (a) { return a.name; })
+      .filter(function (n) { return n; }).join(", ");
+    let t = "✨ " + (entry ? entry.label : "Fused") + " (fused " + partStr + ") — one body, both abilities";
+    if (abilNames) t += " · " + abilNames;
+    if (entry && entry.bonusChips) t += " · +" + entry.bonusChips + " chips on a win";
+    return t;
+  }
+  const s = SUITS[obj.suit];
+  let t = rankLabel(obj.rank) + s.symbol + " — " + s.desc + " (range " + obj.range + ")";
+  if (rankAbilityText(obj)) t += " · " + rankAbilityText(obj);
+  const uniq = uniqueOf(obj);
+  if (uniq) t += " · ★ " + uniq.name + ": " + uniq.blurb;
+  return t;
+}
+
+// Run one hook for a unit: call every ability of that unit that implements it.
+// The ability's data entry (incl. any future params) is passed to the handler.
+function runAbilityHook(unit, hookName, ctx) {
+  const list = unit.abilities || [];
+  for (let i = 0; i < list.length; i++) {
+    const ability = list[i];
+    const kit = ABILITIES[ability.kind];
+    if (kit && kit[hookName]) {
+      kit[hookName](unit, ctx, ability);
+    }
+  }
+}
+
+// The LIVING same-team, same-suit unit of a given rank — a card's "royal partner"
+// (the K♥/Q♥ bond: each finds the other by rank). null if it isn't on the board.
+function livingPartner(unit, rank) {
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u !== unit && u.team === unit.team && u.suit === unit.suit &&
+        u.rank === rank && u.hp > 0) return u;
+  }
+  return null;
+}
+
+// If `target` is a guarded Queen whose royal partner (her King) is alive, return
+// that guardian — the unit that should SOAK the hit instead. Otherwise null, so
+// the caller falls back to the target itself. Drives the K♥/Q♥ damage redirect.
+function royalSink(target) {
+  const list = target.abilities || [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].kind === "royalGuard") {
+      const guardian = livingPartner(target, list[i].partnerRank);
+      if (guardian) return guardian;
+    }
+  }
+  return null;
+}
+
+// Total chips `team` owes the house right now for "detrimental to hold" cards still
+// in its HAND (Queen of Spades' houseTax). Reads each card's unique, so it's fully
+// data-driven and stacks (2 decks = up to two Black Ladies = double the bite).
+function handTax(team) {
+  let total = 0;
+  const hand = hands[team] || [];
+  for (let i = 0; i < hand.length; i++) {
+    const uniq = uniqueOf(hand[i]);
+    if (!uniq) continue;
+    const list = uniq.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind === "houseTax") total += list[j].penalty;
+    }
+  }
+  return total;
+}
+
+// Does `team`'s ENEMY have a fielded queen that extinguishes `suit`? If so, that
+// suit's flush synergy is switched off for `team` (see teamSynergyEffects). Reads
+// live units, so the extinguisher only needs to be on the board at round start.
+function isSuitExtinguished(team, suit) {
+  const enemy = (team === "player1") ? "player2" : "player1";
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.team !== enemy) continue;
+    const list = u.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind === "extinguish" && list[j].suit === suit) return true;
+    }
+  }
+  return false;
+}
+
+// The winner's bonus steal multiplier from loot cards it PLAYED this round (Jack of
+// Diamonds). Summed and data-driven, so copies stack. Read by finishRound's steal math.
+function teamLootMult(team) {
+  let total = 0;
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    const uniq = uniqueOf(cards[i]);
+    if (!uniq) continue;
+    const list = uniq.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind === "loot") total += list[j].stealMult;
+    }
+  }
+  return total;
+}
+
+// How many enemy squares `team` may mark this round — the sum of `squares` from
+// every Airstrike ability on its FIELDED units (King of Clubs). 0 if it has none,
+// which also voids any marks it made and then removed the King before Round Start.
+function strikeAllowance(team) {
+  let total = 0;
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.team !== team) continue;
+    const list = u.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind === "airstrike") total += list[j].squares;
+    }
+  }
+  return total;
+}

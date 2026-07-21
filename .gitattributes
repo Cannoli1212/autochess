@@ -1,0 +1,4 @@
+# Normalize line endings across machines (PC + laptop) so switching computers
+# never makes files look "changed" when only invisible line endings differ.
+# Git stores everything with LF internally and converts on checkout per machine.
+* text=auto

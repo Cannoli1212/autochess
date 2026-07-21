@@ -1,0 +1,122 @@
+<meta charset="utf-8" />
+<title>Autochess — 5-Round Mode</title>
+
+<link rel="stylesheet" href="css/styles.css?v=leg39" />
+
+<p id="roundInfo">Round 1 of 5 — Rounds won: Player 1: 0 · Player 2: 0</p>
+
+<h1>Autochess — 5-Round Mode</h1>
+<p class="intro">Five rounds. Each round you draw <b>2× the round number</b> in cards, then
+   play <b>half</b> of them (round 1 = play 1, round 5 = play 5) by dragging them
+   onto your zone; the unplayed rest are discarded at Round Start.
+   Win rounds to <b>steal chips</b> (more survivors = more stolen) — most chips
+   after round 5 wins.</p>
+
+<div id="flop-area">
+  <div class="flop-label">Community flop — hidden until Round Start, then counts for both players</div>
+  <div id="flop-cards" class="cards"></div>
+</div>
+
+<div class="arena">
+  <div id="board"></div>
+  <div class="side-chips">
+    <div id="chip-player2" class="chip-badge p2">
+      <div>Player 2 (red)</div>
+      <div class="chip-amount">💰 100</div>
+    </div>
+    <div class="side-buttons">
+      <button id="startButton">▶ Round Start</button>
+      <button id="nextButton" style="display:none">Next Round ▶</button>
+      <button id="resetButton">↺ Reset Game</button>
+      <button id="aiToggleButton">🤖 P2: Computer</button>
+      <div id="playtestPanel" style="display:none; background:#2b303a; border:1px solid #4a5568; border-radius:6px; padding:6px; margin-top:4px;">
+        <div style="font-size:12px; margin-bottom:4px;">🧪 Add any card:</div>
+        <select id="ptTeam">
+          <option value="player1">P1 (blue)</option>
+          <option value="player2">P2 (red)</option>
+        </select>
+        <select id="ptSuit">
+          <option value="hearts">♥ Hearts</option>
+          <option value="diamonds">♦ Diamonds</option>
+          <option value="clubs">♣ Clubs</option>
+          <option value="spades">♠ Spades</option>
+        </select>
+        <select id="ptRank"></select>
+        <button id="ptAddButton">➕ Add to hand</button>
+      </div>
+    </div>
+    <div id="chip-player1" class="chip-badge p1">
+      <div>Player 1 (blue)</div>
+      <div class="chip-amount">💰 100</div>
+    </div>
+  </div>
+  <div id="dmgPanel"></div>
+</div>
+
+<p id="turnStatus">Current turn: Player 1 (blue)</p>
+<p id="counter">Player 1: 0/1 placed   |   Player 2: 0/1 placed</p>
+<p id="message"></p>
+
+<div class="hands">
+  <div class="hand-row">
+    <span class="hand-label" id="hand-label-player1"></span>
+    <span class="pile draw" id="draw-player1"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
+    <span class="pile discard" id="discard-player1"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
+    <span class="cards" id="hand-player1"></span>
+  </div>
+  <div class="hand-row">
+    <span class="hand-label" id="hand-label-player2"></span>
+    <span class="pile draw" id="draw-player2"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
+    <span class="pile discard" id="discard-player2"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
+    <span class="cards" id="hand-player2"></span>
+  </div>
+</div>
+
+<div id="synergies">
+  <div class="synergy-row">
+    <span class="synergy-label">Player 1 synergies:</span>
+    <span id="synergy-player1">—</span>
+  </div>
+  <div class="synergy-row">
+    <span class="synergy-label">Player 2 synergies:</span>
+    <span id="synergy-player2">—</span>
+  </div>
+  <div class="synergy-row">
+    <span class="synergy-label">Player 1 poker:</span>
+    <span id="poker-player1">—</span>
+  </div>
+  <div class="synergy-row">
+    <span class="synergy-label">Player 2 poker:</span>
+    <span id="poker-player2">—</span>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="swatch" style="background:#2b303a"></span> Player 1 zone (bottom)
+  <span class="swatch" style="background:#3a2b2b"></span> Player 2 zone (top)
+  &nbsp;·&nbsp; cards show <b>rank + suit</b> and <b>attack / health</b> (stats scale with rank)
+</div>
+
+<div class="legend">
+  <b style="color:#ff8a8a">♥</b> melee tank &nbsp;·&nbsp;
+  <b style="color:#ff8a8a">♦</b> melee, lifesteal &nbsp;·&nbsp;
+  <b style="color:#e8e8e8">♣</b> ranged, fast &nbsp;·&nbsp;
+  <b style="color:#e8e8e8">♠</b> ranged, crit
+</div>
+
+<script src="js/config.js?v=leg39"></script>
+<script src="js/abilities.js?v=leg39"></script>
+<script src="js/state.js?v=leg39"></script>
+<script src="js/cards.js?v=leg39"></script>
+<script src="js/flop.js?v=leg39"></script>
+<script src="js/synergies.js?v=leg39"></script>
+<script src="js/board.js?v=leg39"></script>
+<script src="js/hands.js?v=leg39"></script>
+<script src="js/placement.js?v=leg39"></script>
+<script src="js/ai.js?v=leg39"></script>
+<script src="js/pathing.js?v=leg39"></script>
+<script src="js/combat.js?v=leg39"></script>
+<script src="js/hud.js?v=leg39"></script>
+<script src="js/gameflow.js?v=leg39"></script>
+<script src="js/sim.js?v=leg39"></script>
+<script src="js/main.js?v=leg39"></script>

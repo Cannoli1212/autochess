@@ -1,0 +1,1167 @@
+<meta charset="utf-8" />
+<title>Autochess — 5-Round Mode</title>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    background: #1e1e1e;
+    color: #eaeaea;
+    text-align: center;
+  }
+  h1 { color: #7fd1ff; }
+
+  /* The board is a grid. We set the number of columns in JavaScript below,
+     but the look of each cell is defined here. */
+  #board {
+    display: inline-grid;          /* lay children out in a grid */
+    gap: 2px;                      /* space between cells */
+    margin-top: 0;
+    background: #333;              /* shows through the gaps as grid lines */
+    padding: 2px;
+    border-radius: 6px;
+  }
+
+  /* Row / column number labels around the board. */
+  .coord-label {
+    display: flex; align-items: center; justify-content: center;
+    color: #bbb; font-size: 12px; user-select: none;
+  }
+
+  .cell {
+    width: 56px;
+    height: 56px;
+    background: #2b2b2b;
+    display: flex;
+    flex-direction: column;       /* stack the figure above its stats */
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
+  .stat { font-size: 10px; color: #f0f0f0; margin-top: 1px; }
+
+  /* The two players' home rows get a subtle tint so you can tell them apart.
+     Player 2 sits on top, Player 1 on the bottom (like a chess board). */
+  .cell.player2-zone { background: #3a2b2b; }  /* faint red */
+  .cell.player1-zone { background: #2b303a; }  /* faint blue */
+
+  /* A cell that HOLDS a unit gets a stronger team color. */
+  .cell.unit-player1 { background: #2b4a7a; }  /* Player 1 = blue */
+  .cell.unit-player2 { background: #7a2b2b; }  /* Player 2 = red */
+
+  #turnStatus { font-size: 18px; font-weight: bold; margin-top: 18px; }
+  #message { color: #ffcf6b; min-height: 20px; }  /* warnings show here */
+
+  #startButton {
+    font-size: 18px; padding: 10px 24px; margin-top: 8px;
+    cursor: pointer; color: #fff; background: #2e7d32;
+    border: none; border-radius: 6px;
+  }
+  #startButton:disabled { background: #555; cursor: default; }
+
+  #resetButton {
+    font-size: 18px; padding: 10px 24px; margin: 8px 0 0 8px;
+    cursor: pointer; color: #fff; background: #37474f;
+    border: none; border-radius: 6px;
+  }
+
+  #nextButton {
+    font-size: 18px; padding: 10px 24px; margin: 8px 0 0 8px;
+    cursor: pointer; color: #fff; background: #1565c0;
+    border: none; border-radius: 6px;
+  }
+
+  #roundInfo { font-size: 17px; color: #9ecbff; margin: 6px 0 2px; font-weight: bold; }
+
+  /* Board flanked by side chip badges. */
+  .arena { display: inline-flex; align-items: stretch; gap: 18px; margin-top: 12px; }
+  .side-chips {
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-align: left;
+  }
+  .chip-badge {
+    border: 2px solid #555; border-radius: 8px; padding: 8px 14px; min-width: 120px;
+  }
+  .chip-badge .chip-amount { font-size: 22px; font-weight: bold; color: #ffd76b; margin-top: 2px; }
+  .chip-badge.p1 { border-color: #2b4a7a; background: #1c2636; }  /* blue = Player 1 */
+  .chip-badge.p2 { border-color: #7a2b2b; background: #351f1f; }  /* red = Player 2 */
+
+  /* Round Start / Next / Reset stacked in the middle of the right column. */
+  .side-buttons { display: flex; flex-direction: column; gap: 8px; }
+  .side-buttons button { width: 100%; }
+  .side-buttons #startButton,
+  .side-buttons #nextButton,
+  .side-buttons #resetButton { margin: 0; }
+
+  .intro { max-width: 640px; margin: 0 auto; }
+
+  /* Phase E: the shared community flop in the center. */
+  #flop-area { margin: 14px 0 4px; }
+  .flop-label { font-size: 13px; color: #9ecbff; margin-bottom: 6px; }
+  #flop-cards { display: inline-flex; gap: 6px; justify-content: center; }
+  .flop-card { border-color: #caa14a; }   /* gold edge marks a community card */
+  .flop-back { background: #2b3a4a; border-color: #4a6a8a; }
+  .flop-back .cfig { color: #7fa8cf; }
+
+  .legend { margin-top: 16px; font-size: 14px; color: #aaa; }
+  .swatch {
+    display: inline-block; width: 12px; height: 12px;
+    vertical-align: middle; margin: 0 4px 0 12px; border-radius: 2px;
+  }
+
+  /* Card hands, drawn fresh each round (one card type for now). */
+  .hands { margin-top: 22px; }
+  .hand-row { margin: 6px 0; }
+  .hand-label {
+    display: inline-block; min-width: 160px; text-align: right;
+    margin-right: 10px; color: #aaa; font-size: 14px; vertical-align: middle;
+  }
+  .cards { display: inline-flex; gap: 5px; vertical-align: middle; flex-wrap: wrap; }
+  .card {
+    width: 46px; height: 58px; border-radius: 5px;
+    background: #f5f5f5; color: #222; border: 1px solid #888;
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .card .cfig  { font-size: 15px; line-height: 1.1; font-weight: bold; }
+  .card .cstat { font-size: 9px; color: #333; line-height: 1.2; }
+
+  /* Phase D: draw & discard pile "spots" (same size as a card). */
+  .pile {
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    width: 46px; height: 58px; border-radius: 5px; margin-right: 5px;
+    vertical-align: middle; border: 1px solid #666; font-size: 9px;
+  }
+  .pile.draw    { background: #34506b; color: #dbe7f3; }
+  .pile.discard { background: #3a3a3a; color: #cccccc; margin-right: 12px; }
+  .pile .pile-count { font-size: 15px; font-weight: bold; }
+
+  #synergies { margin-top: 16px; font-size: 13px; }
+  .synergy-row { margin: 4px 0; }
+  .synergy-label { color: #888; margin-right: 6px; }
+  .synergy-chip {
+    display: inline-block; border: 1px solid #555; border-radius: 4px;
+    padding: 2px 8px; margin: 2px 4px; background: #262626; color: #ddd;
+  }
+</style>
+
+<p id="roundInfo">Round 1 of 5 — Rounds won: Player 1: 0 · Player 2: 0</p>
+
+<h1>Autochess — 5-Round Mode</h1>
+<p class="intro">Five rounds. Each round you draw <b>2× the round number</b> in cards, then
+   play <b>half</b> of them (round 1 = play 1, round 5 = play 5) by dragging them
+   onto your zone; the unplayed rest are discarded at Round Start.
+   Win rounds to <b>steal chips</b> (more survivors = more stolen) — most chips
+   after round 5 wins.</p>
+
+<div id="flop-area">
+  <div class="flop-label">Community flop — hidden until Round Start, then counts for both players</div>
+  <div id="flop-cards" class="cards"></div>
+</div>
+
+<div class="arena">
+  <div id="board"></div>
+  <div class="side-chips">
+    <div id="chip-player2" class="chip-badge p2">
+      <div>Player 2 (red)</div>
+      <div class="chip-amount">💰 100</div>
+    </div>
+    <div class="side-buttons">
+      <button id="startButton">▶ Round Start</button>
+      <button id="nextButton" style="display:none">Next Round ▶</button>
+      <button id="resetButton">↺ Reset Game</button>
+    </div>
+    <div id="chip-player1" class="chip-badge p1">
+      <div>Player 1 (blue)</div>
+      <div class="chip-amount">💰 100</div>
+    </div>
+  </div>
+</div>
+
+<p id="turnStatus">Current turn: Player 1 (blue)</p>
+<p id="counter">Player 1: 0/1 placed   |   Player 2: 0/1 placed</p>
+<p id="message"></p>
+
+<div class="hands">
+  <div class="hand-row">
+    <span class="hand-label" id="hand-label-player1"></span>
+    <span class="pile draw" id="draw-player1"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
+    <span class="pile discard" id="discard-player1"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
+    <span class="cards" id="hand-player1"></span>
+  </div>
+  <div class="hand-row">
+    <span class="hand-label" id="hand-label-player2"></span>
+    <span class="pile draw" id="draw-player2"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
+    <span class="pile discard" id="discard-player2"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
+    <span class="cards" id="hand-player2"></span>
+  </div>
+</div>
+
+<div id="synergies">
+  <div class="synergy-row">
+    <span class="synergy-label">Player 1 synergies:</span>
+    <span id="synergy-player1">—</span>
+  </div>
+  <div class="synergy-row">
+    <span class="synergy-label">Player 2 synergies:</span>
+    <span id="synergy-player2">—</span>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="swatch" style="background:#2b303a"></span> Player 1 zone (bottom)
+  <span class="swatch" style="background:#3a2b2b"></span> Player 2 zone (top)
+  &nbsp;·&nbsp; cards show <b>rank + suit</b> and <b>attack / health</b> (stats scale with rank)
+</div>
+
+<div class="legend">
+  <b style="color:#ff8a8a">♥</b> melee tank &nbsp;·&nbsp;
+  <b style="color:#ff8a8a">♦</b> melee, lifesteal &nbsp;·&nbsp;
+  <b style="color:#e8e8e8">♣</b> ranged, splash &nbsp;·&nbsp;
+  <b style="color:#e8e8e8">♠</b> ranged, crit
+</div>
+
+<script>
+// =====================================================================
+//  AUTOCHESS PROTOTYPE — place units, then Round Start to auto-fight.
+// =====================================================================
+
+// How big the board is. Change these two numbers to resize the board.
+const COLS = 8;
+const ROWS = 8;
+
+// Phase B: the four card suits and their stats. Clubs and spades are ranged
+// (attack from 3 away); hearts and diamonds are melee (range 1).
+// Abilities: hearts tanky (10 HP), diamonds lifesteal (heal on hit), clubs
+// splash AoE, spades 50% crit (2x damage).
+// Two colors per suit: cardColor reads on the white card, unitColor on the
+// dark/colored board cell.
+const SUITS = {
+  hearts:   { symbol: "♥", cardColor: "#c0392b", unitColor: "#ff8a8a", range: 1, attack: 1, hp: 10, desc: "melee tank" },
+  diamonds: { symbol: "♦", cardColor: "#c0392b", unitColor: "#ff8a8a", range: 1, attack: 1, hp: 6, lifesteal: true, desc: "melee, lifesteal" },
+  clubs:    { symbol: "♣", cardColor: "#222222", unitColor: "#e8e8e8", range: 3, attack: 2, hp: 3, aoe: true, desc: "ranged, splash AoE" },
+  spades:   { symbol: "♠", cardColor: "#222222", unitColor: "#e8e8e8", range: 3, attack: 3, hp: 2, crit: 0.5, desc: "ranged, 50% crit" },
+};
+const SUIT_NAMES = ["hearts", "diamonds", "clubs", "spades"];
+
+// B5 suit synergies. Count a player's units of each suit; 2 / 4 / 5 give tiered
+// buffs (5 = a poker FLUSH). Hearts & spades buff the WHOLE team; diamonds &
+// clubs buff only their own suit's units. Effects are applied in B5.2 — for now
+// (B5.1) we only detect and display them.
+const SYNERGIES = {
+  hearts:   { label: "♥", color: "#ff8a8a", scope: "team",
+    tiers: { 2: { hpMult: 1.0, text: "+100% team HP" },
+             4: { hpMult: 2.5, text: "+250% team HP" },
+             5: { hpMult: 6.0, text: "FLUSH: +600% team HP" } } },
+  spades:   { label: "♠", color: "#e8e8e8", scope: "team",
+    tiers: { 2: { critBonus: 0.30, text: "team crit +30%" },
+             4: { critBonus: 0.60, text: "team crit +60%" },
+             5: { critBonus: 1.00, text: "FLUSH: team always crits" } } },
+  diamonds: { label: "♦", color: "#ff8a8a", scope: "suit",
+    tiers: { 2: { atkMult: 0.5, text: "♦ +50% attack" },
+             4: { atkMult: 1.5, text: "♦ +150% attack" },
+             5: { atkMult: 4.0, text: "FLUSH: ♦ +400% attack" } } },
+  clubs:    { label: "♣", color: "#e8e8e8", scope: "suit",
+    tiers: { 2: { splashBonus: 1, text: "♣ splash +1" },
+             4: { splashBonus: 2, text: "♣ splash +2" },
+             5: { splashBonus: 4, text: "FLUSH: ♣ splash +4" } } },
+};
+
+// How many ticks a unit waits after attacking before it can attack again.
+// 0 = attack every tick; 1 = attack every other tick (half attack speed).
+const ATTACK_COOLDOWN_TICKS = 1;
+
+// Same idea for movement: 1 = step every other tick (half move speed).
+const MOVE_COOLDOWN_TICKS = 1;
+
+// Global stat multiplier (B4). Final stat = suitBase × rank × STAT_SCALE.
+// Bump to 100 for even bigger numbers, or 1 to shrink — one knob.
+const STAT_SCALE = 10;
+
+// Phase C: chips a round-winner steals per surviving unit (margin of victory).
+const CHIPS_PER_SURVIVOR = 10;
+
+// Phase D: how many 52-card decks make up each player's shoe.
+const DECKS = 2;
+
+// Phase E: how many community flop cards are revealed each round.
+const FLOP_SIZE = 3;
+
+// THE most important line: one array holding every unit on the board.
+// Each unit is an object that remembers where it stands AND which team it's on.
+let units = [];
+
+// Combat state: whether a fight is happening, the repeating timer that
+// drives it, and a safety counter so a stuck battle can't loop forever.
+let inCombat = false;
+let combatTimer = null;
+let tickCount = 0;
+
+// Round system: which round we're on (1..5) and how many rounds each player
+// has won. The number of units you may place each round equals the round number.
+let roundNumber = 1;
+let roundWins = { player1: 0, player2: 0 };
+
+// Phase C: each player's chip stack. Winning a round steals chips; at game end
+// the winner is whoever has more (the net difference is the payout).
+let chips = { player1: 100, player2: 100 };
+
+// Phase D: each player has their own shoe. `hands` = cards in hand; `draw` =
+// the shoe to draw from; `discard` = spent cards; `played` = cards currently on
+// the board this round (they move to discard when the round ends).
+let hands = { player1: [], player2: [] };
+let draw = { player1: [], player2: [] };
+let discard = { player1: [], player2: [] };
+let played = { player1: [], player2: [] };
+
+// Phase E: the shared community flop (3 cards) and the deck it's drawn from.
+// Flop suits count toward BOTH players' synergies (they never become units).
+let flop = [];
+let communityDeck = [];
+let flopRevealed = false;   // the flop stays face-down until Round Start
+
+// What is currently being dragged: a hand card, or a unit from the board.
+let dragData = null;
+
+// True while players may edit the board (drag cards/units). False during a
+// fight and while a round's result is still on screen.
+let placementOpen = true;
+
+// Grab the page elements we'll update.
+const board = document.getElementById("board");
+const counter = document.getElementById("counter");
+const turnStatus = document.getElementById("turnStatus");
+const message = document.getElementById("message");
+const startButton = document.getElementById("startButton");
+const resetButton = document.getElementById("resetButton");
+const nextButton = document.getElementById("nextButton");
+const roundInfo = document.getElementById("roundInfo");
+
+// Turn a team code into a human-friendly label.
+function label(team) {
+  if (team === "player1") return "Player 1 (blue)";
+  return "Player 2 (red)";
+}
+
+// (Turn-taking was removed in A2 — both players place freely by dragging.)
+
+// Count how many units a team currently has on the board.
+function countUnits(team) {
+  return units.filter(function (u) { return u.team === team; }).length;
+}
+
+// Refresh the placement hint and each player's placement progress.
+function updateStatus() {
+  const limit = roundNumber;
+  turnStatus.textContent =
+    "Drag cards from your hand onto your zone — place " + limit + " unit(s) each.";
+  counter.textContent =
+    "Player 1: " + countUnits("player1") + "/" + limit + " placed   |   " +
+    "Player 2: " + countUnits("player2") + "/" + limit + " placed";
+  renderSynergies();
+}
+
+// Refresh the round number and the rounds-won scoreboard.
+function updateRoundInfo() {
+  roundInfo.textContent =
+    "Round " + roundNumber + " of 5   —   Rounds won:  Player 1: " +
+    roundWins.player1 + "  ·  Player 2: " + roundWins.player2;
+  updateChipInfo();
+}
+
+// Phase C: refresh each player's chip stack in their side badge.
+function updateChipInfo() {
+  document.querySelector("#chip-player1 .chip-amount").textContent = "💰 " + chips.player1;
+  document.querySelector("#chip-player2 .chip-amount").textContent = "💰 " + chips.player2;
+}
+
+// ---------------------------------------------------------------------
+// SYNERGIES (B5.1) — count each suit on a team, show the active tier.
+// ---------------------------------------------------------------------
+
+// How many units of a suit a team currently has placed.
+function suitCount(team, suit) {
+  return units.filter(function (u) {
+    return u.team === team && u.suit === suit;
+  }).length;
+}
+
+// Effective suit count for synergies = a team's own units of that suit PLUS the
+// shared community flop's cards of that suit (Phase E). Used for the display
+// AND the actual buffs, so both stay in sync.
+function effectiveSuitCount(team, suit) {
+  return suitCount(team, suit) + flopCount(suit);
+}
+
+// Which synergy tier a count unlocks: 5 (flush), 4, 2, or 0 (none).
+function synergyTier(count) {
+  if (count >= 5) return 5;
+  if (count >= 4) return 4;
+  if (count >= 2) return 2;
+  return 0;
+}
+
+// Redraw both players' synergy panels.
+function renderSynergies() {
+  renderOneSynergy("player1");
+  renderOneSynergy("player2");
+}
+
+// Show one player's active suit synergies as chips.
+function renderOneSynergy(team) {
+  const el = document.getElementById("synergy-" + team);
+  el.innerHTML = "";
+  let anyActive = false;
+
+  for (let i = 0; i < SUIT_NAMES.length; i++) {
+    const suit = SUIT_NAMES[i];
+    const count = effectiveSuitCount(team, suit);
+    const tier = synergyTier(count);
+    if (tier === 0) continue;            // need at least 2 of a suit
+
+    anyActive = true;
+    const info = SYNERGIES[suit];
+    const chip = document.createElement("span");
+    chip.className = "synergy-chip";
+    chip.innerHTML =
+      '<b style="color:' + info.color + '">' + info.label + "×" + count + "</b> " +
+      info.tiers[tier].text;
+    el.appendChild(chip);
+  }
+
+  if (!anyActive) el.textContent = "—";   // nothing active yet
+}
+
+// Work out a team's combined synergy effects from its suit counts.
+function teamSynergyEffects(team) {
+  const eff = { hpMult: 0, atkMult: 0, critBonus: 0, splashBonus: 0 };
+  for (let i = 0; i < SUIT_NAMES.length; i++) {
+    const suit = SUIT_NAMES[i];
+    const tier = synergyTier(effectiveSuitCount(team, suit));
+    if (tier === 0) continue;
+    const t = SYNERGIES[suit].tiers[tier];
+    if (t.hpMult !== undefined) eff.hpMult = t.hpMult;             // hearts (team)
+    if (t.atkMult !== undefined) eff.atkMult = t.atkMult;          // diamonds (own)
+    if (t.critBonus !== undefined) eff.critBonus = t.critBonus;    // spades (team)
+    if (t.splashBonus !== undefined) eff.splashBonus = t.splashBonus; // clubs (own)
+  }
+  return eff;
+}
+
+// B5.2: bake both teams' synergies into their units, just before combat.
+function applySynergies() {
+  ["player1", "player2"].forEach(function (team) {
+    const eff = teamSynergyEffects(team);
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      if (u.team !== team) continue;
+      const base = SUITS[u.suit];
+
+      // Hearts (team-wide): boost max HP, and start the fight at full.
+      u.maxHp = Math.round(u.maxHp * (1 + eff.hpMult));
+      u.hp = u.maxHp;
+
+      // Diamonds (own suit only): boost attack.
+      if (u.suit === "diamonds") {
+        u.attack = Math.round(u.attack * (1 + eff.atkMult));
+      }
+
+      // Spades (team-wide): crit chance = this unit's own crit + team bonus.
+      u.critChance = Math.min(1, (base.crit || 0) + eff.critBonus);
+
+      // Clubs (own suit only): splash radius = base 1 + bonus; others don't splash.
+      u.splashRadius = (u.suit === "clubs") ? (1 + eff.splashBonus) : 0;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
+// CARDS (Phase A1) — draw a hand each round from an infinite one-card pool.
+// ---------------------------------------------------------------------
+
+// Turn a rank number (2–14) into its card label (2–10, J, Q, K, A).
+function rankLabel(rank) {
+  if (rank === 11) return "J";
+  if (rank === 12) return "Q";
+  if (rank === 13) return "K";
+  if (rank === 14) return "A";
+  return String(rank);
+}
+
+// Build one card of a specific suit + rank. Stats = base × rank × STAT_SCALE.
+function makeCardOf(suit, rank) {
+  const s = SUITS[suit];
+  return {
+    suit: suit,
+    rank: rank,
+    range: s.range,
+    attack: s.attack * rank * STAT_SCALE,
+    hp: s.hp * rank * STAT_SCALE,
+  };
+}
+
+// A random card — only a safety fallback now that we draw from a real shoe.
+function makeCard() {
+  const suit = SUIT_NAMES[Math.floor(Math.random() * SUIT_NAMES.length)];
+  const rank = 2 + Math.floor(Math.random() * 13);   // 2..14 inclusive
+  return makeCardOf(suit, rank);
+}
+
+// ---------------------------------------------------------------------
+// THE SHOE (Phase D) — a finite, per-player deck of DECKS × 52 cards.
+// ---------------------------------------------------------------------
+
+// Build one player's shoe: DECKS copies of all 52 suit+rank combos, shuffled.
+function buildShoe() {
+  const cards = [];
+  for (let d = 0; d < DECKS; d++) {
+    for (let si = 0; si < SUIT_NAMES.length; si++) {
+      for (let rank = 2; rank <= 14; rank++) {
+        cards.push(makeCardOf(SUIT_NAMES[si], rank));
+      }
+    }
+  }
+  shuffle(cards);
+  return cards;
+}
+
+// Fisher–Yates shuffle, in place.
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+}
+
+// Give both players a fresh shoe; empty their discard and played piles.
+function initShoes() {
+  draw = { player1: buildShoe(), player2: buildShoe() };
+  discard = { player1: [], player2: [] };
+  played = { player1: [], player2: [] };
+}
+
+// Fold a player's discard pile back into their draw pile and reshuffle.
+function reshuffle(team) {
+  draw[team] = discard[team];
+  discard[team] = [];
+  shuffle(draw[team]);
+}
+
+// Draw one card from a player's shoe (reshuffling the discard if it empties).
+function drawCard(team) {
+  if (draw[team].length === 0) reshuffle(team);
+  if (draw[team].length === 0) draw[team] = buildShoe();   // extreme safety
+  return draw[team].pop();
+}
+
+// ---------------------------------------------------------------------
+// COMMUNITY FLOP (Phase E) — 3 shared cards whose suits buff both players.
+// ---------------------------------------------------------------------
+
+// Fresh community deck (its own shoe, separate from the players').
+function initCommunityDeck() {
+  communityDeck = buildShoe();
+}
+
+// Hide the flop during placement: face-down, empty, and NOT counted yet.
+function hideFlop() {
+  flop = [];
+  flopRevealed = false;
+  renderFlop();
+}
+
+// Reveal the flop at Round Start: deal FLOP_SIZE community cards, face-up.
+function dealFlop() {
+  flop = [];
+  for (let i = 0; i < FLOP_SIZE; i++) {
+    if (communityDeck.length === 0) communityDeck = buildShoe();
+    flop.push(communityDeck.pop());
+  }
+  flopRevealed = true;
+  renderFlop();
+}
+
+// How many flop cards are of a given suit (0 while hidden, since flop is empty).
+function flopCount(suit) {
+  return flop.filter(function (c) { return c.suit === suit; }).length;
+}
+
+// Draw the flop: face-down "?" backs until it's revealed at Round Start.
+function renderFlop() {
+  const el = document.getElementById("flop-cards");
+  el.innerHTML = "";
+
+  if (!flopRevealed) {
+    for (let i = 0; i < FLOP_SIZE; i++) {
+      const back = document.createElement("div");
+      back.className = "card flop-card flop-back";
+      back.innerHTML = '<div class="cfig">?</div>';
+      el.appendChild(back);
+    }
+    return;
+  }
+
+  for (let i = 0; i < flop.length; i++) {
+    const c = flop[i];
+    const cs = SUITS[c.suit];
+    const card = document.createElement("div");
+    card.className = "card flop-card";
+    card.title = rankLabel(c.rank) + cs.symbol + " (community)";
+    card.innerHTML =
+      '<div class="cfig" style="color:' + cs.cardColor + '">' + rankLabel(c.rank) + cs.symbol + '</div>';
+    el.appendChild(card);
+  }
+}
+
+// Deal each player a new hand: 2 cards per round number (round 1 = 2, round 5 = 10).
+function drawHands() {
+  const drawCount = roundNumber * 2;
+  hands.player1 = [];
+  hands.player2 = [];
+  for (let i = 0; i < drawCount; i++) {
+    hands.player1.push(drawCard("player1"));
+    hands.player2.push(drawCard("player2"));
+  }
+  renderHands();
+}
+
+// Draw both players' hands onto the page.
+function renderHands() {
+  renderOneHand("player1");
+  renderOneHand("player2");
+  updateShoeDisplay();
+}
+
+// Phase D: refresh each player's draw-pile and discard-pile counts.
+function updateShoeDisplay() {
+  ["player1", "player2"].forEach(function (team) {
+    document.querySelector("#draw-" + team + " .pile-count").textContent = draw[team].length;
+    document.querySelector("#discard-" + team + " .pile-count").textContent = discard[team].length;
+  });
+}
+
+// Draw a single player's hand as a row of little card rectangles.
+function renderOneHand(team) {
+  const labelEl = document.getElementById("hand-label-" + team);
+  const cardsEl = document.getElementById("hand-" + team);
+  const hand = hands[team];
+
+  labelEl.textContent = label(team) + " hand (" + hand.length + " cards):";
+  cardsEl.innerHTML = "";
+  for (let i = 0; i < hand.length; i++) {
+    const c = hand[i];
+    const card = document.createElement("div");
+    card.className = "card";
+    card.draggable = true;
+    const cs = SUITS[c.suit];
+    card.title = rankLabel(c.rank) + cs.symbol + " — " + cs.desc + " (range " + c.range + ")";
+    card.innerHTML =
+      '<div class="cfig" style="color:' + cs.cardColor + '">' + rankLabel(c.rank) + cs.symbol + '</div>' +
+      '<div class="cstat">' + c.attack + "/" + c.hp + "</div>";
+    // Remember which hand and which card this is when a drag begins.
+    const cardIndex = i;
+    card.addEventListener("dragstart", function () {
+      dragData = { kind: "card", team: team, index: cardIndex };
+    });
+    cardsEl.appendChild(card);
+  }
+}
+
+// Find the cell element at a given x,y coordinate.
+function cellAt(x, y) {
+  return document.querySelector('.cell[data-x="' + x + '"][data-y="' + y + '"]');
+}
+
+// Find the unit standing at x,y (or null if that square is empty).
+function findUnitAt(x, y) {
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].x === x && units[i].y === y) return units[i];
+  }
+  return null;
+}
+
+// Redraw the whole board from the units array. The array is the TRUTH;
+// the board is just a picture of it. Clear every cell, then draw each unit.
+function render() {
+  const allCells = document.querySelectorAll(".cell");
+  for (let i = 0; i < allCells.length; i++) {
+    allCells[i].innerHTML = "";
+    allCells[i].classList.remove("unit-player1", "unit-player2");
+    allCells[i].draggable = false;            // empty cells can't be dragged
+  }
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    const cell = cellAt(u.x, u.y);
+    const su = SUITS[u.suit];
+    // Draw the unit as its rank + suit, with attack / current-health below.
+    cell.innerHTML =
+      '<div class="fig" style="color:' + su.unitColor + '">' + rankLabel(u.rank) + su.symbol + '</div>' +
+      '<div class="stat">' + u.attack + " / " + u.hp + '</div>';
+    cell.classList.add("unit-" + u.team);
+    cell.title = rankLabel(u.rank) + su.symbol + " — " + su.desc + " (range " + u.range + ")";
+    cell.draggable = true;                     // a cell with a unit can be dragged
+  }
+}
+
+// Tell the CSS grid its columns: a narrow first column for row numbers,
+// then COLS board columns of 56px.
+board.style.gridTemplateColumns = "26px repeat(" + COLS + ", 56px)";
+
+// Top row of coordinate labels: an empty corner, then a number per column.
+const corner = document.createElement("div");
+corner.className = "coord-label";
+board.appendChild(corner);
+for (let cx = 0; cx < COLS; cx++) {
+  const colLabel = document.createElement("div");
+  colLabel.className = "coord-label";
+  colLabel.textContent = String.fromCharCode(65 + cx);  // 0→A, 1→B, ...
+  board.appendChild(colLabel);
+}
+
+// For every row: add a row-number label, then walk across every column
+// creating one cell each. 8 rows x 8 cols = 64 cells.
+for (let y = 0; y < ROWS; y++) {
+  const rowLabel = document.createElement("div");
+  rowLabel.className = "coord-label";
+  rowLabel.textContent = ROWS - y;      // top row = 8 ... bottom row = 1 (chess style)
+  board.appendChild(rowLabel);
+
+  for (let x = 0; x < COLS; x++) {
+    // Make a new empty square.
+    const cell = document.createElement("div");
+    cell.className = "cell";
+
+    // Remember this cell's coordinates for later milestones.
+    cell.dataset.x = x;
+    cell.dataset.y = y;
+
+    // Tint the home rows: top 3 rows = Player 2, bottom 3 rows = Player 1.
+    if (y < 3) {
+      cell.classList.add("player2-zone");
+    } else if (y >= ROWS - 3) {
+      cell.classList.add("player1-zone");
+    }
+
+    // DRAG & DROP: every cell is a drop target (drop a card here to play it),
+    // and a cell that holds a unit is also draggable (drag it out to move it
+    // or return it to the hand).
+    cell.addEventListener("dragover", function (e) { e.preventDefault(); });
+    cell.addEventListener("drop", function (e) {
+      e.preventDefault();
+      handleDropOnCell(cell);
+    });
+    cell.addEventListener("dragstart", function (e) {
+      const ux = Number(cell.dataset.x);
+      const uy = Number(cell.dataset.y);
+      const u = findUnitAt(ux, uy);
+      if (u === null) { e.preventDefault(); return; }  // empty cell: nothing to drag
+      dragData = { kind: "unit", x: ux, y: uy, team: u.team };
+    });
+
+    // Add the finished cell to the board on the page.
+    board.appendChild(cell);
+  }
+}
+
+// ---------------------------------------------------------------------
+// DRAG & DROP placement (Phase A2): play a card onto your zone, drag a unit
+// back to your hand, or move a unit to another cell in your own zone.
+// ---------------------------------------------------------------------
+
+// Which player's zone does a given row belong to?
+function zoneOfRow(y) {
+  if (y < 3) return "player2";
+  if (y >= ROWS - 3) return "player1";
+  return "neutral";
+}
+
+// Something was dropped on a board cell.
+function handleDropOnCell(cell) {
+  if (!placementOpen) { dragData = null; return; }
+  if (dragData === null) return;
+
+  const x = Number(cell.dataset.x);
+  const y = Number(cell.dataset.y);
+
+  if (dragData.kind === "card") {
+    playCard(dragData.team, dragData.index, x, y);
+  } else if (dragData.kind === "unit") {
+    moveUnit(dragData, x, y);
+  }
+  dragData = null;
+}
+
+// Play a card from a hand onto an empty cell in that player's zone.
+function playCard(team, index, x, y) {
+  if (zoneOfRow(y) !== team) {
+    message.textContent = label(team) + " can only place on their own colored rows.";
+    return;
+  }
+  if (findUnitAt(x, y) !== null) {
+    message.textContent = "That square is already taken.";
+    return;
+  }
+  if (countUnits(team) >= roundNumber) {
+    message.textContent =
+      label(team) + " has already placed all " + roundNumber + " unit(s) this round.";
+    return;
+  }
+
+  // Take the card out of the hand and turn it into a unit on the board.
+  const card = hands[team][index];
+  hands[team].splice(index, 1);              // remove 1 card at that position
+  played[team].push(card);                   // track it as "on the board" this round
+  units.push({ x: x, y: y, attack: card.attack, hp: card.hp, maxHp: card.hp,
+               range: card.range, suit: card.suit, rank: card.rank, team: team,
+               attackCooldown: 0, moveCooldown: 0, card: card });
+
+  render();
+  renderHands();
+  updateStatus();
+  updatePlacementMessage();
+}
+
+// Move a unit already on the board to another empty cell in its own zone.
+function moveUnit(drag, x, y) {
+  if (zoneOfRow(y) !== drag.team) {
+    message.textContent = "You can only move units within your own zone.";
+    return;
+  }
+  if (findUnitAt(x, y) !== null) {
+    message.textContent = "That square is already taken.";
+    return;
+  }
+  const u = findUnitAt(drag.x, drag.y);
+  if (u === null) return;
+  u.x = x;
+  u.y = y;
+  render();
+  updateStatus();
+}
+
+// Something was dropped on a player's hand area — return that unit to the hand.
+function handleDropOnHand(team) {
+  if (!placementOpen) { dragData = null; return; }
+  if (dragData !== null && dragData.kind === "unit") {
+    if (dragData.team === team) {
+      returnUnitToHand(dragData);
+    } else {
+      message.textContent = "That's the other player's unit.";
+    }
+  }
+  dragData = null;
+}
+
+// Remove a unit from the board and give its owner a card back.
+function returnUnitToHand(drag) {
+  const u = findUnitAt(drag.x, drag.y);      // grab the unit before removing it
+  units = units.filter(function (uu) {
+    return !(uu.x === drag.x && uu.y === drag.y);
+  });
+  if (u !== null) {
+    // Take the played card off the board and return the exact card to the hand.
+    const pidx = played[drag.team].indexOf(u.card);
+    if (pidx !== -1) played[drag.team].splice(pidx, 1);
+    hands[drag.team].push(u.card);
+  }
+  render();
+  renderHands();
+  updateStatus();
+  updatePlacementMessage();
+}
+
+// Show the "ready" prompt once both players have placed their full army.
+function updatePlacementMessage() {
+  if (countUnits("player1") >= roundNumber && countUnits("player2") >= roundNumber) {
+    message.textContent = "Both armies ready — press Round Start!";
+  } else {
+    message.textContent = "";
+  }
+}
+
+// =====================================================================
+//  COMBAT (Milestone 4) — the auto-fight that runs on Round Start.
+// =====================================================================
+
+// Find the closest enemy of a given unit (or null if none are left).
+function nearestEnemy(unit) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (let i = 0; i < units.length; i++) {
+    const other = units[i];
+    if (other.team === unit.team) continue;   // skip our own team
+    // Distance = the larger of the horizontal/vertical gap (diagonal steps allowed).
+    const distance = Math.max(Math.abs(other.x - unit.x), Math.abs(other.y - unit.y));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = other;
+    }
+  }
+  return best;
+}
+
+// Resolve one attack: deal damage, roll diamonds' crit, apply clubs' splash.
+function attackTarget(attacker, target) {
+  const s = SUITS[attacker.suit];
+  let damage = attacker.attack;
+
+  // Crit: chance to strike for double damage (spade base + spade synergy,
+  // baked into critChance at Round Start). Fall back to the suit's base crit.
+  const critChance = (attacker.critChance !== undefined) ? attacker.critChance : (s.crit || 0);
+  if (Math.random() < critChance) {
+    damage = damage * 2;
+  }
+
+  target.hp = target.hp - damage;
+
+  // Lifesteal (diamonds): heal the attacker for the damage dealt, up to its max.
+  if (s.lifesteal) {
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + damage);
+  }
+
+  // Splash (clubs): hit enemies within the attacker's splash radius of the
+  // target. Clubs get radius 1+ (widened by the clubs synergy); others = 0.
+  const radius = attacker.splashRadius || 0;
+  if (radius > 0) {
+    for (let j = 0; j < units.length; j++) {
+      const other = units[j];
+      if (other === target) continue;
+      if (other.team === attacker.team) continue;   // never hit our own side
+      const adj = Math.max(Math.abs(other.x - target.x), Math.abs(other.y - target.y));
+      if (adj <= radius) {
+        other.hp = other.hp - damage;
+      }
+    }
+  }
+}
+
+// One "tick" of battle: every unit acts once, then we clean up and redraw.
+function combatStep() {
+  // Loop over a COPY so removing the dead mid-loop doesn't skip anyone.
+  const acting = units.slice();
+
+  for (let i = 0; i < acting.length; i++) {
+    const unit = acting[i];
+    if (unit.hp <= 0) continue;               // already died this tick
+
+    const target = nearestEnemy(unit);
+    if (target === null) continue;            // no enemies remain
+
+    const dx = target.x - unit.x;
+    const dy = target.y - unit.y;
+    const distance = Math.max(Math.abs(dx), Math.abs(dy));
+
+    if (distance <= unit.range) {
+      // In range → attack, but only when the attack cooldown has recharged.
+      if (unit.attackCooldown > 0) {
+        unit.attackCooldown = unit.attackCooldown - 1;   // still recharging
+      } else {
+        attackTarget(unit, target);                       // crit / splash / lifesteal
+        unit.attackCooldown = ATTACK_COOLDOWN_TICKS;       // wait before next attack
+      }
+    } else {
+      // Not in range → step toward the target, but only when the move cooldown
+      // has recharged (so movement is slowed to match the attack speed).
+      if (unit.moveCooldown > 0) {
+        unit.moveCooldown = unit.moveCooldown - 1;         // still recharging
+      } else {
+        const stepX = unit.x + Math.sign(dx);
+        const stepY = unit.y + Math.sign(dy);
+        if (findUnitAt(stepX, stepY) === null) {           // step only if the square is free
+          unit.x = stepX;
+          unit.y = stepY;
+          unit.moveCooldown = MOVE_COOLDOWN_TICKS;          // wait before the next step
+        }
+      }
+    }
+  }
+
+  // Remove everyone who dropped to 0 hp this tick.
+  units = units.filter(function (u) { return u.hp > 0; });
+  render();
+
+  // Safety valve: if a battle somehow stalls, end it as a draw.
+  tickCount = tickCount + 1;
+  if (tickCount > 300) {
+    finishRound("draw");
+    return;
+  }
+
+  checkForWinner();
+}
+
+// After each tick, see if one side has been wiped out.
+function checkForWinner() {
+  const p1 = countUnits("player1");
+  const p2 = countUnits("player2");
+
+  if (p1 > 0 && p2 > 0) return;  // both sides still standing → keep fighting
+
+  if (p1 > 0) {
+    finishRound("player1");
+  } else if (p2 > 0) {
+    finishRound("player2");
+  } else {
+    finishRound("draw");
+  }
+}
+
+// A round is over: stop the battle, record who won, then continue or end game.
+function finishRound(winner) {
+  clearInterval(combatTimer);
+  inCombat = false;
+  startButton.disabled = true;
+
+  if (winner === "draw") {
+    turnStatus.textContent = "🤝 Round " + roundNumber + " is a draw — no chips change hands!";
+  } else {
+    roundWins[winner] = roundWins[winner] + 1;   // add a point for the winner
+
+    // Phase C: steal chips based on margin of victory (the winner's survivors).
+    const loser = (winner === "player1") ? "player2" : "player1";
+    const survivors = countUnits(winner);
+    const steal = Math.min(survivors * CHIPS_PER_SURVIVOR, chips[loser]);
+    chips[winner] = chips[winner] + steal;
+    chips[loser] = chips[loser] - steal;
+
+    turnStatus.textContent = "🏆 " + label(winner) + " wins round " + roundNumber +
+      " with " + survivors + " unit(s) left — steals " + steal + " chips!";
+  }
+  updateRoundInfo();
+
+  if (roundNumber < 5) {
+    // More rounds to play — reveal the Next Round button.
+    message.textContent = "Press Next Round to continue.";
+    nextButton.style.display = "inline-block";
+  } else {
+    // That was the 5th round — decide the overall winner.
+    endGame();
+  }
+}
+
+// All 5 rounds done: whoever won more rounds wins the game.
+function endGame() {
+  let result;
+  if (chips.player1 > chips.player2) {
+    result = "🎉 Player 1 (blue) wins — " + chips.player1 + " vs " + chips.player2 +
+      " chips (up " + (chips.player1 - chips.player2) + ")!";
+  } else if (chips.player2 > chips.player1) {
+    result = "🎉 Player 2 (red) wins — " + chips.player2 + " vs " + chips.player1 +
+      " chips (up " + (chips.player2 - chips.player1) + ")!";
+  } else {
+    result = "🤝 Dead even at " + chips.player1 + " chips each — push!";
+  }
+  turnStatus.textContent = result;
+  message.textContent = "Press Reset Game to play again.";
+  nextButton.style.display = "none";
+}
+
+// Pressing the button starts the fight — but only when both armies are placed.
+function startRound() {
+  if (inCombat) return;                        // already fighting
+  if (countUnits("player1") < roundNumber || countUnits("player2") < roundNumber) {
+    message.textContent =
+      "Place all your units first — " + roundNumber + " each this round.";
+    return;
+  }
+  inCombat = true;
+  placementOpen = false;         // lock the board once the fight begins
+  tickCount = 0;
+  startButton.disabled = true;
+
+  // A3/D: the unplayed cards in each hand go to that player's discard pile.
+  discard.player1 = discard.player1.concat(hands.player1);
+  discard.player2 = discard.player2.concat(hands.player2);
+  hands.player1 = [];
+  hands.player2 = [];
+  renderHands();
+
+  // Phase E: reveal the community flop NOW — nobody saw it during placement.
+  dealFlop();
+  renderSynergies();
+
+  // B5.2: bake each team's suit synergies into their units, then redraw so the
+  // boosted stats are visible as the fight begins.
+  applySynergies();
+  render();
+
+  message.textContent = "";
+  turnStatus.textContent = "⚔️ Fight!";
+  // Run one combat step every 500 milliseconds until someone wins.
+  combatTimer = setInterval(combatStep, 500);
+}
+
+// Advance to the next round: clear the board; the placement limit rises by 1
+// automatically because it equals roundNumber.
+function nextRound() {
+  // Phase D: cards played this round (the whole board) go to the discard piles.
+  discard.player1 = discard.player1.concat(played.player1);
+  discard.player2 = discard.player2.concat(played.player2);
+  played.player1 = [];
+  played.player2 = [];
+
+  roundNumber = roundNumber + 1;
+  units = [];
+  inCombat = false;
+  placementOpen = true;         // players may edit the board again
+  tickCount = 0;
+  startButton.disabled = false;
+  nextButton.style.display = "none";
+  message.textContent = "";
+  hideFlop();                   // next round's flop stays hidden until its Round Start
+  render();
+  updateStatus();
+  updateRoundInfo();
+  drawHands();                  // deal fresh hands (2 x the new round number)
+}
+
+// Reset the WHOLE game back to round 1 with a clean scoreboard.
+function resetGame() {
+  clearInterval(combatTimer);   // stop any battle that's running
+  units = [];
+  roundNumber = 1;
+  roundWins = { player1: 0, player2: 0 };
+  chips = { player1: 100, player2: 100 };
+  inCombat = false;
+  placementOpen = true;
+  tickCount = 0;
+  startButton.disabled = false;
+  nextButton.style.display = "none";
+  message.textContent = "";
+  initShoes();                  // fresh 2-deck shoe per player, empty discards
+  initCommunityDeck();
+  hideFlop();
+  render();
+  updateStatus();
+  updateRoundInfo();
+  drawHands();                  // deal fresh round-1 hands
+}
+
+startButton.addEventListener("click", startRound);
+nextButton.addEventListener("click", nextRound);
+resetButton.addEventListener("click", resetGame);
+
+// Each hand area is a drop target: drag a unit here to return it to that hand.
+["player1", "player2"].forEach(function (team) {
+  const handEl = document.getElementById("hand-" + team);
+  handEl.addEventListener("dragover", function (e) { e.preventDefault(); });
+  handEl.addEventListener("drop", function (e) {
+    e.preventDefault();
+    handleDropOnHand(team);
+  });
+});
+
+// Draw the starting board, the first texts, build the shoes, and deal on load.
+initShoes();
+initCommunityDeck();
+hideFlop();
+render();
+updateStatus();
+updateRoundInfo();
+drawHands();
+</script>
