@@ -272,3 +272,22 @@
     display: inline-block; border: 1px solid #555; border-radius: 4px;
     padding: 2px 8px; margin: 2px 4px; background: #262626; color: #ddd;
   }
+
+  /* Phase D — the 6-seat table panel (six chip stacks + last round's recap). */
+  #tablePanel {
+    margin: 10px auto 4px; padding: 10px 12px; max-width: 720px;
+    border: 1px solid #3a4152; border-radius: 10px; background: #141822;
+  }
+  .table-title { font-size: 14px; color: #cdd6e5; font-weight: bold; margin-bottom: 8px; }
+  .seat-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .seat-badge {
+    border: 2px solid #555; border-radius: 8px; padding: 6px 10px; min-width: 84px;
+    background: #1b2130; text-align: center;
+  }
+  .seat-badge.you { background: #16233a; box-shadow: 0 0 0 1px #5b8def inset; }
+  .seat-badge.opp { background: #2a1c1c; }
+  .seat-name { font-size: 12px; font-weight: bold; }
+  .seat-chips { font-size: 18px; font-weight: bold; color: #ffd76b; margin-top: 2px; }
+  .seat-tag { font-size: 10px; color: #9aa4b5; margin-top: 2px; letter-spacing: .04em; }
+  .recap-title { font-size: 12px; color: #888; margin: 10px 0 4px; }
+  .recap-line { font-size: 13px; color: #cdd6e5; margin: 2px 0; }

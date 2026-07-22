@@ -65,6 +65,23 @@ function finishRound(winner) {
 
   updateRoundInfo();
 
+  // Phase D: fold the live result back into the SEATS, then run the two other
+  // matchups headless so the whole table advances this round. Must run AFTER the live
+  // steal/tax math above (it reads the post-round chips.player1/2).
+  if (tableActive && tablePairing) {
+    const oppName = seats[opponentSeat].name;
+    const youBefore = seats[0].chips;
+    seats[0].chips = chips.player1;              // your post-round stack
+    seats[opponentSeat].chips = chips.player2;   // this round's opponent's stack
+    const youDelta = seats[0].chips - youBefore; // net change to your stack this round
+    let liveLine;
+    if (winner === "draw") liveLine = "You drew " + oppName + " — no chips moved";
+    else if (winner === "player1") liveLine = "🏆 You beat " + oppName + " — won " + youDelta + " chips";
+    else liveLine = "💀 " + oppName + " beat You — lost " + Math.abs(youDelta) + " chips";
+    runHeadlessMatchups(liveLine);               // fills tableRecap (live line first)
+    renderTable();
+  }
+
   if (roundNumber < MAX_ROUNDS) {
     // More rounds to play — reveal the Next Round button.
     // Phase E: open hold mode so players can click leftover cards to keep them.
@@ -83,6 +100,27 @@ function finishRound(winner) {
 // All rounds done: whoever has the most chips wins.
 function endGame() {
   holdMode = false;             // no holding once the game is over
+
+  // Phase D: at a full table the winner is simply the richest of the six seats
+  // (no elimination — everyone played all MAX_ROUNDS rounds). Ties share the pot.
+  if (tableActive) {
+    const ranked = seats.slice().sort(function (a, b) { return b.chips - a.chips || a.id - b.id; });
+    const top = ranked[0];
+    const tied = ranked.filter(function (s) { return s.chips === top.chips; });
+    const place = ranked.findIndex(function (s) { return s.isHuman; }) + 1;
+    if (tied.length > 1) {
+      turnStatus.textContent = "🤝 Split pot at " + top.chips + " chips — " +
+        tied.map(function (s) { return s.name; }).join(" & ") + "!";
+    } else {
+      turnStatus.textContent = "🎉 " + top.name + " wins the table with " + top.chips +
+        " chips!" + (top.isHuman ? " That's you!" : "  You finished " + ordinal(place) + ".");
+    }
+    message.textContent = "Press Reset Game to play again.";
+    nextButton.style.display = "none";
+    renderTable();
+    return;
+  }
+
   let result;
   if (chips.player1 > chips.player2) {
     result = "🎉 Player 1 (blue) wins — " + chips.player1 + " vs " + chips.player2 +
@@ -120,6 +158,17 @@ function resolveStrikes() {
 // Pressing the button starts the fight — but only when both armies are placed.
 function startRound() {
   if (inCombat) return;                        // already fighting
+
+  // Phase D: in table mode, pick this round's live opponent and load the two dueling
+  // seats' stacks onto the player1/player2 sides BEFORE the AI places, so gold-scaling
+  // abilities read the real seat chips. The opponent is a rotating seat; mechanically
+  // the live fight is identical to the old 1-AI game — it's just "you vs seat N" now.
+  if (tableActive) {
+    pairRound();
+    chips.player1 = seats[0].chips;
+    chips.player2 = seats[opponentSeat].chips;
+    weakCardsPlayed.player2 = 0;               // fresh opponent each round (your own tally persists)
+  }
 
   // Part B step 1: if Player 2 is the computer, let the AI place its army now —
   // just before the fight, so the human sees the enemy board appear at Round Start
@@ -229,6 +278,7 @@ function nextRound() {
   updateStatus();
   updateRoundInfo();
   drawHands();                  // deal fresh hands (2 x the new round number)
+  renderTable();                // Phase D: keep the seat stacks on screen (no-op off-table)
 }
 
 // Playtest mode: drop a hand-picked card (any suit+rank) into a team's hand so you can
@@ -264,8 +314,57 @@ function resetGame() {
   initShoes();                  // fresh 2-deck shoe per player, empty discards
   initCommunityDeck();
   hideFlop();
+  if (tableActive) makeLiveSeats();   // Phase D: fresh 6-seat table for the new game
   render();
   updateStatus();
   updateRoundInfo();
   drawHands();                  // deal fresh round-1 hands
+  renderTable();                // Phase D: paint the reset seat stacks (no-op off-table)
+}
+
+// ── Phase D helpers (6-seat table) ────────────────────────────────────────────
+
+// Pair the table for one round: you (seat 0) face a random other seat, and the
+// remaining four split into the two headless matchups. No byes — all six seats always
+// play (most-chips win condition, nobody is eliminated). `shuffle` lives in table.js.
+function pairRound() {
+  const others = shuffle([1, 2, 3, 4, 5]);
+  opponentSeat = others[0];
+  const rest = others.slice(1);              // the four seats you're NOT facing
+  tablePairing = {
+    opponentSeat: opponentSeat,
+    headless: [[rest[0], rest[1]], [rest[2], rest[3]]],
+  };
+}
+
+// Run this round's two OTHER matchups with no UI, folding each result into the seats.
+// Bracketed by simInstall/simRestore (+ SIM_MODE) exactly like a balance scan, so the
+// finished LIVE board (units, chips, hands, flop) is preserved and restored afterward —
+// tableMatch stomps those same globals. `liveLine` is your own recap, shown first.
+function runHeadlessMatchups(liveLine) {
+  const size = armySize();                   // same army size as the live round just fought
+  const saved = simInstall();                // swap live globals for a clean sandbox
+  SIM_MODE = true;
+  tableRecap = [liveLine];
+  tablePairing.headless.forEach(function (pair) {
+    const a = seats[pair[0]], b = seats[pair[1]];
+    const out = tableMatch(a, b, size);      // settles the chip steal on the seat objects
+    tableRecap.push(buildRecapLine(out, a, b));
+  });
+  SIM_MODE = false;
+  simRestore(saved);                         // restore the player's real board
+}
+
+// One human-readable line for a headless matchup result.
+function buildRecapLine(out, a, b) {
+  if (out.draw) return a.name + " drew " + b.name + " — no chips moved";
+  const w = (out.winnerId === a.id) ? a : b;
+  const l = (out.winnerId === a.id) ? b : a;
+  return w.name + " beat " + l.name + " — stole " + out.steal + " chips";
+}
+
+// 1 → "1st", 2 → "2nd", 3 → "3rd", ... for the end-of-game placement text.
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }

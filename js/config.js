@@ -607,3 +607,17 @@ const COMMUNITY_SCHEDULE = [0, 3, 3, 3, 4, 4, 5, 5];
 // a fresh draw — the cap makes bench space finite so you can't hoard forever.
 const PLAY_CAP = 5;
 const HAND_CAP = 10;
+
+// ── Phase C (6-seat table) ───────────────────────────────────────────────────
+// A "seat" is a player AT THE TABLE (its own chip stack + alive/dead), as opposed
+// to a "side" (player1/player2) which is all combat.js ever understands. Each
+// round the alive seats are PAIRED and every pairing is fought as an ordinary
+// 2-side combat, loaded onto the player1/player2 globals (see table.js).
+//
+// These live here as named knobs so the table's shape/rules are one edit away.
+const NUM_SEATS = 6;                 // players at a full table
+const SEAT_START_CHIPS = 100;        // every seat's opening stack (matches the 2p game)
+// Game end (headless-first choice): a seat at 0 chips is ELIMINATED and the game
+// ends when one seat remains — BUT never run longer than this many rounds, so a
+// batch scan can't spin forever if chips somehow stalemate. Swap either rule here.
+const TABLE_ROUND_CAP = MAX_ROUNDS;  // hard safety cap on rounds per table game

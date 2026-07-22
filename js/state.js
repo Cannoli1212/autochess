@@ -84,6 +84,39 @@ let player2IsAI = true;
 let p2Mode = "computer";                       // "computer" | "human" | "playtest"
 function isPlaytest() { return p2Mode === "playtest"; }
 
+// ── Phase D (6-seat table, live) ─────────────────────────────────────────────
+// The live table. A SEAT is a player at the table (you = seat 0, seats 1-5 are AI);
+// a SIDE is player1/player2, all combat understands (see table.js for the split).
+// Each round you're PAIRED with one seat (opponentSeat) and fight it live on the
+// board; the other four seats fight two headless matchups. `tableActive` gates the
+// whole 6-seat flow — it's on for vs-computer and OFF for the classic 2-player
+// testing modes (human hotseat / playtest), which stay exactly as they were.
+let seats = [];              // 6 live seats; index 0 is you
+let tableActive = false;     // true = 6-seat table flow; false = classic 2-player
+let opponentSeat = 1;        // which seat is on the player2 side THIS round
+let tablePairing = null;     // { opponentSeat, headless: [[a,b],[c,d]] } for the round
+let tableRecap = [];         // last round's result lines, shown in the table panel
+
+// Display identity for each seat (index 0 = you). Purely cosmetic — seats carry no
+// persistent deck in D1 (AI opponents draft a fresh hand each matchup, like the sim).
+const SEAT_NAMES  = ["You", "Seat 2", "Seat 3", "Seat 4", "Seat 5", "Seat 6"];
+const SEAT_COLORS = ["#5b8def", "#e0655b", "#e0a15b", "#5bbf7a", "#a15be0", "#e05bb0"];
+
+// Build a fresh table of NUM_SEATS live seats at the starting stack. Called on a new
+// game (resetGame) and when switching into table mode.
+function makeLiveSeats() {
+  seats = [];
+  for (let i = 0; i < NUM_SEATS; i++) {
+    seats.push({
+      id: i, chips: SEAT_START_CHIPS, isHuman: i === 0,
+      name: SEAT_NAMES[i], color: SEAT_COLORS[i],
+    });
+  }
+  opponentSeat = 1;
+  tablePairing = null;
+  tableRecap = [];
+}
+
 // Phase E: true only on the results screen, when players may click their
 // leftover cards to mark them "held" for next round. A held card carries a
 // `held` flag on the card object itself. Off during placement and combat.

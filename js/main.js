@@ -17,6 +17,11 @@ aiToggleButton.addEventListener("click", function () {
   player2IsAI = (p2Mode === "computer");
   aiToggleButton.textContent = P2_MODE_LABEL[p2Mode];
   playtestPanel.style.display = (p2Mode === "playtest") ? "block" : "none";
+  // Phase D: the 6-seat table is on ONLY in vs-computer mode. Switching modes rebuilds
+  // the table (fresh stacks) so it never carries stale seats from a prior mode.
+  tableActive = (p2Mode === "computer");
+  if (tableActive) makeLiveSeats();
+  renderTable();
   updateStatus();
   updatePlacementMessage();
 });
@@ -45,7 +50,11 @@ initInput();
 initShoes();
 initCommunityDeck();
 hideFlop();
+// Phase D: default mode is vs-computer, so open at a fresh 6-seat table.
+tableActive = (p2Mode === "computer");
+if (tableActive) makeLiveSeats();
 render();
 updateStatus();
 updateRoundInfo();
 drawHands();
+renderTable();
