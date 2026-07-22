@@ -278,9 +278,12 @@ function nextRound() {
   startButton.disabled = false;
   nextButton.style.display = "none";
   message.textContent = "";
-  // Phase A: the community PERSISTS across rounds — do NOT wipe it. Just repaint so
-  // the new round shows the cards dealt so far face-up (known while you plan) plus
-  // any pending back (the turn/river reveal still to come this round).
+  // Community is RE-RANDOMIZED every round (it no longer persists): wipe the board and
+  // give it a fresh deck, so growCommunity() deals a brand-new random flop/turn/river at
+  // Round Start. Until then it stays face-down ("?"), hidden while you plan.
+  flop = [];
+  flopRevealed = false;
+  initCommunityDeck();
   renderFlop();
   render();
   updateStatus();

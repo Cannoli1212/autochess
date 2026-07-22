@@ -1,9 +1,10 @@
-// flop.js — the shared community board (own deck, grow/reveal, display).
-// Phase A (Poker Streets): the community is no longer re-dealt every round. It
-// GROWS and PERSISTS across the whole game — flop (3) → turn (4th) → river (5th),
-// each card staying once dealt (see COMMUNITY_SCHEDULE in config.js).
-// NOTE: the `flop` array now holds the WHOLE community board (up to 5 cards by the
-// river) — we kept the name `flop` from when the community was only ever 3 cards.
+// flop.js — the shared community board (own deck, deal/reveal, display).
+// The community is RE-RANDOMIZED every round: nextRound wipes it + reshuffles the
+// deck, then growCommunity() deals a fresh random flop/turn/river at Round Start. The
+// COMMUNITY_SCHEDULE count still grows across the game — flop (3) → turn (4) → river
+// (5) — but the cards themselves are new each round and hidden until Round Start.
+// NOTE: the `flop` array holds the WHOLE community board (up to 5 cards) — we kept the
+// name `flop` from when the community was only ever 3 cards.
 // Depends on: config, state, cards.
 
 // Fresh community deck (its own shoe, separate from the players').
@@ -27,9 +28,9 @@ function hideFlop() {
   renderFlop();
 }
 
-// Round Start: TOP UP the community board to this round's target, KEEPING every
-// card already dealt. On the flop/turn/river rounds this reveals the new card(s);
-// on the "stays" rounds the board is already full, so this does nothing.
+// Round Start: deal this round's community up to its target count. The board was
+// wiped at nextRound (and is empty on a fresh game), so this deals a full fresh
+// random flop/turn/river — revealing it face-up as the fight begins.
 function growCommunity() {
   const target = communityTarget(roundNumber);
   while (flop.length < target) {
@@ -47,9 +48,9 @@ function flopCount(suit) {
   return flop.filter(function (c) { return c.suit === suit; }).length;
 }
 
-// Draw the community board: cards already dealt show FACE-UP (known while you plan
-// — poker-authentic), and any not-yet-dealt card for THIS round shows as a
-// face-down "?" back (the turn/river reveal that lands at Round Start).
+// Draw the community board: once this round's cards are dealt (at Round Start) they
+// show FACE-UP; while you're still planning the board is empty, so every slot for
+// this round shows as a face-down "?" back until the reveal at Round Start.
 function renderFlop() {
   if (SIM_MODE) return;   // headless batch sim: skip DOM (see sim.js)
   const el = document.getElementById("flop-cards");
