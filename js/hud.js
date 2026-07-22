@@ -26,6 +26,19 @@ function updateStatus() {
 
 // Refresh the round number and the rounds-won scoreboard.
 function updateRoundInfo() {
+  // Phase D3: at a 6-seat table the old "Player 1 vs Player 2 rounds won" line is
+  // meaningless — show your live standing (chips + rank) and the current leader instead.
+  if (tableActive && seats.length) {
+    const ranked = seats.slice().sort(function (a, b) { return b.chips - a.chips || a.id - b.id; });
+    const place = ranked.findIndex(function (s) { return s.isHuman; }) + 1;
+    const leader = ranked[0];
+    roundInfo.textContent =
+      "Round " + roundNumber + " of " + MAX_ROUNDS + "   —   You: 💰" + seats[0].chips +
+      " (" + ordinal(place) + " of " + seats.length + ")   ·   Leader: " + leader.name +
+      " 💰" + leader.chips;
+    updateChipInfo();
+    return;
+  }
   roundInfo.textContent =
     "Round " + roundNumber + " of " + MAX_ROUNDS + "   —   Rounds won:  Player 1: " +
     roundWins.player1 + "  ·  Player 2: " + roundWins.player2;

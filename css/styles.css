@@ -291,3 +291,16 @@
   .seat-tag { font-size: 10px; color: #9aa4b5; margin-top: 2px; letter-spacing: .04em; }
   .recap-title { font-size: 12px; color: #888; margin: 10px 0 4px; }
   .recap-line { font-size: 13px; color: #cdd6e5; margin: 2px 0; }
+
+  /* Phase D2 — the "watch" tab bar above the board. */
+  #matchTabs {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    justify-content: center; margin: 8px auto 0; max-width: 720px;
+  }
+  .match-tabs-label { font-size: 12px; color: #9aa4b5; margin-right: 2px; }
+  .match-tab {
+    font-size: 12px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid #3a4152; background: #1b2130; color: #cdd6e5; cursor: pointer;
+  }
+  .match-tab:hover { background: #262d3d; }
+  .match-tab.active { border-color: #5b8def; background: #16233a; color: #fff; font-weight: bold; }

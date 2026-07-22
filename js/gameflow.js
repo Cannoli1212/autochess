@@ -74,12 +74,19 @@ function finishRound(winner) {
     seats[0].chips = chips.player1;              // your post-round stack
     seats[opponentSeat].chips = chips.player2;   // this round's opponent's stack
     const youDelta = seats[0].chips - youBefore; // net change to your stack this round
-    let liveLine;
-    if (winner === "draw") liveLine = "You drew " + oppName + " — no chips moved";
-    else if (winner === "player1") liveLine = "🏆 You beat " + oppName + " — won " + youDelta + " chips";
-    else liveLine = "💀 " + oppName + " beat You — lost " + Math.abs(youDelta) + " chips";
-    runHeadlessMatchups(liveLine);               // fills tableRecap (live line first)
+    let liveLine, liveTab;
+    if (winner === "draw") { liveLine = "You drew " + oppName + " — no chips moved"; liveTab = "You vs " + oppName + " (draw)"; }
+    else if (winner === "player1") { liveLine = "🏆 You beat " + oppName + " — won " + youDelta + " chips"; liveTab = "You ✓ vs " + oppName; }
+    else { liveLine = "💀 " + oppName + " beat You — lost " + Math.abs(youDelta) + " chips"; liveTab = "You vs " + oppName + " ✓"; }
+
+    // Phase D2: your fight is the first recording (captured live in the combat timer);
+    // runHeadlessMatchups appends the other two. Then show the tab bar on tab 0 (yours).
+    matchRecordings = [{ label: liveTab, frames: liveFrames }];
+    runHeadlessMatchups(liveLine);               // fills tableRecap + appends 2 recordings
+    viewingTab = 0;
     renderTable();
+    renderMatchTabs();
+    updateRoundInfo();                           // refresh standings NOW that seats are settled
   }
 
   if (roundNumber < MAX_ROUNDS) {
@@ -228,10 +235,16 @@ function startRound() {
   message.textContent = "";
   turnStatus.textContent = (struck > 0 ? "✕ Airstrike hit " + struck + " unit(s)! " : "") + "⚔️ Fight!";
 
+  // Phase D2: record YOUR live fight tick-by-tick so it can be rewatched from the tab
+  // bar alongside the other matchups. Snapshot the opening board, then one per tick.
+  liveFrames = [];
+  if (tableActive) liveFrames.push(snapshotFrame());
+
   // gameflow owns the combat loop: run a step every 500ms; when combatStep
   // reports a result (non-null), stop the loop and finish the round.
   combatTimer = setInterval(function () {
     const result = combatStep();
+    if (tableActive) liveFrames.push(snapshotFrame());
     if (result !== null) {
       clearInterval(combatTimer);
       finishRound(result);
@@ -242,6 +255,7 @@ function startRound() {
 // Advance to the next round: clear the board; the placement limit rises by 1
 // automatically because it equals roundNumber.
 function nextRound() {
+  clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
   // Phase E: keep each player's HELD leftover cards; discard the rest.
   ["player1", "player2"].forEach(function (team) {
     const kept = [];
@@ -295,6 +309,7 @@ function addPlaytestCard(team, suit, rank) {
 // Reset the WHOLE game back to round 1 with a clean scoreboard.
 function resetGame() {
   clearInterval(combatTimer);   // stop any battle that's running
+  clearMatchTabs();             // Phase D2: stop any replay + drop recordings
   units = [];
   strikeMarks = { player1: [], player2: [] };
   roundNumber = 1;
@@ -348,8 +363,12 @@ function runHeadlessMatchups(liveLine) {
   tableRecap = [liveLine];
   tablePairing.headless.forEach(function (pair) {
     const a = seats[pair[0]], b = seats[pair[1]];
-    const out = tableMatch(a, b, size);      // settles the chip steal on the seat objects
+    const frames = [];                       // Phase D2: capture this fight for replay
+    const out = tableMatch(a, b, size, frames);   // settles the chip steal on the seat objects
     tableRecap.push(buildRecapLine(out, a, b));
+    const tab = out.draw ? (a.name + " vs " + b.name + " (draw)")
+      : (out.winnerId === a.id ? (a.name + " ✓ vs " + b.name) : (a.name + " vs " + b.name + " ✓"));
+    matchRecordings.push({ label: tab, frames: frames });
   });
   SIM_MODE = false;
   simRestore(saved);                         // restore the player's real board

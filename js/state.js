@@ -97,6 +97,16 @@ let opponentSeat = 1;        // which seat is on the player2 side THIS round
 let tablePairing = null;     // { opponentSeat, headless: [[a,b],[c,d]] } for the round
 let tableRecap = [];         // last round's result lines, shown in the table panel
 
+// Phase D2 — "tab to watch" the other fights. Combat is never re-run; instead each
+// fight is RECORDED tick-by-tick (a list of board snapshots) so it can be replayed on
+// the real board. `matchRecordings` holds this round's three fights (yours first);
+// `liveFrames` accumulates YOUR fight's snapshots as its combat timer ticks;
+// `viewingTab` is which fight the tab bar is showing; `replayTimer` drives playback.
+let matchRecordings = [];    // [{ label, frames, ... }] for the round just fought
+let liveFrames = [];         // your live fight's snapshots, packaged at finishRound
+let viewingTab = 0;          // active tab in the match-tabs bar
+let replayTimer = null;      // setInterval driving a replay (null = not replaying)
+
 // Display identity for each seat (index 0 = you). Purely cosmetic — seats carry no
 // persistent deck in D1 (AI opponents draft a fresh hand each matchup, like the sim).
 const SEAT_NAMES  = ["You", "Seat 2", "Seat 3", "Seat 4", "Seat 5", "Seat 6"];

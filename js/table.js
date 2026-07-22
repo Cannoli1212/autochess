@@ -82,7 +82,10 @@ function pairSeats(seats) {
 //      CHIPS_PER_SURVIVOR per surviving unit, capped at what the loser has.
 //
 // Returns { winnerId, loserId, steal, survivors, draw } for the caller to log.
-function tableMatch(seatA, seatB, armySizeThisRound) {
+// Phase D2: pass an array as `frames` and a board snapshot is pushed each tick, so
+// the fight can be replayed on the real board later. Omit it (balance scans do) and
+// nothing is recorded — behavior is otherwise identical.
+function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   // Side assignment: A is always player1, B always player2 for this match. (Which
   // physical zone that is doesn't bias anything — the AI mirrors its placement.)
   units = [];
@@ -105,8 +108,12 @@ function tableMatch(seatA, seatB, armySizeThisRound) {
   applySynergies();                                // bake suit + poker buffs on the placed teams
   for (let i = 0; i < units.length; i++) runAbilityHook(units[i], "onRoundStart", {});
 
+  if (frames) frames.push(snapshotFrame());        // opening board (units placed, pre-fight)
   let result = null, guard = 0;
-  while (result === null && guard < 1000) { result = combatStep(); guard++; }
+  while (result === null && guard < 1000) {
+    result = combatStep(); guard++;
+    if (frames) frames.push(snapshotFrame());      // one snapshot per tick, for replay
+  }
 
   // Settle chips at the SEAT level. A draw moves nothing.
   if (result === "draw" || result === null) {

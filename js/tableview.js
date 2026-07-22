@@ -37,3 +37,65 @@ function renderTable() {
     '<div class="seat-row">' + badges + '</div>' +
     recap;
 }
+
+// ── Phase D2: record & replay the fights ──────────────────────────────────────
+
+// A single replay frame: a shallow clone of everything render() reads off the board.
+// Units/traps are cloned so their x/y/hp are frozen at this tick; u.card is a stable
+// reference kept as-is. snapshotFrame() does NO DOM work, so it's safe to call inside
+// the headless combat loop (SIM_MODE on) as well as the live one.
+function snapshotFrame() {
+  return {
+    units: units.map(function (u) { return Object.assign({}, u); }),
+    traps: traps.map(function (t) { return Object.assign({}, t); }),
+    strikeMarks: { player1: strikeMarks.player1.slice(), player2: strikeMarks.player2.slice() },
+    tick: tickCount,
+  };
+}
+
+// Paint one recorded frame onto the real board by swapping it into the globals render()
+// reads, then rendering. Replay is display-only; nextRound rebuilds the true board.
+function showFrame(f) {
+  units = f.units; traps = f.traps; strikeMarks = f.strikeMarks; tickCount = f.tick;
+  render();
+}
+
+// Draw the tab bar for this round's three fights (yours first). Hidden when there's
+// nothing to watch (off-table, or before the round is fought / after nextRound clears it).
+function renderMatchTabs() {
+  const bar = document.getElementById("matchTabs");
+  if (!bar) return;
+  if (!tableActive || matchRecordings.length === 0) { bar.style.display = "none"; bar.innerHTML = ""; return; }
+  bar.style.display = "flex";
+  bar.innerHTML = '<span class="match-tabs-label">▶ Watch:</span>' +
+    matchRecordings.map(function (rec, i) {
+      const active = (i === viewingTab) ? " active" : "";
+      return '<button class="match-tab' + active + '" data-idx="' + i + '">' + rec.label + '</button>';
+    }).join("");
+  const btns = bar.querySelectorAll(".match-tab");
+  for (let i = 0; i < btns.length; i++) {
+    btns[i].addEventListener("click", function () { watchMatch(Number(this.dataset.idx)); });
+  }
+}
+
+// Play recording `idx` on the board: step through its frames on a brisk timer.
+function watchMatch(idx) {
+  clearInterval(replayTimer);
+  viewingTab = idx;
+  renderMatchTabs();                    // refresh the active-tab highlight
+  const rec = matchRecordings[idx];
+  if (!rec || rec.frames.length === 0) return;
+  let i = 0;
+  replayTimer = setInterval(function () {
+    if (i >= rec.frames.length) { clearInterval(replayTimer); replayTimer = null; return; }
+    showFrame(rec.frames[i]); i++;
+  }, 130);
+}
+
+// Tear down the tab bar + any running replay (called by nextRound / resetGame).
+function clearMatchTabs() {
+  clearInterval(replayTimer); replayTimer = null;
+  matchRecordings = []; viewingTab = 0;
+  const bar = document.getElementById("matchTabs");
+  if (bar) { bar.style.display = "none"; bar.innerHTML = ""; }
+}
