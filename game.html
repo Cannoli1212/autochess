@@ -1,7 +1,7 @@
 <meta charset="utf-8" />
 <title>Autochess — 7-Round Mode</title>
 
-<link rel="stylesheet" href="css/styles.css?v=leg50" />
+<link rel="stylesheet" href="css/styles.css?v=leg53" />
 
 <p id="roundInfo">Round 1 of 7 — Rounds won: Player 1: 0 · Player 2: 0</p>
 
@@ -25,6 +25,7 @@
 <div id="matchTabs" style="display:none"></div>
 
 <div class="arena">
+  <div id="traitBar"></div>
   <div id="board"></div>
   <div class="side-chips">
     <div id="chip-player2" class="chip-badge p2">
@@ -33,7 +34,6 @@
     </div>
     <div class="side-buttons">
       <button id="startButton">▶ Round Start</button>
-      <button id="redrawButton" title="Throw away your whole hand and deal a fresh one of the same size. 2 per round; use it before you place any units.">🔄 Redraw (2 left)</button>
       <button id="nextButton" style="display:none">Next Round ▶</button>
       <button id="resetButton">↺ Reset Game</button>
       <button id="aiToggleButton">🤖 P2: Computer</button>
@@ -71,6 +71,7 @@
     <span class="pile draw" id="draw-player1"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
     <span class="pile discard" id="discard-player1"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
     <span class="cards" id="hand-player1"></span>
+    <button id="redrawButton" title="Throw away your whole hand and deal a fresh one of the same size. 2 per round; use it before you place any units.">🔄 Redraw (2 left)</button>
   </div>
   <div class="hand-row" data-team="player2">
     <span class="hand-label" id="hand-label-player2"></span>
@@ -112,21 +113,21 @@
   <b style="color:#e8e8e8">♠</b> ranged, crit
 </div>
 
-<script src="js/config.js?v=leg50"></script>
-<script src="js/abilities.js?v=leg50"></script>
-<script src="js/state.js?v=leg50"></script>
-<script src="js/cards.js?v=leg50"></script>
-<script src="js/flop.js?v=leg50"></script>
-<script src="js/synergies.js?v=leg50"></script>
-<script src="js/board.js?v=leg50"></script>
-<script src="js/hands.js?v=leg50"></script>
-<script src="js/placement.js?v=leg50"></script>
-<script src="js/ai.js?v=leg50"></script>
-<script src="js/pathing.js?v=leg50"></script>
-<script src="js/combat.js?v=leg50"></script>
-<script src="js/hud.js?v=leg50"></script>
-<script src="js/tableview.js?v=leg50"></script>
-<script src="js/gameflow.js?v=leg50"></script>
-<script src="js/sim.js?v=leg50"></script>
-<script src="js/table.js?v=leg50"></script>
-<script src="js/main.js?v=leg50"></script>
+<script src="js/config.js?v=leg53"></script>
+<script src="js/abilities.js?v=leg53"></script>
+<script src="js/state.js?v=leg53"></script>
+<script src="js/cards.js?v=leg53"></script>
+<script src="js/flop.js?v=leg53"></script>
+<script src="js/synergies.js?v=leg53"></script>
+<script src="js/board.js?v=leg53"></script>
+<script src="js/hands.js?v=leg53"></script>
+<script src="js/placement.js?v=leg53"></script>
+<script src="js/ai.js?v=leg53"></script>
+<script src="js/pathing.js?v=leg53"></script>
+<script src="js/combat.js?v=leg53"></script>
+<script src="js/hud.js?v=leg53"></script>
+<script src="js/tableview.js?v=leg53"></script>
+<script src="js/gameflow.js?v=leg53"></script>
+<script src="js/sim.js?v=leg53"></script>
+<script src="js/table.js?v=leg53"></script>
+<script src="js/main.js?v=leg53"></script>

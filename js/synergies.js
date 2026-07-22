@@ -29,6 +29,181 @@ function renderSynergies() {
   renderOneSynergy("player1");
   renderOneSynergy("player2");
   renderPokerHands();
+  renderTraitBar();
+}
+
+// ── TFT-style LEFT trait sidebar (Riley, 2026-07-22) ───────────────────────
+// YOUR (player1) live traits, lit as you field units — sits left of the board so it
+// never covers gameplay. Two sections: SUIT traits (the team synergies, breakpoints
+// 2/3/5) and POKER (the of-a-kind ladder pair→trips→quads plus any named/shaped
+// hands). Every row reuses the SAME detectors as the combat buffs and the bottom
+// panel (effectiveSuitCount / synergyTier / rankCounts / bestStraight / …), so the
+// three displays can never disagree. Hover a row for a tooltip of every breakpoint
+// with the active tier highlighted; tooltips open to the LEFT, into empty margin.
+
+// Pretty-print a suit key as its capitalized name ("hearts" → "Hearts").
+function suitName(suit) { return suit.charAt(0).toUpperCase() + suit.slice(1); }
+
+// Build one trait row element from its parts. Shared by the suit and poker sections.
+//   pips: [{ label, hit, cur }]  — the breakpoint chips (hit = reached, cur = active tier)
+function traitRowEl(symbolText, symbolColor, nameHTML, pips, tooltipHTML, active) {
+  const row = document.createElement("div");
+  row.className = "trait-row" + (active ? " active" : " inactive");
+
+  const sym = document.createElement("div");
+  sym.className = "trait-sym";
+  if (symbolColor) sym.style.color = symbolColor;
+  sym.textContent = symbolText;
+  row.appendChild(sym);
+
+  const body = document.createElement("div");
+  body.className = "trait-body";
+  const name = document.createElement("div");
+  name.className = "trait-name";
+  name.innerHTML = nameHTML;
+  body.appendChild(name);
+
+  const pipWrap = document.createElement("div");
+  pipWrap.className = "trait-pips";
+  pips.forEach(function (p) {
+    const el = document.createElement("span");
+    el.className = "pip" + (p.hit ? " hit" : "") + (p.cur ? " cur" : "");
+    el.textContent = p.label;
+    pipWrap.appendChild(el);
+  });
+  body.appendChild(pipWrap);
+  row.appendChild(body);
+
+  const tip = document.createElement("div");
+  tip.className = "trait-tooltip";
+  tip.innerHTML = tooltipHTML;
+  row.appendChild(tip);
+
+  return row;
+}
+
+// Redraw the whole left sidebar for player1.
+function renderTraitBar() {
+  const bar = document.getElementById("traitBar");
+  if (!bar) return;                         // SIM_MODE / older pages have no sidebar
+  const team = "player1";
+  bar.innerHTML = "";
+
+  // ── Suit traits ─────────────────────────────────────────────────────────
+  const suitTitle = document.createElement("div");
+  suitTitle.className = "trait-section-title";
+  suitTitle.textContent = "Suit traits";
+  bar.appendChild(suitTitle);
+
+  for (let i = 0; i < SUIT_NAMES.length; i++) {
+    const suit = SUIT_NAMES[i];
+    const info = SYNERGIES[suit];
+    const count = effectiveSuitCount(team, suit);
+    const tier = synergyTier(count);
+    const extinguished = isSuitExtinguished(team, suit);
+    const active = tier > 0 && !extinguished;
+
+    // Breakpoint pips: 2 / 3 / 5, lit once your count reaches each; the active tier
+    // (highest reached) gets the extra "cur" outline.
+    const pips = [2, 3, 5].map(function (bp) {
+      return { label: bp, hit: count >= bp && !extinguished, cur: tier === bp && !extinguished };
+    });
+
+    // Tooltip: every tier's effect, active one highlighted, dimmer ones as "what you'd
+    // get" if you add more of the suit.
+    let tip = '<div class="tip-head" style="color:' + info.color + '">' +
+              info.label + " " + suitName(suit) + " · " + count + " fielded</div>";
+    [2, 3, 5].forEach(function (bp) {
+      const on = tier === bp && !extinguished;
+      tip += '<div class="tip-tier' + (on ? " on" : "") + (count >= bp ? " reached" : "") + '">' +
+             '<b>' + bp + (bp === 5 ? " · Flush" : "") + '</b> ' + info.tiers[bp].text + '</div>';
+    });
+    if (extinguished) tip += '<div class="tip-note">Extinguished by an enemy Queen this round.</div>';
+
+    const nameHTML = suitName(suit) + ' <span class="trait-count">×' + count + '</span>' +
+                     (extinguished ? ' <span class="trait-off">off</span>' : '');
+    bar.appendChild(traitRowEl(info.label, info.color, nameHTML, pips, tip, active));
+  }
+
+  // ── Poker traits ────────────────────────────────────────────────────────
+  renderPokerTraits(bar, team);
+}
+
+// The poker section of the sidebar: an of-a-kind ladder row per repeated rank (so you
+// see pair→trips→quads), plus a compact row for each active named/shaped hand.
+function renderPokerTraits(bar, team) {
+  const pokerTitle = document.createElement("div");
+  pokerTitle.className = "trait-section-title";
+  pokerTitle.textContent = "Poker hands";
+  bar.appendChild(pokerTitle);
+
+  const counts = rankCounts(pokerPool(team));
+  let any = false;
+
+  // Of-a-kind ladders (biggest first). The pips 2/3/4 are the pair/trips/quads rungs.
+  Object.keys(counts).map(Number)
+    .sort(function (a, b) { return counts[b] - counts[a] || b - a; })
+    .forEach(function (rank) {
+      const n = counts[rank];
+      if (n < 2) return;
+      any = true;
+      const shown = Math.min(n, 4);
+      const info = POKER_HANDS.ofAKind[shown];
+      const pips = [2, 3, 4].map(function (k) {
+        return { label: k, hit: n >= k, cur: shown === k };
+      });
+      let tip = '<div class="tip-head">' + rankLabel(rank) + "s · " + n + " in pool</div>";
+      [2, 3, 4].forEach(function (k) {
+        const t = POKER_HANDS.ofAKind[k];
+        const on = shown === k;
+        tip += '<div class="tip-tier' + (on ? " on" : "") + (n >= k ? " reached" : "") + '">' +
+               '<b>' + t.label + " · " + k + '</b> ' + t.text + '</div>';
+      });
+      const nameHTML = info.label + " of " + rankLabel(rank) +
+                       ' <span class="trait-count">×' + n + '</span>';
+      bar.appendChild(traitRowEl("🂠", "#cdd6e5", nameHTML, pips, tip, true));
+    });
+
+  // Named hands (Doyle, 7-2): active when all their ranks are present.
+  Object.keys(POKER_HANDS.named).forEach(function (key) {
+    const hand = POKER_HANDS.named[key];
+    const has = hand.ranks.every(function (r) { return (counts[r] || 0) >= 1; });
+    if (!has) return;
+    any = true;
+    const tip = '<div class="tip-head">' + hand.label + '</div>' +
+                '<div class="tip-tier on reached">' + hand.text + '</div>';
+    bar.appendChild(traitRowEl("★", "#ffd76b", hand.label, [{ label: "✓", hit: true, cur: true }], tip, true));
+  });
+
+  // Shaped hands (straight / full house) — detected the same way pokerBuffs applies them.
+  const run = bestStraight(counts);
+  if (run) {
+    any = true;
+    const cfg = POKER_HANDS.shaped.straight;
+    const full = run.length >= 5;
+    const t = full ? cfg.full : cfg.small;
+    const seq = (full ? run.slice(0, 5) : run).slice().reverse()
+      .map(function (r) { return rankLabel(r); }).join("-");
+    const label = (full ? cfg.label : "Small " + cfg.label);
+    const tip = '<div class="tip-head">' + label + " (" + seq + ")</div>" +
+                '<div class="tip-tier on reached">' + t.text + '</div>';
+    bar.appendChild(traitRowEl("➜", "#9ecbff", label, [{ label: "✓", hit: true, cur: true }], tip, true));
+  }
+  const fh = fullHouseRanks(counts);
+  if (fh) {
+    any = true;
+    const info = POKER_HANDS.shaped.fullHouse;
+    const tip = '<div class="tip-head">' + info.label + " (" + rankLabel(fh[0]) + " over " + rankLabel(fh[1]) + ")</div>" +
+                '<div class="tip-tier on reached">' + info.text + '</div>';
+    bar.appendChild(traitRowEl("🂠", "#2ecc71", info.label, [{ label: "✓", hit: true, cur: true }], tip, true));
+  }
+
+  if (!any) {
+    const empty = document.createElement("div");
+    empty.className = "trait-empty";
+    empty.textContent = "No poker hands yet";
+    bar.appendChild(empty);
+  }
 }
 
 // ── B6.1: poker-hand detection (reads RANKS) ───────────────────────────────

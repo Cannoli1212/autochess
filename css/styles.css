@@ -216,6 +216,16 @@
     margin-right: 10px; color: #aaa; font-size: 14px; vertical-align: middle;
   }
   .cards { display: inline-flex; gap: 5px; vertical-align: middle; flex-wrap: wrap; }
+
+  /* Redraw now lives at the RIGHT end of Player 1's hand row (moved out of the
+     side column). Vertically centered against the cards, with a gold-ish tint so
+     it reads as a hand action, not a board control. */
+  #redrawButton {
+    vertical-align: middle; margin-left: 14px;
+    font-size: 14px; padding: 8px 14px; cursor: pointer;
+    color: #fff; background: #8a6d00; border: none; border-radius: 6px;
+  }
+  #redrawButton:disabled { background: #555; cursor: default; }
   .card {
     width: 46px; height: 58px; border-radius: 5px;
     background: #f5f5f5; color: #222; border: 1px solid #888;
@@ -270,6 +280,62 @@
   .pile.draw    { background: #34506b; color: #dbe7f3; }
   .pile.discard { background: #3a3a3a; color: #cccccc; margin-right: 12px; }
   .pile .pile-count { font-size: 15px; font-weight: bold; }
+
+  /* TFT-style trait sidebar — a narrow column LEFT of the board (first child of
+     .arena). Your live suit + poker traits, lit as you field units. */
+  #traitBar {
+    width: 180px; align-self: stretch; text-align: left;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .trait-section-title {
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: #8b93a3; margin: 4px 0 1px;
+  }
+  .trait-empty { font-size: 12px; color: #6b7280; padding: 2px 2px 6px; }
+
+  /* One trait row: symbol · name/count · breakpoint pips. Tooltip lives inside it,
+     hidden until hover. position:relative anchors that tooltip. */
+  .trait-row {
+    position: relative; display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border: 1px solid #333; border-radius: 7px;
+    background: #161a22;
+  }
+  .trait-row.active { border-color: #caa14a; background: #1c2230; }
+  .trait-row.inactive { opacity: 0.42; }
+  .trait-sym { font-size: 20px; width: 20px; text-align: center; line-height: 1; }
+  .trait-body { flex: 1; min-width: 0; }
+  .trait-name { font-size: 12px; font-weight: bold; color: #dbe1ec; }
+  .trait-count { color: #ffd76b; font-weight: bold; }
+  .trait-off { color: #c05a5a; font-weight: normal; font-size: 10px; }
+
+  /* Breakpoint pips — one chip per tier, lit (gold) once your count reaches it, the
+     currently-active tier ringed. */
+  .trait-pips { display: flex; gap: 3px; margin-top: 3px; }
+  .pip {
+    font-size: 10px; min-width: 15px; text-align: center; padding: 1px 0;
+    border-radius: 3px; background: #2a2f3a; color: #8b93a3;
+    font-variant-numeric: tabular-nums;
+  }
+  .pip.hit { background: #caa14a; color: #171a1a; font-weight: bold; }
+  .pip.cur { box-shadow: 0 0 0 2px #ffe082; }
+
+  /* Hover tooltip — opens to the RIGHT of the row (TFT-style). The persistent sidebar
+     stays off to the side; only this transient popup briefly overlays the board's edge
+     on hover, which keeps it fully on-screen (opening left runs off narrow viewports).
+     Shows every tier; the active one is highlighted, reached ones brighter. */
+  .trait-tooltip {
+    display: none; position: absolute; left: calc(100% + 8px); top: 0; z-index: 30;
+    width: 205px; text-align: left;
+    background: #0f131b; border: 1px solid #3a4152; border-radius: 8px;
+    padding: 8px 10px; box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+  }
+  .trait-row:hover .trait-tooltip { display: block; }
+  .tip-head { font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+  .tip-tier { font-size: 11px; color: #7b8290; margin: 2px 0; line-height: 1.3; }
+  .tip-tier.reached { color: #c7ccd6; }
+  .tip-tier.on { color: #fff; background: #26324a; border-radius: 4px; padding: 1px 5px; }
+  .tip-tier b { color: #ffd76b; margin-right: 3px; }
+  .tip-note { font-size: 10px; color: #c05a5a; margin-top: 5px; }
 
   #synergies { margin-top: 16px; font-size: 13px; }
   .synergy-row { margin: 4px 0; }
