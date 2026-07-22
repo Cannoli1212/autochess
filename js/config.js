@@ -215,10 +215,18 @@ const UNIQUE_CARDS = {
   // backline before it acts. Glass cannon (spade = 2 base HP) so a greedy dive just
   // feeds it to the enemy — the risk is the balance. Still costs one of your unit
   // slots this round (countUnits is by team, not zone), so it's never a free body.
+  // Ace of Spades — also gains "Vanish" (Riley 2026-07-22): as an attack-mana caster, each time
+  // its bar fills from swinging it drops aggro — untargetable for `ticks` ticks so enemies re-path
+  // off it (see the dropAggro kit + nearestEnemy's skip). Fits the glass-cannon dive: strike, then
+  // slip the focus fire. castTargeting "self" fires it on a full bar with no aim.
   "spades-14": {
     name: "Ace of Spades",
-    abilities: [{ kind: "infiltrator", placement: "anywhere" }],
-    blurb: "Infiltrator — place anywhere, even the enemy's side",
+    abilities: [
+      { kind: "infiltrator", placement: "anywhere" },
+      { kind: "dropAggro", name: "Vanish", cast: true, castTargeting: "self",
+        manaMax: 100, manaPerAttack: 25, manaStart: 50, ticks: 4 },
+    ],
+    blurb: "Infiltrator — place anywhere, even the enemy's side; Vanishes on cast to shed aggro (~2s untargetable)",
   },
 
   // Ace of Clubs — "Sharpshooter": a club (fast attacker) with UNLIMITED range.
@@ -230,12 +238,20 @@ const UNIQUE_CARDS = {
   // time and in applySynergies — it REPLACES the club suit's fast 1.5 with a sniper's
   // 0.5 (fires every 4 ticks vs a normal unit's 2), so its board-wide reach is paid
   // for by low DPS. The club team speed synergy still ADDS on top (its flush reward).
+  // Ace of Clubs — also gains "Sniper Round" (Riley 2026-07-22): as an attack-mana caster, its
+  // slow auto-fire charges a special round that strikes the enemy BACKLINE (farthest foe) for
+  // spellPower × attack — but it can be BLOCKED by any body on the straight line to that target
+  // (see the sniperShot kit + firstEnemyOnLine). It stays a hybrid (auto-attacks nearest AND
+  // snipes the back). castTargeting "self" so the kit aims farthest, not nearest.
   "clubs-14": {
     name: "Ace of Clubs",
-    abilities: [],
+    abilities: [
+      { kind: "sniperShot", name: "Sniper Round", cast: true, castTargeting: "self",
+        manaMax: 100, manaPerAttack: 34, manaStart: 34, spellPower: 3 },
+    ],
     range: COLS + ROWS,
     attackSpeed: 0.5,
-    blurb: "Sharpshooter — hits anywhere on the board, but fires slowly",
+    blurb: "Sharpshooter — hits anywhere, fires slowly; charges a blockable sniper round at the enemy backline",
   },
 
   // Ace of Diamonds — "Aegis": a diamond (lifesteal melee) that also banks a SHIELD

@@ -653,6 +653,34 @@ const ABILITIES = {
     },
   },
 
+  // Ace of Spades — "Vanish" (drop-aggro cast, Riley 2026-07-22). The Infiltrator dives the
+  // enemy backline, then SHEDS focus: on a full (attack-mana) bar it goes untargetable for
+  // `ticks` ticks — nearestEnemy skips it, so enemies re-path to the next foe and stop swinging
+  // at it. It STILL deals damage while hidden; only INCOMING aggro drops (AoE/poison, which don't
+  // route through nearestEnemy, can still catch it). castTargeting "self" fires the instant the
+  // bar fills, no aim needed. The blue cast-flash is its blink-out visual — no extra flash.
+  dropAggro: {
+    onCast: function (unit, ctx, ability) {
+      unit.untargetableUntil = tickCount + (ability.ticks || 4);
+    },
+  },
+
+  // Ace of Clubs — "Sniper Round" (backline cast, Riley 2026-07-22). The Sharpshooter charges a
+  // special round while auto-firing, then looses it at the enemy BACKLINE — farthestEnemy picks
+  // the deepest (farthest) foe. The shot can be BLOCKED: firstEnemyOnLine walks the straight ray
+  // and hands the bullet to the FIRST enemy body in the way, so a frontliner can bodyguard the
+  // carry it was aimed at. Damage = spellPower × the caster's current attack via dealSpellDamage
+  // (shields/invuln/redirect + the victim's Thorns/Berserk, but no crit and no lifesteal — it's a
+  // spell, not a swing). castTargeting "self" so the kit does its OWN farthest-not-nearest aim.
+  sniperShot: {
+    onCast: function (unit, ctx, ability) {
+      const back = farthestEnemy(unit);
+      if (!back) return;                                   // no enemies → hold the shot
+      const hit = firstEnemyOnLine(unit, back);            // first body on the ray (block) or the target
+      dealSpellDamage(unit, hit, Math.round(unit.attack * (ability.spellPower || 2.5)));
+    },
+  },
+
   // King of Spades — Warlord's Levy: at the start of each fight, scale its attack
   // by a flat % per LOW card (rank 2-5) its team has PLAYED all game
   // (weakCardsPlayed). Cumulative and UNCAPPED — a "field cheap bodies to feed the
