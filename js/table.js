@@ -91,13 +91,16 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   units = [];
   tickCount = 0;
   resetRoundStats();
-  roundNumber = armySizeThisRound;                 // aiPlaceUnits fills until countUnits==armySize()
+  roundNumber = armySizeThisRound;                 // sizes this match's community deck (communityTarget)
+  armyOverride = armySizeThisRound;                // force aiPlaceUnits to place exactly this many units
   weakCardsPlayed = { player1: 0, player2: 0 };
   played = { player1: [], player2: [] };
   chips = { player1: seatA.chips, player2: seatB.chips };   // seat stacks drive gold abilities
   hands = {
-    player1: simDraftHand(2 * armySizeThisRound),  // a fresh random hand, like a real draw
-    player2: simDraftHand(2 * armySizeThisRound),
+    // Hand = army + 1, matching the live HAND_SCHEDULE (place all but one). Reroll
+    // isn't emulated here, so background AIs are a touch weaker than a rerolling human.
+    player1: simDraftHand(armySizeThisRound + 1),
+    player2: simDraftHand(armySizeThisRound + 1),
   };
 
   aiPlaceUnits("player1");
@@ -157,8 +160,8 @@ function tableGame(numSeats) {
   while (aliveSeats(seats).length > 1 && round < TABLE_ROUND_CAP) {
     round++;
     // Army size grows with the round exactly like the live game (armySize()):
-    // rounds 1..5 field 1..5 units, then plateau at PLAY_CAP.
-    const armySizeThisRound = Math.min(round, PLAY_CAP);
+    // the ARMY_SCHEDULE entry for this round → rounds 1..7 field 2,2,3,3,4,4,5.
+    const armySizeThisRound = ARMY_SCHEDULE[round] || PLAY_CAP;
 
     const { pairs } = pairSeats(seats);            // (bye seat simply isn't fought)
     pairs.forEach(function (pair) {

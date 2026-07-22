@@ -4,6 +4,7 @@
 // Refresh the placement hint and each player's placement progress.
 function updateStatus() {
   if (SIM_MODE) return;   // headless batch sim: skip DOM (see sim.js)
+  updateRedrawButton();   // keep the Redraw button's count + enabled state in sync
   const limit = armySize();
   if (isPlaytest()) {
     turnStatus.textContent =

@@ -130,7 +130,12 @@ function makeLiveSeats() {
 // Phase E: true only on the results screen, when players may click their
 // leftover cards to mark them "held" for next round. A held card carries a
 // `held` flag on the card object itself. Off during placement and combat.
+// (Superseded by auto-carry — leftovers now always carry — so this stays false.)
 let holdMode = false;
+
+// Redraws remaining THIS round for each player (a "redraw" rerolls the whole hand).
+// Reset to REDRAWS_PER_ROUND at the start of every round; spent by rerollHand().
+let redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };
 
 // Grab the page elements we'll update.
 const board = document.getElementById("board");
@@ -140,6 +145,7 @@ const message = document.getElementById("message");
 const startButton = document.getElementById("startButton");
 const resetButton = document.getElementById("resetButton");
 const nextButton = document.getElementById("nextButton");
+const redrawButton = document.getElementById("redrawButton");
 const roundInfo = document.getElementById("roundInfo");
 const dmgPanel = document.getElementById("dmgPanel");
 
@@ -154,12 +160,18 @@ function countUnits(team) {
   return units.filter(function (u) { return u.team === team; }).length;
 }
 
-// How many units each player places THIS round: the round number, capped at
-// PLAY_CAP. Rounds 1..5 → 1..5; rounds 6-7 stay at 5 (the board cap). This is the
-// single source of truth for "army size" — every placement check reads it, so the
-// cap lives in one place.
+// Sim/table harnesses (simAIBattle, tableMatch) set this to FORCE an exact placement
+// count for a headless fight; null means "use the round schedule below". It lives in
+// the simInstall/simRestore snapshot, so it never leaks into live play.
+let armyOverride = null;
+
+// How many units each player places THIS round. Normally the ARMY_SCHEDULE entry for
+// the current round (rounds 1..7 → 2,2,3,3,4,4,5); the harnesses can override it to a
+// fixed count. This is the single source of truth for "army size" — every placement
+// check reads it, so the schedule lives in one place (edit ARMY_SCHEDULE in config.js).
 function armySize() {
-  return Math.min(roundNumber, PLAY_CAP);
+  if (armyOverride !== null) return armyOverride;
+  return ARMY_SCHEDULE[roundNumber] || PLAY_CAP;
 }
 
 // ── Damage tracking (balance instrumentation) ────────────────────────────────

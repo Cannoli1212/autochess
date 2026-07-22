@@ -90,13 +90,10 @@ function finishRound(winner) {
   }
 
   if (roundNumber < MAX_ROUNDS) {
-    // More rounds to play — reveal the Next Round button.
-    // Phase E: open hold mode so players can click leftover cards to keep them.
-    // holdLimit = the round just played (roundNumber, before nextRound bumps it).
-    holdMode = true;
-    renderHands();               // redraw hands so they become clickable-to-hold
+    // More rounds to play — reveal the Next Round button. Leftover cards now carry
+    // automatically (no click-to-hold), so there's nothing to pick here.
     message.textContent =
-      "Click any leftover card(s) to hold for next round, then press Next Round.";
+      "Your unplayed card(s) carry to next round — press Next Round.";
     nextButton.style.display = "inline-block";
   } else {
     // That was the final round — decide the overall winner.
@@ -182,6 +179,7 @@ function startRound() {
   // (it stays hidden during planning, like the real game will work). Render right
   // away so those units show before combat begins.
   if (player2IsAI && countUnits("player2") < armySize()) {
+    aiMaybeReroll("player2");     // opponent reshapes a weak hand before committing
     aiPlaceUnits("player2");
     render();
   }
@@ -256,18 +254,14 @@ function startRound() {
 // automatically because it equals roundNumber.
 function nextRound() {
   clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
-  // Phase E: keep each player's HELD leftover cards; discard the rest.
+  // Every unplayed leftover card carries into the next round automatically (holding
+  // is no longer optional). We just clear any stale `held` flag; nothing is discarded
+  // here — drawHands only tops the carried hand up to the new round's HAND_SCHEDULE.
   ["player1", "player2"].forEach(function (team) {
-    const kept = [];
-    hands[team].forEach(function (c) {
-      // Held by choice, OR a hot potato that can't be discarded (Queen of Spades):
-      // either way it carries into the next hand. Everything else is discarded.
-      if (c.held || cardCannotDiscard(c)) { c.held = false; kept.push(c); }
-      else { discard[team].push(c); }                // unheld leftovers get discarded
-    });
-    hands[team] = kept;
+    hands[team].forEach(function (c) { c.held = false; });
   });
-  holdMode = false;             // hold window closes for this round
+  holdMode = false;
+  redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };  // fresh redraws
 
   // Phase D: cards played this round (the whole board) go to the discard piles.
   discard.player1 = discard.player1.concat(played.player1);
@@ -291,7 +285,7 @@ function nextRound() {
   render();
   updateStatus();
   updateRoundInfo();
-  drawHands();                  // deal fresh hands (2 x the new round number)
+  drawHands();                  // top the carried hand up to this round's HAND_SCHEDULE
   renderTable();                // Phase D: keep the seat stacks on screen (no-op off-table)
 }
 
@@ -326,6 +320,7 @@ function resetGame() {
   nextButton.style.display = "none";
   message.textContent = "";
   hands = { player1: [], player2: [] };  // empty hands (drawHands now appends)
+  redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };  // fresh redraws
   initShoes();                  // fresh 2-deck shoe per player, empty discards
   initCommunityDeck();
   hideFlop();

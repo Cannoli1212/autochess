@@ -1,21 +1,71 @@
 // hands.js — hand + draw/discard pile rendering.
 // Depends on: config, state, cards.
 
-// Fill each hand up to its target size for the round: 2 × round number
-// (round 1 = 2, round 2 = 4, round 5 = 10). Phase E: any cards the player held
-// from last round COUNT toward that total, so we only draw enough to top the
-// hand off. Holding a card therefore replaces a fresh draw — it's never a bonus
-// card. Callers must set the starting hand (empty, or the kept-held cards) first.
+// Fill each hand up to its target size for the round: HAND_SCHEDULE[round]
+// (rounds 1..7 → 3,3,4,4,5,5,6). Any leftover cards carried from last round COUNT
+// toward that total, so we only draw enough to top the hand off — a carried card
+// replaces a fresh draw, never a bonus. Callers must set the starting hand (empty,
+// or the carried leftovers) first.
 function drawHands() {
-  // Fill up to 2×round, but never past the bench cap (HAND_CAP). Rounds 1-5 are
-  // unchanged (2→10); rounds 6-7 hold at HAND_CAP instead of ballooning to 12/14.
-  const targetSize = Math.min(roundNumber * 2, HAND_CAP);
+  const targetSize = handTarget();
   ["player1", "player2"].forEach(function (team) {
     while (hands[team].length < targetSize) {
       hands[team].push(drawCard(team));
     }
   });
   renderHands();
+}
+
+// This round's hand size (with a safe fallback past the last scheduled round).
+function handTarget() {
+  return HAND_SCHEDULE[roundNumber] || HAND_SCHEDULE[HAND_SCHEDULE.length - 1];
+}
+
+// Spend one redraw: throw the whole hand away and deal a brand-new one of the same
+// size. "Stuck" cards (e.g. the Queen of Spades hot potato) can't be discarded, so
+// they stay and the fresh cards fill in around them. Returns false if no redraws
+// remain (or, defensively, in SIM_MODE). aiMaybeReroll drives the computer's copy.
+function rerollHand(team) {
+  if (redrawsLeft[team] <= 0) return false;
+  const kept = [];
+  hands[team].forEach(function (c) {
+    if (cardCannotDiscard(c)) { kept.push(c); }   // hot potato can't leave the hand
+    else { discard[team].push(c); }
+  });
+  hands[team] = kept;
+  const targetSize = handTarget();
+  while (hands[team].length < targetSize) hands[team].push(drawCard(team));
+  redrawsLeft[team] -= 1;
+  renderHands();
+  return true;
+}
+
+// The computer opponent's redraw policy: a simple, tunable heuristic — reroll while
+// the army it would field (its best armySize() cards) is below average rank, up to
+// its redraw budget. Rank 8 is the midpoint of 2..14, so a below-8 average hand is
+// worse than a random one and worth gambling a reroll on.
+function aiMaybeReroll(team) {
+  for (let n = 0; n < REDRAWS_PER_ROUND; n++) {
+    const sorted = hands[team].slice().sort(function (a, b) {
+      return (b.attack + b.hp) - (a.attack + a.hp);
+    });
+    const top = sorted.slice(0, armySize());
+    if (top.length === 0) break;
+    const avgRank = top.reduce(function (s, c) { return s + c.rank; }, 0) / top.length;
+    if (avgRank >= 8) break;                 // decent enough — keep this hand
+    if (!rerollHand(team)) break;            // out of redraws
+  }
+}
+
+// Refresh the human's Redraw button: label shows redraws left, and it's only usable
+// while you're still planning AND haven't placed a unit yet (redraw first, then place).
+function updateRedrawButton() {
+  if (!redrawButton) return;
+  const left = redrawsLeft.player1;
+  redrawButton.textContent = "🔄 Redraw (" + left + " left)";
+  const usable = placementOpen && !inCombat && !isPlaytest() &&
+                 left > 0 && countUnits("player1") === 0;
+  redrawButton.disabled = !usable;
 }
 
 // Phase E: count how many of a player's hand cards are marked held.

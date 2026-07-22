@@ -6,6 +6,16 @@ startButton.addEventListener("click", startRound);
 nextButton.addEventListener("click", nextRound);
 resetButton.addEventListener("click", resetGame);
 
+// Redraw: reroll your whole hand (up to REDRAWS_PER_ROUND per round). Only your own
+// hand; the AI opponent rerolls itself at Round Start. updateStatus() repaints the
+// button's count + enabled state.
+redrawButton.addEventListener("click", function () {
+  if (rerollHand("player1")) {
+    message.textContent = "🔄 Redrew your hand — " + redrawsLeft.player1 + " redraw(s) left.";
+    updateStatus();
+  }
+});
+
 // Part B step 1 (now 3-way): cycle Player 2 between the computer, a second human, and
 // PLAYTEST (a sandbox with a card picker). player2IsAI stays true only in "computer" mode.
 const aiToggleButton = document.getElementById("aiToggleButton");

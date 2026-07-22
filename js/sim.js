@@ -82,7 +82,9 @@ function simInstall() {
     weakCardsPlayed: weakCardsPlayed, hands: hands, played: played,
     flop: flop, strikeMarks: strikeMarks, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
+    armyOverride: armyOverride,
   };
+  armyOverride = null;                        // each sim battle sets its own forced size
   clearInterval(combatTimer);                // stop any live fight
   inCombat = false; placementOpen = false;
   chips = { player1: 100, player2: 100 };    // neutral: Midas King sits at baseline
@@ -106,6 +108,7 @@ function simRestore(s) {
   weakCardsPlayed = s.weakCardsPlayed; hands = s.hands; played = s.played;
   flop = s.flop; strikeMarks = s.strikeMarks; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
+  armyOverride = s.armyOverride;
 }
 
 // THE CARD SCAN. Play every unordered card pair `games` times and tally, for each
@@ -187,10 +190,11 @@ function simAIBattle(teamSize) {
   units = [];
   tickCount = 0;
   resetRoundStats();
-  roundNumber = teamSize;                    // aiPlaceUnits places until countUnits==roundNumber
+  roundNumber = teamSize;                    // sizes this battle's community deck (communityTarget)
+  armyOverride = teamSize;                    // force aiPlaceUnits to place exactly teamSize units
   weakCardsPlayed = { player1: 0, player2: 0 };
   played = { player1: [], player2: [] };
-  hands = { player1: simDraftHand(2 * teamSize), player2: simDraftHand(2 * teamSize) };
+  hands = { player1: simDraftHand(teamSize + 1), player2: simDraftHand(teamSize + 1) };  // hand = army + 1 (live HAND_SCHEDULE)
 
   aiPlaceUnits("player1");
   aiPlaceUnits("player2");

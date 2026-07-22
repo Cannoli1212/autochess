@@ -638,6 +638,23 @@ const COMMUNITY_SCHEDULE = [0, 3, 3, 3, 4, 4, 5, 5];
 const PLAY_CAP = 5;
 const HAND_CAP = 10;
 
+// How many units you PLACE each round, looked up by round number (index 0 unused).
+// Rounds 1..7 → 2, 2, 3, 3, 4, 4, 5. This is the whole schedule — to reshape the
+// ramp, just edit these seven numbers (keep them ≤ PLAY_CAP, the board cap).
+// armySize() in state.js reads this.
+const ARMY_SCHEDULE = [0, 2, 2, 3, 3, 4, 4, 5];
+//    round:            0  1  2  3  4  5  6  7
+
+// How many cards you HOLD in hand each round, looked up by round number (index 0
+// unused). Rounds 1..7 → 3, 3, 4, 4, 5, 5, 6 — always one more than ARMY_SCHEDULE,
+// so you place all but one card. Unplayed leftovers carry into the next round and
+// the hand is only topped up to this size (drawHands in hands.js), so you no longer
+// get a fresh firehose of cards each round. Each round you also get REDRAWS_PER_ROUND
+// whole-hand rerolls to reshape a bad hand. Edit these seven numbers to retune.
+const HAND_SCHEDULE = [0, 3, 3, 4, 4, 5, 5, 6];
+//    round:           0  1  2  3  4  5  6  7
+const REDRAWS_PER_ROUND = 2;
+
 // ── Phase C (6-seat table) ───────────────────────────────────────────────────
 // A "seat" is a player AT THE TABLE (its own chip stack + alive/dead), as opposed
 // to a "side" (player1/player2) which is all combat.js ever understands. Each
