@@ -284,16 +284,29 @@ const UNIQUE_CARDS = {
   // 500ms, and the stamp is checked as `tickCount < invulnUntil`, so a 4-tick
   // stamp shields her for ~3 attack windows ≈ 1.5s. A lone Queen still gets the
   // +1 range; the redirect/invuln simply never trigger without her King.
+  // The royal pair also SUPPORT each other on cast (Riley 2026-07-22), both attack-mana casters:
+  //   Q♥ "Aegis Vow" — banks a small shield onto her King each cast (shieldPartner kit).
+  //   K♥ "Rally" — gives his Queen a temporary, refreshable attack buff each cast (attackBuffPartner).
+  // A tight loop: her Royal Guard soaks her hits onto him, she keeps him shielded, he keeps her
+  // hitting hard. Each cast fizzles harmlessly if the partner isn't fielded/alive.
   "hearts-12": {
     name: "Queen of Hearts",
     rangeBonus: 1,
-    abilities: [{ kind: "royalGuard", partnerRank: 13 }],
-    blurb: "Royal Guard — her King takes her hits; when he falls, she's briefly invulnerable",
+    abilities: [
+      { kind: "royalGuard", partnerRank: 13 },
+      { kind: "shieldPartner", name: "Aegis Vow", cast: true, castTargeting: "self", partnerRank: 13,
+        manaMax: 80, manaPerAttack: 20, manaStart: 20, shieldFrac: 0.15 },
+    ],
+    blurb: "Royal Guard — her King takes her hits (invuln when he falls); each cast shields him",
   },
   "hearts-13": {
     name: "King of Hearts",
-    abilities: [{ kind: "royalVow", partnerRank: 12, invulnTicks: 4 }],
-    blurb: "Royal Vow — bodyguards the Queen of Hearts; his death makes her untouchable for ~1.5s",
+    abilities: [
+      { kind: "royalVow", partnerRank: 12, invulnTicks: 4 },
+      { kind: "attackBuffPartner", name: "Rally", cast: true, castTargeting: "self", partnerRank: 12,
+        manaMax: 80, manaPerAttack: 20, manaStart: 20, mult: 1.5, buffTicks: 6 },
+    ],
+    blurb: "Royal Vow — his death makes the Queen untouchable ~1.5s; each cast buffs her attack (+50%, ~3s)",
   },
 
   // King of Spades — "Warlord's Levy": a spade (crit carry) whose attack scales,

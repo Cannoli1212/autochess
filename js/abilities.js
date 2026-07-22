@@ -742,6 +742,36 @@ const ABILITIES = {
     },
   },
 
+  // King of Hearts — "Rally" (partner attack-buff cast, Riley 2026-07-22). On a full (attack-mana)
+  // bar he rallies his Queen of Hearts (livingPartner rank 12): a TEMPORARY, refreshable outgoing-
+  // damage window on her — atkBuffMult applied for `buffTicks` ticks, honored in attackTarget and
+  // auto-expiring (no cleanup pass, no permanent stat mutation). Recasting just pushes the window
+  // out again. Fizzles harmlessly if she isn't fielded/alive. castTargeting "self" so he fires on a
+  // full bar and finds her via the royal bond (not a nearest-enemy aim). Pairs with her shield cast:
+  // she keeps his body alive, he keeps her swings hitting hard.
+  attackBuffPartner: {
+    onCast: function (unit, ctx, ability) {
+      const partner = livingPartner(unit, ability.partnerRank);
+      if (!partner) return;
+      partner.atkBuffMult = ability.mult || 1.5;
+      partner.atkBuffUntil = tickCount + (ability.buffTicks || 6);
+    },
+  },
+
+  // Queen of Hearts — "Aegis Vow" (partner shield cast, Riley 2026-07-22). On a full (attack-mana)
+  // bar she banks a SMALL shield onto her King of Hearts (livingPartner rank 13) — the SAME u.shield
+  // pool the Ace of Diamonds' Aegis fills, which attackTarget/dealSpellDamage already drain before
+  // HP, so this reuses the shield mechanic wholesale (zero engine change). The amount is a fraction
+  // of HER own max HP. Pairs with her Royal Guard: his body already soaks the hits SHE'd take, and
+  // now she keeps that body shielded. Fizzles if her King isn't alive/fielded. castTargeting "self".
+  shieldPartner: {
+    onCast: function (unit, ctx, ability) {
+      const partner = livingPartner(unit, ability.partnerRank);
+      if (!partner) return;
+      partner.shield = (partner.shield || 0) + Math.round(unit.maxHp * (ability.shieldFrac || 0.15));
+    },
+  },
+
   // Rank 10 — Rally (Batch C rework, was team-wide attack): an ADJACENCY aura.
   // At fight start, buff every ally within `radius` cells (Chebyshev, same as
   // range/movement) — NOT itself, NOT enemies. Which stat depends on this 10's

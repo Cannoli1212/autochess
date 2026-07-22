@@ -69,6 +69,8 @@ function render() {
     if (tickCount < (u.healFlashUntil || 0)) cell.classList.add("healed");    // Cleric mend (green)
     if (tickCount < (u.trapSprungUntil || 0)) cell.classList.add("trap-sprung"); // stepped on a trap
     if (tickCount < (u.stunUntil || 0)) cell.classList.add("stunned");           // frozen (purple)
+    if (tickCount < (u.atkBuffUntil || 0)) cell.classList.add("buffed");          // K♥ rally on Q♥ (gold) — lingers while active
+    if (tickCount < (u.untargetableUntil || 0)) cell.classList.add("vanished");   // Ace of Spades hidden (faded) — lingers while active
     cell.title = figureTitle(u);
     cell.draggable = true;                     // a cell with a unit can be dragged
   }

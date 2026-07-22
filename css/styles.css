@@ -90,6 +90,12 @@
   /* STUN (casting): a purple ring on a frozen unit while stunUntil is in the future.
      Distinct hue from cast-blue / spell-orange / heal-green / trap-amber. */
   .cell.stunned   { box-shadow: inset 0 0 0 2px #ce93d8, 0 0 11px 2px rgba(186, 104, 200, 0.95); }
+  /* ATTACK BUFF (King of Hearts' Rally on his Queen): a warm GOLD glow that LINGERS while the
+     buff window is open (not a one-tick flash) — distinct from cast-blue/spell-orange/heal-green. */
+  .cell.buffed    { box-shadow: inset 0 0 0 2px #ffd54f, 0 0 11px 2px rgba(255, 213, 79, 0.95); }
+  /* VANISHED (Ace of Spades' drop-aggro): the unit fades while untargetable so you can SEE it's
+     slipped the enemy's aggro. A dashed outline reads as "not locked on". Lingers with the window. */
+  .cell.vanished  { opacity: 0.45; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
 
   /* The two players' home rows get a subtle tint so you can tell them apart.
      Player 2 sits on top, Player 1 on the bottom (like a chess board). */
