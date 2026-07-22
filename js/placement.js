@@ -117,6 +117,9 @@ function buildUnit(card, x, y, team) {
     shield: 0,           // Ace of Diamonds' banked shield (a damage pool)
     invulnUntil: 0,      // tick until which the unit ignores all damage (Q♥ mourning)
     stunUntil: 0,        // tick until which the unit is STUNNED (no move/attack/cast) — see applyStun
+    untargetableUntil: 0,// tick until which the unit can't be aggroed (Ace of Spades' drop-aggro) — nearestEnemy skips it
+    atkBuffUntil: 0,     // tick until which auto-attacks are multiplied by atkBuffMult (King of Hearts' rally on Q♥)
+    atkBuffMult: 1,      // the temporary outgoing-damage multiplier while the window above is open
     attackCharge: 0, moveCooldown: 0, card: card,
     // Mana meter (0 / undefined-ish for non-casters). castRange defaults to the unit's
     // attack range when the ability doesn't set its own. mana starts at manaStart.

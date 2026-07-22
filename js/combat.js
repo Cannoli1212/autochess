@@ -5,12 +5,19 @@
 // Depends on: config, state, board.
 
 // Find the closest enemy of a given unit (or null if none are left).
+// UNTARGETABLE (Ace of Spades' drop-aggro): an enemy whose `untargetableUntil` is still
+// in the future is INVISIBLE to targeting — it's skipped here, so units pathing/swinging
+// re-acquire the next-nearest foe and the vanished Ace loses its aggro. This is the ONLY
+// place untargetable is honored (aggro = who units path to and hit), so AoE/poison — which
+// don't route through nearestEnemy — can still catch a hidden unit. It can still deal damage
+// while hidden; only INCOMING aggro drops.
 function nearestEnemy(unit) {
   let best = null;
   let bestDistance = Infinity;
   for (let i = 0; i < units.length; i++) {
     const other = units[i];
     if (other.team === unit.team) continue;   // skip our own team
+    if (tickCount < (other.untargetableUntil || 0)) continue;   // vanished → can't be aggroed
     // Distance = the larger of the horizontal/vertical gap (diagonal steps allowed).
     const distance = Math.max(Math.abs(other.x - unit.x), Math.abs(other.y - unit.y));
     if (distance < bestDistance) {
@@ -19,6 +26,52 @@ function nearestEnemy(unit) {
     }
   }
   return best;
+}
+
+// Find the FARTHEST enemy of a given unit (or null if none are left) — the mirror of
+// nearestEnemy, used by the Ace of Clubs' sniper cast to pick the enemy "backline"
+// (deepest = greatest Chebyshev distance from the shooter). Honors the same untargetable
+// skip so a vanished unit isn't sniped either.
+function farthestEnemy(unit) {
+  let best = null;
+  let bestDistance = -1;
+  for (let i = 0; i < units.length; i++) {
+    const other = units[i];
+    if (other.team === unit.team || other.hp <= 0) continue;
+    if (tickCount < (other.untargetableUntil || 0)) continue;
+    const distance = Math.max(Math.abs(other.x - unit.x), Math.abs(other.y - unit.y));
+    if (distance > bestDistance) {
+      bestDistance = distance;
+      best = other;
+    }
+  }
+  return best;
+}
+
+// The FIRST living enemy standing on the straight 8-direction line from `shooter` toward
+// `target` — how the Ace of Clubs' sniper shot can be BLOCKED. Walks cell by cell from just
+// in front of the shooter to the target; whoever the ray reaches first is who eats the bullet
+// (a frontline body soaks a shot meant for the backline). Returns `target` itself if the line
+// is clear all the way there, or null if the shot isn't on a clean 8-direction ray. Allies
+// don't block — the bullet flies past its own team.
+function firstEnemyOnLine(shooter, target) {
+  const dx = Math.sign(target.x - shooter.x);
+  const dy = Math.sign(target.y - shooter.y);
+  if (dx === 0 && dy === 0) return target;                 // on top of it → just hit it
+  // Only a clean 8-direction ray (orthogonal or perfect diagonal) can be traced cell by cell.
+  const adx = Math.abs(target.x - shooter.x);
+  const ady = Math.abs(target.y - shooter.y);
+  if (adx !== 0 && ady !== 0 && adx !== ady) return target;   // off-axis → no blocker check, hit target
+  let x = shooter.x + dx;
+  let y = shooter.y + dy;
+  while (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+    const u = findUnitAt(x, y);
+    if (u && u.team !== shooter.team && u.hp > 0) return u;   // first enemy body on the ray
+    if (x === target.x && y === target.y) break;             // reached the target's cell
+    x = x + dx;
+    y = y + dy;
+  }
+  return target;
 }
 
 // The nearest LIVING teammate of a unit (not itself), by the same Chebyshev
@@ -166,6 +219,15 @@ function attackTarget(attacker, target) {
   // critChance at Round Start). Fall back to the suit's base crit.
   const critChance = (attacker.critChance !== undefined) ? attacker.critChance : (s.crit || 0);
   if (Math.random() < critChance) ctx.damage = ctx.damage * 2;
+
+  // TEMPORARY ATTACK BUFF (King of Hearts' rally on his Queen): a timed outgoing-damage
+  // window, checked like invulnUntil/stunUntil. While `tickCount < atkBuffUntil`, the
+  // attacker's swings are multiplied by `atkBuffMult` — auto-expiring, so no cleanup pass
+  // and no permanent mutation of the base attack stat. Recasting just pushes the tick-stamp
+  // out again. Only touches AUTO-attacks (this pipeline); it never boosts spell damage.
+  if (tickCount < (attacker.atkBuffUntil || 0)) {
+    ctx.damage = Math.round(ctx.damage * (attacker.atkBuffMult || 1));
+  }
 
   // Attacker's outgoing-damage abilities can adjust the pending damage (Giant
   // Slayer). They read/write ctx.damage before it lands.

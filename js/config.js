@@ -369,20 +369,21 @@ const UNIQUE_CARDS = {
     abilities: [{ kind: "extinguish", suit: "hearts" }],
     blurb: "Heartbreaker — shuts off the enemy's ♥ heart synergy (their team HP buff)",
   },
-  // Queen of Clubs — "Usurper & Cleric": keeps her tech-counter (snuff the enemy's ♠ crit
-  // flush) AND gains a heal (casting Slice 2, Riley 2026-07-15). As a club she auto-attacks
-  // fast and banks mana per swing (attack-mana model, manaPerAttack) — when the bar fills she
-  // mends her most-wounded ally in range for healPower × her attack. She's the first hybrid
-  // ATTACK-mana caster and the first support/heal cast. castAbilityOf returns the cleric
-  // entry (extinguish has no `cast`), so buildUnit stamps her mana profile from it.
+  // Queen of Clubs — "Cleric": a board-wide healer (casting Slice 2, Riley 2026-07-15).
+  // As a club she auto-attacks fast and banks mana per swing (attack-mana model, manaPerAttack) —
+  // when the bar fills she mends her most-wounded ally in range for healPower × her attack. She's
+  // the first hybrid ATTACK-mana caster and the first support/heal cast. castAbilityOf returns the
+  // cleric entry, so buildUnit stamps her mana profile from it.
+  // NOTE (Riley 2026-07-22): her old spades `extinguish` was REMOVED — she no longer shuts off the
+  // enemy's ♠ crit flush. Only Queen of Diamonds still extinguishes (♥). This makes Q♣ a pure
+  // support legendary and keeps the spades synergy always-live for its owner.
   "clubs-12": {
     name: "Queen of Clubs",
     abilities: [
-      { kind: "extinguish", suit: "spades" },
       { kind: "cleric", name: "Cleric", cast: true, castTargeting: "ally",
         manaMax: 60, manaPerAttack: 20, castRange: COLS + ROWS, healPower: 5.0, attackMult: 0.4 },
     ],
-    blurb: "Usurper & Cleric — a board-wide HEALER (mends her most-wounded ally each cast) who hits soft; also snuffs the enemy's ♠ crit",
+    blurb: "Cleric — a board-wide HEALER who mends her most-wounded ally each cast (she hits soft to pay for it)",
   },
 };
 
