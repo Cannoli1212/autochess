@@ -111,6 +111,14 @@ function countUnits(team) {
   return units.filter(function (u) { return u.team === team; }).length;
 }
 
+// How many units each player places THIS round: the round number, capped at
+// PLAY_CAP. Rounds 1..5 → 1..5; rounds 6-7 stay at 5 (the board cap). This is the
+// single source of truth for "army size" — every placement check reads it, so the
+// cap lives in one place.
+function armySize() {
+  return Math.min(roundNumber, PLAY_CAP);
+}
+
 // ── Damage tracking (balance instrumentation) ────────────────────────────────
 // The whole point: you can't balance what you can't measure. Every point of
 // damage in the game is BOOKED here through recordDamage(), so the numbers are

@@ -190,7 +190,21 @@
 
   /* Card hands, drawn fresh each round (one card type for now). */
   .hands { margin-top: 22px; }
-  .hand-row { margin: 6px 0; }
+  .hand-row {
+    margin: 6px 0;
+    /* A tall, full-width band so a unit dragged back to the bench is easy to drop
+       even when the hand is empty. The transparent border is reserved here so the
+       .bench-drop highlight doesn't shift the layout when it appears. */
+    min-height: 70px;
+    padding: 4px 8px;
+    border-radius: 7px;
+    border: 2px dashed transparent;
+  }
+  /* Bench drop zone lit up while a unit is being dragged back to the hand. */
+  .hand-row.bench-drop {
+    border-color: #6ca0ff;
+    background: rgba(108, 160, 255, 0.13);
+  }
   .hand-label {
     display: inline-block; min-width: 160px; text-align: right;
     margin-right: 10px; color: #aaa; font-size: 14px; vertical-align: middle;

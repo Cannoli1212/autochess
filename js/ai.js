@@ -36,7 +36,7 @@ function aiPickCell(team, card) {
 // it has placed its roundNumber units or runs out of cards. We re-scan the hand
 // each pass because playCard() splices the placed card out of it.
 function aiPlaceUnits(team) {
-  while (countUnits(team) < roundNumber && hands[team].length > 0) {
+  while (countUnits(team) < armySize() && hands[team].length > 0) {
     // Find the strongest card still in hand.
     let bestIdx = 0;
     let bestScore = -1;

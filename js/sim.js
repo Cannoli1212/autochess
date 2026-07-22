@@ -195,7 +195,8 @@ function simAIBattle(teamSize) {
   aiPlaceUnits("player1");
   aiPlaceUnits("player2");
 
-  dealFlop();                                // reveal the shared flop (renderFlop is gated)
+  flop = [];                                 // fresh community for each isolated sim battle
+  growCommunity();                           // deal this round's community (renderFlop is gated)
   applySynergies();                          // bake suit + poker buffs (now real, teams are big)
   for (let i = 0; i < units.length; i++) runAbilityHook(units[i], "onRoundStart", {});
 

@@ -584,3 +584,26 @@ const DECKS = 2;
 
 // Phase E: how many community flop cards are revealed each round.
 const FLOP_SIZE = 3;
+
+// Phase A (Poker Streets): the game runs MAX_ROUNDS rounds, and the shared
+// community board GROWS across the game like Texas Hold'em — the flop (3 cards)
+// lands on round 1, the turn (a 4th) on round 4, the river (a 5th) on round 6 —
+// and every card, once dealt, STAYS for the rest of the game.
+// COMMUNITY_SCHEDULE is indexed by round number and gives how many community
+// cards are in play by that round; index 0 is unused. The numbers must never
+// DECREASE round to round — the board only ever grows. Change them to reshape
+// the streets (e.g. bump MAX_ROUNDS and extend the array to add more).
+const MAX_ROUNDS = 7;
+const COMMUNITY_SCHEDULE = [0, 3, 3, 3, 4, 4, 5, 5];
+//    round:               0  1  2  3  4  5  6  7
+//                            └─ flop ─┘  └turn┘ └river┘
+
+// Phase A (caps): the BOARD holds at most PLAY_CAP units, and the HAND (your
+// "bench") holds at most HAND_CAP cards. Units to place this round = the smaller
+// of the round number and PLAY_CAP (see armySize) — so rounds 1..5 grow 1→5 as
+// before, then plateau at 5 for rounds 6-7. HAND_CAP stops the hand ballooning:
+// drawHands fills up to min(2×round, HAND_CAP), so rounds 1-5 are unchanged (2→10)
+// and 6-7 hold at 10 instead of 12/14. Holding a leftover card still just replaces
+// a fresh draw — the cap makes bench space finite so you can't hoard forever.
+const PLAY_CAP = 5;
+const HAND_CAP = 10;

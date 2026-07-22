@@ -1,16 +1,18 @@
 <meta charset="utf-8" />
-<title>Autochess — 5-Round Mode</title>
+<title>Autochess — 7-Round Mode</title>
 
-<link rel="stylesheet" href="css/styles.css?v=leg39" />
+<link rel="stylesheet" href="css/styles.css?v=leg40" />
 
-<p id="roundInfo">Round 1 of 5 — Rounds won: Player 1: 0 · Player 2: 0</p>
+<p id="roundInfo">Round 1 of 7 — Rounds won: Player 1: 0 · Player 2: 0</p>
 
-<h1>Autochess — 5-Round Mode</h1>
-<p class="intro">Five rounds. Each round you draw <b>2× the round number</b> in cards, then
-   play <b>half</b> of them (round 1 = play 1, round 5 = play 5) by dragging them
+<h1>Autochess — 7-Round Mode</h1>
+<p class="intro">Seven rounds. Each round you draw <b>2× the round number</b> in cards, then
+   play <b>half</b> of them (round 1 = play 1, round 7 = play 7) by dragging them
    onto your zone; the unplayed rest are discarded at Round Start.
+   The shared <b>community board</b> grows like poker — flop, turn, river — and its
+   cards count toward everyone's synergies.
    Win rounds to <b>steal chips</b> (more survivors = more stolen) — most chips
-   after round 5 wins.</p>
+   after round 7 wins.</p>
 
 <div id="flop-area">
   <div class="flop-label">Community flop — hidden until Round Start, then counts for both players</div>
@@ -58,13 +60,13 @@
 <p id="message"></p>
 
 <div class="hands">
-  <div class="hand-row">
+  <div class="hand-row" data-team="player1">
     <span class="hand-label" id="hand-label-player1"></span>
     <span class="pile draw" id="draw-player1"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
     <span class="pile discard" id="discard-player1"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
     <span class="cards" id="hand-player1"></span>
   </div>
-  <div class="hand-row">
+  <div class="hand-row" data-team="player2">
     <span class="hand-label" id="hand-label-player2"></span>
     <span class="pile draw" id="draw-player2"><span class="pile-label">Draw</span><span class="pile-count">0</span></span>
     <span class="pile discard" id="discard-player2"><span class="pile-label">Discard</span><span class="pile-count">0</span></span>
@@ -104,19 +106,19 @@
   <b style="color:#e8e8e8">♠</b> ranged, crit
 </div>
 
-<script src="js/config.js?v=leg39"></script>
-<script src="js/abilities.js?v=leg39"></script>
-<script src="js/state.js?v=leg39"></script>
-<script src="js/cards.js?v=leg39"></script>
-<script src="js/flop.js?v=leg39"></script>
-<script src="js/synergies.js?v=leg39"></script>
-<script src="js/board.js?v=leg39"></script>
-<script src="js/hands.js?v=leg39"></script>
-<script src="js/placement.js?v=leg39"></script>
-<script src="js/ai.js?v=leg39"></script>
-<script src="js/pathing.js?v=leg39"></script>
-<script src="js/combat.js?v=leg39"></script>
-<script src="js/hud.js?v=leg39"></script>
-<script src="js/gameflow.js?v=leg39"></script>
-<script src="js/sim.js?v=leg39"></script>
-<script src="js/main.js?v=leg39"></script>
+<script src="js/config.js?v=leg40"></script>
+<script src="js/abilities.js?v=leg40"></script>
+<script src="js/state.js?v=leg40"></script>
+<script src="js/cards.js?v=leg40"></script>
+<script src="js/flop.js?v=leg40"></script>
+<script src="js/synergies.js?v=leg40"></script>
+<script src="js/board.js?v=leg40"></script>
+<script src="js/hands.js?v=leg40"></script>
+<script src="js/placement.js?v=leg40"></script>
+<script src="js/ai.js?v=leg40"></script>
+<script src="js/pathing.js?v=leg40"></script>
+<script src="js/combat.js?v=leg40"></script>
+<script src="js/hud.js?v=leg40"></script>
+<script src="js/gameflow.js?v=leg40"></script>
+<script src="js/sim.js?v=leg40"></script>
+<script src="js/main.js?v=leg40"></script>

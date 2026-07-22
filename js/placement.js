@@ -27,12 +27,27 @@ function initInput() {
     });
   }
 
-  // Each hand area is a drop target: drag a unit here to return it to that hand.
+  // The WHOLE hand row is a drop target: drag a unit anywhere onto your bench row to
+  // return it to hand. (Was the skinny `.cards` span, which collapses to near-zero
+  // width when the hand is nearly empty — easy to miss. The full row is a big, fixed
+  // hitbox.) We only accept a UNIT drag from THAT row's own team, and light the row
+  // up while it's a valid target so you can see exactly where to drop.
   ["player1", "player2"].forEach(function (team) {
-    const handEl = document.getElementById("hand-" + team);
-    handEl.addEventListener("dragover", function (e) { e.preventDefault(); });
-    handEl.addEventListener("drop", function (e) {
+    const rowEl = document.querySelector('.hand-row[data-team="' + team + '"]');
+    if (!rowEl) return;
+    rowEl.addEventListener("dragover", function (e) {
+      if (placementOpen && dragData && dragData.kind === "unit" && dragData.team === team) {
+        e.preventDefault();                  // allow the drop
+        rowEl.classList.add("bench-drop");   // highlight the landing zone
+      }
+    });
+    rowEl.addEventListener("dragleave", function (e) {
+      // Only clear when the pointer actually leaves the row (not when crossing a child).
+      if (!rowEl.contains(e.relatedTarget)) rowEl.classList.remove("bench-drop");
+    });
+    rowEl.addEventListener("drop", function (e) {
       e.preventDefault();
+      rowEl.classList.remove("bench-drop");
       handleDropOnHand(team);
     });
   });
@@ -137,9 +152,9 @@ function playCard(team, index, x, y) {
     message.textContent = "That square is already taken.";
     return;
   }
-  if (!isPlaytest() && countUnits(team) >= roundNumber) {   // playtest lifts the per-round cap
+  if (!isPlaytest() && countUnits(team) >= armySize()) {   // playtest lifts the per-round cap
     message.textContent =
-      label(team) + " has already placed all " + roundNumber + " unit(s) this round.";
+      label(team) + " has already placed all " + armySize() + " unit(s) this round.";
     return;
   }
 
@@ -244,13 +259,13 @@ function updatePlacementMessage() {
   }
   // Against the computer only Player 1 needs to be placed (the AI fills its board
   // at Round Start); in two-human hotseat both armies must be ready.
-  const p2Ready = player2IsAI || countUnits("player2") >= roundNumber;
+  const p2Ready = player2IsAI || countUnits("player2") >= armySize();
   const allowance = strikeAllowance("player1");
   const strikeHint = allowance > 0
     ? "  ✕ Airstrike: click enemy (red) squares to mark (" +
       strikeMarks.player1.length + "/" + allowance + ")."
     : "";
-  if (countUnits("player1") >= roundNumber && p2Ready) {
+  if (countUnits("player1") >= armySize() && p2Ready) {
     message.textContent = "Army ready — press Round Start!" + strikeHint;
   } else {
     message.textContent = strikeHint;

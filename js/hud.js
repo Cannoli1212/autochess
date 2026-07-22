@@ -4,7 +4,7 @@
 // Refresh the placement hint and each player's placement progress.
 function updateStatus() {
   if (SIM_MODE) return;   // headless batch sim: skip DOM (see sim.js)
-  const limit = roundNumber;
+  const limit = armySize();
   if (isPlaytest()) {
     turnStatus.textContent =
       "🧪 Playtest — add any card below, place units on EITHER side (no unit cap), then Round Start.";
@@ -27,7 +27,7 @@ function updateStatus() {
 // Refresh the round number and the rounds-won scoreboard.
 function updateRoundInfo() {
   roundInfo.textContent =
-    "Round " + roundNumber + " of 5   —   Rounds won:  Player 1: " +
+    "Round " + roundNumber + " of " + MAX_ROUNDS + "   —   Rounds won:  Player 1: " +
     roundWins.player1 + "  ·  Player 2: " + roundWins.player2;
   updateChipInfo();
 }

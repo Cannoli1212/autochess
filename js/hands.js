@@ -7,7 +7,9 @@
 // hand off. Holding a card therefore replaces a fresh draw — it's never a bonus
 // card. Callers must set the starting hand (empty, or the kept-held cards) first.
 function drawHands() {
-  const targetSize = roundNumber * 2;
+  // Fill up to 2×round, but never past the bench cap (HAND_CAP). Rounds 1-5 are
+  // unchanged (2→10); rounds 6-7 hold at HAND_CAP instead of ballooning to 12/14.
+  const targetSize = Math.min(roundNumber * 2, HAND_CAP);
   ["player1", "player2"].forEach(function (team) {
     while (hands[team].length < targetSize) {
       hands[team].push(drawCard(team));
@@ -22,15 +24,16 @@ function heldCount(team) {
 }
 
 // Phase E: on the results screen, clicking a card toggles its "held" mark.
-// You may hold up to holdLimit (= roundNumber, the round just played).
+// Bench cap: you may hold up to HAND_CAP cards (in practice you can keep every
+// leftover, since held cards always fit within next round's capped hand).
 function toggleHold(team, index) {
   const card = hands[team][index];
   if (card.held) {
     card.held = false;                       // un-hold: always allowed
   } else {
-    if (heldCount(team) >= roundNumber) {    // at the cap — must free a slot first
-      message.textContent = label(team) + " can only hold " + roundNumber +
-        " card(s) — unclick one first.";
+    if (heldCount(team) >= HAND_CAP) {       // bench full — must free a slot first
+      message.textContent = label(team) + " bench is full (" + HAND_CAP +
+        ") — unclick one first.";
       return;
     }
     card.held = true;
@@ -98,6 +101,10 @@ function renderOneHand(team) {
     });
     card.addEventListener("dragleave", function () { card.classList.remove("fuse-target"); });
     card.addEventListener("drop", function (e) {
+      // A UNIT dropped onto a hand card isn't a fusion — let it bubble up to the
+      // hand-row drop handler, which returns the unit to the bench. (Bail BEFORE
+      // touching dragData so the row handler still sees it.)
+      if (dragData && dragData.kind === "unit") return;
       e.preventDefault();
       card.classList.remove("fuse-target");
       if (!placementOpen || holdMode) { dragData = null; return; }

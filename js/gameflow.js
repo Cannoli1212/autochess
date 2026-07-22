@@ -65,22 +65,22 @@ function finishRound(winner) {
 
   updateRoundInfo();
 
-  if (roundNumber < 5) {
+  if (roundNumber < MAX_ROUNDS) {
     // More rounds to play — reveal the Next Round button.
     // Phase E: open hold mode so players can click leftover cards to keep them.
     // holdLimit = the round just played (roundNumber, before nextRound bumps it).
     holdMode = true;
     renderHands();               // redraw hands so they become clickable-to-hold
-    message.textContent = "Click up to " + roundNumber +
-      " leftover card(s) to hold, then press Next Round.";
+    message.textContent =
+      "Click any leftover card(s) to hold for next round, then press Next Round.";
     nextButton.style.display = "inline-block";
   } else {
-    // That was the 5th round — decide the overall winner.
+    // That was the final round — decide the overall winner.
     endGame();
   }
 }
 
-// All 5 rounds done: whoever has the most chips wins.
+// All rounds done: whoever has the most chips wins.
 function endGame() {
   holdMode = false;             // no holding once the game is over
   let result;
@@ -125,7 +125,7 @@ function startRound() {
   // just before the fight, so the human sees the enemy board appear at Round Start
   // (it stays hidden during planning, like the real game will work). Render right
   // away so those units show before combat begins.
-  if (player2IsAI && countUnits("player2") < roundNumber) {
+  if (player2IsAI && countUnits("player2") < armySize()) {
     aiPlaceUnits("player2");
     render();
   }
@@ -136,9 +136,9 @@ function startRound() {
       message.textContent = "Playtest: place at least one unit on EACH side, then Round Start.";
       return;
     }
-  } else if (countUnits("player1") < roundNumber || countUnits("player2") < roundNumber) {
+  } else if (countUnits("player1") < armySize() || countUnits("player2") < armySize()) {
     message.textContent =
-      "Place all your units first — " + roundNumber + " each this round.";
+      "Place all your units first — " + armySize() + " each this round.";
     return;
   }
   inCombat = true;
@@ -152,8 +152,11 @@ function startRound() {
   // hand through the fight so the player can pick which to hold on the results
   // screen. They're discarded (or kept) in nextRound() instead.
 
-  // Phase E: reveal the community flop NOW — nobody saw it during placement.
-  dealFlop();
+  // Phase A: TOP UP the community board to this round's target. This reveals the
+  // round's new card — the flop (R1), turn (R4), or river (R6) — that was hidden
+  // during planning. On the "stays" rounds the board is already full, so it's a
+  // no-op. Cards from earlier rounds were already face-up while you planned.
+  growCommunity();
   renderSynergies();
 
   // King of Clubs' Airstrike: the enemy army has appeared — destroy any enemy unit
@@ -218,7 +221,10 @@ function nextRound() {
   startButton.disabled = false;
   nextButton.style.display = "none";
   message.textContent = "";
-  hideFlop();                   // next round's flop stays hidden until its Round Start
+  // Phase A: the community PERSISTS across rounds — do NOT wipe it. Just repaint so
+  // the new round shows the cards dealt so far face-up (known while you plan) plus
+  // any pending back (the turn/river reveal still to come this round).
+  renderFlop();
   render();
   updateStatus();
   updateRoundInfo();
