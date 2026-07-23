@@ -217,19 +217,22 @@ const ABILITIES = {
   // Rank 4 — Giant Slayer: bonus damage vs targets with MORE max HP than itself
   // (it "punches up"). Plays differently per suit for free — brutal on a glassy
   // 4♠/4♣, tame on a tanky 4♥ whose own maxHP is already high.
-  // PHALANX pack-scaling: the bonus climbs by `bonusPerExtra` per EXTRA 4 in the
-  // pool, capped at `bonusMax`, baked onto unit.slayerBonus at fight start.
+  // OF-A-KIND GATED (redesigned 2026-07-22, Riley — same dial as ranks 2 & 3): the passive
+  // UNLOCKS at TRIPS (a lone 4 or a pair get NO Giant Slayer — the pair only unlocks Haste).
+  // ROLE-split magnitude: RANGED ♣/♠ read `tiersRanged` (the full bonus); MELEE ♥/♦ read
+  // `tiersMelee` (a SMALLER bonus — they're compensated by Kill Dash). QUADS buff both tables.
+  // Baked ONCE at round start off packCount (fielded 4s + the shared flop). tiers are keyed by
+  // of-a-kind count: 3=trips, 4=quads (caps at 4); counts 1-2 have no entry → slayerBonus 0.
   giantSlayer: {
     onRoundStart: function (unit, ctx, ability) {
-      let bonus = ability.bonus + (ability.bonusPerExtra || 0) * (packCount(unit) - 1);
-      if (ability.bonusMax !== undefined) bonus = Math.min(bonus, ability.bonusMax);
-      unit.slayerBonus = bonus;
+      const table = isRangedSuit(unit.suit) ? ability.tiersRanged : ability.tiersMelee;
+      const t = table[Math.min(packCount(unit), 4)];   // undefined below trips
+      unit.slayerBonus = t ? t.bonus : 0;              // 0 = ungated body (lone/pair)
     },
     onAttack: function (unit, ctx, ability) {
+      if (!unit.slayerBonus) return;                   // not yet unlocked (below trips)
       if (ctx.target.maxHp > unit.maxHp) {
-        // The pack-scaled bonus if baked; else the base (the 1v1 sim path).
-        const bonus = (unit.slayerBonus !== undefined) ? unit.slayerBonus : ability.bonus;
-        ctx.damage = Math.round(ctx.damage * (1 + bonus));
+        ctx.damage = Math.round(ctx.damage * (1 + unit.slayerBonus));
       }
     },
   },
@@ -602,31 +605,50 @@ const ABILITIES = {
     },
   },
 
-  // HASTE (rank 4's cast — a "self"-targeting ATTACK-SPEED buff, casting, Riley 2026-07-15).
-  // On a full (attack-mana) bar it multiplies its own attackSpeed by (1 + `speedMult`), a
-  // STACKING ramp like Berserk's attack growth — but capped at `speedMax` because attack-mana
-  // makes it a snowball (faster swings → more mana → more casts). Reads/writes only the plain
-  // attackSpeed stat the combat loop already uses to pace attacks, so no engine change.
+  // HASTE (rank 4's cast — a "self"-targeting ATTACK-SPEED buff, casting, Riley 2026-07-15;
+  // OF-A-KIND GATED 2026-07-22). On a full (attack-mana) bar it multiplies its own attackSpeed by
+  // (1 + baked speedMult), a STACKING ramp like Berserk's attack growth — but capped at the baked
+  // speedMax because attack-mana makes it a snowball (faster swings → more mana → more casts).
+  // Reads/writes only the plain attackSpeed stat the combat loop already uses, so no engine change.
+  // GATE: a LONE 4 (count < 2) doesn't cast — onRoundStart kills its caster flag (like a lone 2),
+  // so no dead mana bar renders. A PAIR+ unlocks it; onRoundStart bakes the per-tier speed off
+  // packCount (moderate at pair/trips, HUGE at quads). The mana profile is shared by every tier.
   hasteCast: {
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);
+      if (count < 2) {                        // lone 4 → no cast, no mana bar
+        unit.caster = false;
+        unit.hasteSpeedMult = 0;
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.hasteSpeedMult = t.speedMult;      // bake the per-cast ramp for onCast
+      unit.hasteSpeedMax = t.speedMax;        // and its ceiling
+    },
     onCast: function (unit, ctx, ability) {
-      const cap = (ability.speedMax !== undefined) ? ability.speedMax : Infinity;
-      unit.attackSpeed = Math.min(cap, unit.attackSpeed * (1 + (ability.speedMult || 0)));
+      if (!unit.hasteSpeedMult) return;       // lone 4 (gated) — no ramp
+      const cap = (unit.hasteSpeedMax !== undefined) ? unit.hasteSpeedMax : Infinity;
+      unit.attackSpeed = Math.min(cap, unit.attackSpeed * (1 + unit.hasteSpeedMult));
     },
   },
 
-  // CHARGE (rank 4's MELEE rider — a "self" move-speed burst, casting, Riley 2026-07-15). The
-  // melee ♥/♦ 4s keep the same Haste attack-speed cast the ranged 4s get, and ALSO gain this:
-  // a bump to `moveSteps` (how many steps the unit takes per move-tick — default 1, read in
-  // combatStep's movement branch), so a hasted melee 4 CLOSES the gap faster instead of only
-  // swinging faster. Ramps `stepGain` per cast, capped at `stepMax`, exactly like Haste ramps
-  // attackSpeed. It has NO `cast`/mana profile of its own — it rides the Haste bar: runAbilityHook
-  // fires EVERY ability's onCast when the bar fills (it doesn't check the `cast` flag), so Charge
-  // discharges alongside Haste on one bar. Move speed matters because base movement is already
-  // every-tick (MOVE_COOLDOWN_TICKS 0), so the only way to be faster is extra steps per tick.
-  chargeCast: {
-    onCast: function (unit, ctx, ability) {
-      const cap = (ability.stepMax !== undefined) ? ability.stepMax : Infinity;
-      unit.moveSteps = Math.min(cap, (unit.moveSteps || 1) + (ability.stepGain || 1));
+  // KILL DASH (rank 4's MELEE rider — a permanent move-speed stack ON KILL, redesigned 2026-07-22,
+  // Riley; replaces the old Haste-riding "Charge"). Only the melee ♥/♦ 4s carry it (role "melee"),
+  // as compensation for their SMALLER Giant Slayer bonus: every enemy this unit kills banks one more
+  // step onto `moveSteps` (how many steps it takes per move-tick — default 1, read in combatStep's
+  // movement branch), capped at the baked stepMax. It SNOWBALLS — a melee 4 that keeps killing gets
+  // faster and STAYS faster the rest of the fight (no decay). OF-A-KIND GATED: unlocks at TRIPS (no
+  // entry below → killDashGain 0, a no-op), and QUADS raise the ceiling. Baked at round start off
+  // packCount. Fires on the onKill hook (combat.js runs it when a hit drops a target to 0 HP).
+  killDash: {
+    onRoundStart: function (unit, ctx, ability) {
+      const t = ability.tiers[Math.min(packCount(unit), 4)];   // undefined below trips
+      unit.killDashGain = t ? t.stepGain : 0;                  // 0 = not unlocked (lone/pair)
+      unit.killDashMax = t ? t.stepMax : 0;
+    },
+    onKill: function (unit, ctx, ability) {
+      if (!unit.killDashGain) return;                          // below trips — no dash
+      unit.moveSteps = Math.min(unit.killDashMax, (unit.moveSteps || 1) + unit.killDashGain);
     },
   },
 

@@ -385,7 +385,7 @@ function combatStep() {
         // A SLOWED unit (stepped on a Trapline) waits longer between steps.
         const slowed = tickCount < (unit.slowUntil || 0);
         const moveDelay = slowed ? SLOW_MOVE_COOLDOWN : MOVE_COOLDOWN_TICKS;
-        // MOVE-SPEED BURST (melee rank-4 Charge): a hasted unit takes EXTRA steps this tick —
+        // MOVE-SPEED BURST (melee rank-4 Kill Dash): a snowballing unit takes EXTRA steps this tick —
         // `moveSteps` (default 1) is how many. A slow pins it to a single step (the slow wins).
         // Units WITHOUT the burst have moveSteps 1, so this loop runs exactly once and behaves
         // identically to the old single-step move. Each step re-pathfinds from the new cell and

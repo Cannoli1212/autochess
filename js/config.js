@@ -80,21 +80,46 @@ const RANK_ABILITIES = {
           4: { reflect: 1.35 },   // quads — reflects MORE than it takes (net damage while inert)
         } },
       { kind: "targetDummy",  name: "Target Dummy" }],
-  // Rank 4 — GIANT SLAYER + HASTE, with a MELEE move-burst rider (casting, Riley 2026-07-15):
-  // keeps the "punch up" bonus vs bigger targets AND the SELF-cast attack-speed buff. Hybrid
-  // caster (still auto-attacks, NOT noAutoAttack — Giant Slayer needs swings to matter). ATTACK-
-  // mana: each swing banks mana, so the faster it gets the sooner it casts again — a snowball,
-  // capped at `speedMax` so the loop can't run away. Reuses the attackSpeed stat only.
-  // ROLE split — the ONLY difference is the melee half gets ONE extra thing (everything else is
-  // identical for both roles): the melee ♥/♦ 4s ALSO carry `chargeCast` (role "melee"), a small
-  // MOVE-SPEED burst so a frontline 4 closes the gap faster, not just swings faster. Charge has
-  // no mana profile of its own — it rides the Haste bar (see the chargeCast kit). Ranged ♣/♠ 4s
-  // are UNCHANGED (Giant Slayer + Haste, pure fire-rate — a backliner doesn't need to close).
-  4:  [{ kind: "giantSlayer", name: "Giant Slayer", bonus: 1.0, bonusPerExtra: 0.5, bonusMax: 3.0 },
-      { kind: "hasteCast",   name: "Haste",        cast: true, castTargeting: "self",
-        manaMax: 40, manaPerAttack: 10, speedMult: 0.25, speedMax: 4.0 },
-      { kind: "chargeCast",  name: "Charge",       role: "melee",
-        stepGain: 1, stepMax: 2 }],
+  // Rank 4 — HASTE + GIANT SLAYER, OF-A-KIND GATED (redesigned 2026-07-22, Riley — same
+  // pair/trips/quads dial as ranks 2 & 3). The of-a-kind COUNT unlocks the kit in stages, and
+  // the two roles differ in HOW MUCH Giant Slayer they get plus a melee-only kill-dash:
+  //   • A LONE 4 is a plain body — no cast, no Giant Slayer (the cast is gated, like a lone 2).
+  //   • PAIR (2)  → HASTE unlocks for BOTH roles: a self-cast attack-speed ramp on an attack-mana
+  //     bar (each swing banks mana, so a faster 4 casts sooner — a snowball capped at `speedMax`).
+  //   • TRIPS (3) → keep Haste AND add a MODERATE Giant Slayer passive (bonus damage vs targets
+  //     with MORE max HP — it "punches up"). RANGED ♣/♠ get the full bonus; MELEE ♥/♦ get a
+  //     SLIGHTLY SMALLER one but ALSO gain "Kill Dash" — a permanent, capped move-speed stack on
+  //     every kill (compensation for the smaller slayer bonus and for being in the scrum).
+  //   • QUADS (4) → the tiers BUFF: a HUGE Haste ramp, a LARGE Giant Slayer bonus (ranged still >
+  //     melee), and a higher Kill Dash ceiling for melee.
+  // Hybrid caster (still auto-attacks, NOT noAutoAttack — Giant Slayer needs swings to matter).
+  // Haste carries the shared mana profile; its per-tier speed is baked at round start off packCount
+  // (fielded 4s + the shared flop — the same count the poker synergies use). Giant Slayer reads two
+  // tables (tiersRanged / tiersMelee) and picks by the unit's suit role; Kill Dash is role "melee".
+  //   speedMult/speedMax — per-cast attack-speed ramp and its ceiling (Haste)
+  //   bonus              — Giant Slayer damage vs bigger targets, as a fraction (0.75 = +75%)
+  //   stepGain/stepMax   — extra move-steps banked per kill and the cap (Kill Dash)
+  4:  [{ kind: "hasteCast",   name: "Haste",        cast: true, castTargeting: "self",
+        manaMax: 40, manaPerAttack: 10,
+        tiers: {
+          2: { speedMult: 0.20, speedMax: 3.0 },   // pair  — moderate attack-speed ramp
+          3: { speedMult: 0.20, speedMax: 3.0 },   // trips — same Haste (trips adds Giant Slayer)
+          4: { speedMult: 0.40, speedMax: 6.0 },   // quads — HUGE attack-speed ramp
+        } },
+      { kind: "giantSlayer", name: "Giant Slayer",
+        tiersRanged: {
+          3: { bonus: 0.75 },   // trips — moderate: +75% vs bigger targets
+          4: { bonus: 1.75 },   // quads — large
+        },
+        tiersMelee: {
+          3: { bonus: 0.50 },   // trips — moderate but SMALLER than ranged (compensated by Kill Dash)
+          4: { bonus: 1.25 },   // quads — large but < ranged
+        } },
+      { kind: "killDash",    name: "Kill Dash",    role: "melee",
+        tiers: {
+          3: { stepGain: 1, stepMax: 2 },   // trips — dash on kill, capped at +1 step
+          4: { stepGain: 1, stepMax: 3 },   // quads — higher ceiling (+2 steps)
+        } }],
   // Rank 5 — SLIPPERY + WARD (casting, Riley 2026-07-15): the 5s are now DEFENSIVE
   // attackers, not pure mages (Fireball moved to the devil-themed 6s). They auto-attack
   // normally and keep the Slippery dodge, but on a REGEN-mana clock they self-cast Ward: a
