@@ -148,26 +148,43 @@ const RANK_ABILITIES = {
            3: { shieldFrac: 1.0, stack: false },   // trips — a BIGGER single shield, same one-at-a-time rule
            4: { shieldFrac: 0.5, stack: true },    // quads — layer a new shield on each full bar (builds up)
          } }],
-  // Rank 6 — EXECUTIONER + HELLFIRE, now SPLIT BY ROLE (casting, Riley 2026-07-15): the DEVIL
-  // rank. All four 6s keep the Executioner passive (autos on targets at/below `threshold` of max
-  // HP are EXACTLY lethal, through Bulwark and shields) — it has NO `role`, so it lands on every
-  // suit. The CAST differs by whether the suit is melee or ranged (see isRangedSuit / the role
-  // filter in unitAbilities), because a devil in the back line lobs fire while a devil in the
-  // scrum radiates it:
-  //   • RANGED ♣/♠ → "Hellfire" projectile (the fireball kit, unchanged): `spellPower` × attack
-  //     to a target within castRange, then `splashMult` of that to enemies within `radius`.
-  //   • MELEE ♥/♦ → "Hellfire Aura" (burnAura kit): a SELF-centered burst that scorches every
-  //     enemy within `radius` of the caster for `spellPower` × attack. No target needed
-  //     (castTargeting "self"), so it fires the instant the bar fills — the melee 6 is already
-  //     surrounded, so being in the fray IS the aim. spellPower is lower than Hellfire's on
-  //     purpose: it hits a whole ring, not one target.
+  // Rank 6 — EXECUTIONER + HELLFIRE, SPLIT BY ROLE and now OF-A-KIND GATED (casting Riley
+  // 2026-07-15; of-a-kind dial added Riley 2026-07-23): the DEVIL rank. All four 6s keep the
+  // Executioner passive UNGATED (autos on targets at/below `threshold` of max HP are EXACTLY
+  // lethal, through Bulwark and shields) — it has NO `role`, so it lands on every 6, even a lone
+  // one. The CAST is now the of-a-kind payoff, gated exactly like ranks 2-5 (see the `tiers`
+  // tables keyed by packCount): a LONE 6 is a plain Executioner body with NO cast (mana bar
+  // killed in onRoundStart), a PAIR unlocks the base cast, TRIPS bumps it, QUADS goes big. The
+  // cast also differs by role (isRangedSuit / the role filter in unitAbilities), because a devil
+  // in the back line lobs fire while a devil in the scrum radiates it:
+  //   • RANGED ♣/♠ → "Hellfire" projectile: `spellPower` × attack to a target within castRange,
+  //     then `splashMult` of that to enemies within `radius`. Tiers: PAIR = base fireball,
+  //     TRIPS = more damage, QUADS = `hitAll` BOARD-WIDE nuke (full damage to EVERY enemy, no
+  //     splash shape — the projectile becomes a rain of fire).
+  //   • MELEE ♥/♦ → "Hellfire Aura" (burnAura): a SELF-centered burst scorching every enemy
+  //     within `radius` for `spellPower` × attack (no target — fires the instant the bar fills,
+  //     the melee 6 is already surrounded). Tiers: PAIR = base ring, TRIPS = bigger ring + more
+  //     damage, QUADS = trips ring/damage but `fullStart` opens the fight with a FULL mana bar
+  //     so it scorches on the very first tick.
   // Both are HYBRID casters (still auto-attack, so Executioner keeps procing — NOT noAutoAttack)
-  // and both charge on ATTACK-mana (the devil banks fire by swinging).
+  // and both charge on ATTACK-mana (the devil banks fire by swinging). The mana profile
+  // (manaMax/manaPerAttack/castRange) is SHARED across tiers on the card; only the payload scales.
+  // `tiers` is keyed by of-a-kind count: 2=pair, 3=trips, 4=quads (caps at 4); count <2 → no cast.
   6:  [{ kind: "executioner", name: "Executioner",  threshold: 0.3 },
       { kind: "fireball",    name: "Hellfire",     role: "ranged", cast: true, castTargeting: "enemy",
-        manaMax: 60, manaPerAttack: 15, castRange: 4, spellPower: 2.0, radius: 1, splashMult: 0.5 },
+        manaMax: 60, manaPerAttack: 15, castRange: 4,
+        tiers: {
+          2: { spellPower: 2.0, radius: 1, splashMult: 0.5 },               // pair  — base fireball (today's values)
+          3: { spellPower: 3.0, radius: 1, splashMult: 0.5 },               // trips — damage up moderately
+          4: { spellPower: 3.0, radius: 1, splashMult: 0.5, hitAll: true }, // quads — full damage to EVERY enemy (board nuke)
+        } },
       { kind: "burnAura",    name: "Hellfire Aura", role: "melee",  cast: true, castTargeting: "self",
-        manaMax: 60, manaPerAttack: 15, radius: 1, spellPower: 0.6 }],
+        manaMax: 60, manaPerAttack: 15,
+        tiers: {
+          2: { radius: 1, spellPower: 0.6 },                  // pair  — base ring (today's nova)
+          3: { radius: 2, spellPower: 0.9 },                  // trips — bigger ring + more damage
+          4: { radius: 2, spellPower: 0.9, fullStart: true }, // quads — trips ring/damage + opens the fight FULLY charged
+        } }],
   // Rank 7 — GAMBLER + SLOT MACHINE (casting, Riley 2026-07-15): keeps the on-hit Gambler (every
   // hit rolls a random damage factor `min`..`max`; the floor ramps `rampPerHit`/hit; fully ramped
   // it pickpockets `stealAmount` chips, 7♦ +`diamondBonus`) AND gains a hybrid ATTACK-mana cast.

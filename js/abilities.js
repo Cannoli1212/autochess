@@ -470,14 +470,45 @@ const ABILITIES = {
   // no crit and no lifesteal. Balance knobs: spellPower, radius, splashMult, + the mana
   // profile (manaMax/manaRegen/manaStart) on the card that sets cast cadence.
   fireball: {
+    // OF-A-KIND GATED (rank 6 ranged, Riley 2026-07-23 — same pair/trips/quads dial as ranks 2-5).
+    // The Hellfire projectile is the of-a-kind payoff: a LONE 6 is a plain Executioner body with NO
+    // cast (mana bar killed, like a lone 2/4/5). A PAIR unlocks the base fireball, TRIPS bumps the
+    // damage, and QUADS bakes `fireHitAll` → the projectile becomes a BOARD-WIDE nuke (full fireball
+    // damage to EVERY living enemy, ignoring the single-target + splash shape). Baked ONCE at round
+    // start off packCount (fielded 6s + the shared flop), so a copy dying mid-fight can't weaken it.
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);          // this unit's 6s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 6 doesn't cast — kill its mana bar
+        unit.caster = false;                  // cast pass skips it; Executioner passive still lands
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.fireSpellPower = t.spellPower;
+      unit.fireRadius = t.radius;
+      unit.fireSplashMult = t.splashMult;
+      unit.fireHitAll = !!t.hitAll;
+    },
     onCast: function (unit, ctx, ability) {
+      const power = (unit.fireSpellPower !== undefined) ? unit.fireSpellPower : ability.tiers[2].spellPower;
+      const dmg = Math.round(unit.attack * (power || 1));
+      // QUADS — board-wide nuke: full fireball damage to EVERY living enemy, no target needed.
+      if (unit.fireHitAll) {
+        for (let i = 0; i < units.length; i++) {
+          const u = units[i];
+          if (u.team === unit.team || u.hp <= 0) continue;
+          dealSpellDamage(unit, u, dmg);
+          u.spellHitUntil = tickCount + FLASH_TICKS;   // flash each scorched enemy
+        }
+        return;
+      }
+      // PAIR/TRIPS — single target + splash (the classic Hellfire shape).
       const target = ctx.target;
       if (!target) return;
-      const dmg = Math.round(unit.attack * (ability.spellPower || 1));
       dealSpellDamage(unit, target, dmg);
-      const radius = ability.radius || 0;
+      const radius = (unit.fireRadius !== undefined) ? unit.fireRadius : 0;
       if (radius <= 0) return;
-      const splash = Math.round(dmg * (ability.splashMult !== undefined ? ability.splashMult : 1));
+      const splashMult = (unit.fireSplashMult !== undefined) ? unit.fireSplashMult : 1;
+      const splash = Math.round(dmg * splashMult);
       for (let i = 0; i < units.length; i++) {
         const u = units[i];
         if (u.team === unit.team || u === target || u.hp <= 0) continue;   // enemies only, not the primary
@@ -496,9 +527,29 @@ const ABILITIES = {
   // fires it the instant the bar fills — the melee devil is already surrounded, so no aim needed.
   // spellPower is deliberately lower than the projectile's: it pays for hitting a whole ring.
   burnAura: {
+    // OF-A-KIND GATED (rank 6 melee, Riley 2026-07-23 — same pair/trips/quads dial as ranks 2-5).
+    // The self-nova is the of-a-kind payoff: a LONE 6 is a plain Executioner body with NO cast (mana
+    // bar killed). A PAIR unlocks the burn, TRIPS widens the ring AND hits harder, and QUADS keeps the
+    // trips ring/damage but bakes `fullStart` → opens the fight with a FULL mana bar so it scorches on
+    // the very first tick. Baked ONCE at round start off packCount. The full-mana bake runs AFTER
+    // applySynergies' mana reset (synergies.js resets casters to manaStart), because ability
+    // onRoundStart hooks fire after applySynergies — so the full start sticks and isn't clobbered.
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);          // this unit's 6s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 6 doesn't cast — kill its mana bar
+        unit.caster = false;                  // cast pass skips it; Executioner passive still lands
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.auraRadius = t.radius;
+      unit.auraSpellPower = t.spellPower;
+      if (t.fullStart) unit.mana = unit.manaMax;   // quads open the fight already charged
+    },
     onCast: function (unit, ctx, ability) {
-      const dmg = Math.round(unit.attack * (ability.spellPower || 0.6));
-      const foes = enemiesNear(unit, ability.radius || 1);
+      const power = (unit.auraSpellPower !== undefined) ? unit.auraSpellPower : ability.tiers[2].spellPower;
+      const radius = (unit.auraRadius !== undefined) ? unit.auraRadius : 1;
+      const dmg = Math.round(unit.attack * (power || 0.6));
+      const foes = enemiesNear(unit, radius);
       for (let i = 0; i < foes.length; i++) {
         dealSpellDamage(unit, foes[i], dmg);
         foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each scorched cell
