@@ -742,26 +742,70 @@ const ABILITIES = {
     },
   },
 
-  // SLOT MACHINE (rank 7's cast — the "spin", casting, Riley 2026-07-15). The Gambler rank gains a
-  // hybrid ATTACK-mana cast that, each time the bar fills, SPINS one random reel from `slots` and
-  // fires it — leaning all the way into the poker/gambling theme. Every reel reuses a primitive that
-  // ALREADY EXISTS (dealSpellDamage / chainTargets / applyStun / applyPoison / heal), so this kit is
-  // PURE DISPATCH — zero combat-loop change. Enemy reels use ctx.target (nearest enemy in castRange,
-  // castTargeting "enemy"); the Heal reel finds its OWN most-wounded ally. `unit.lastSpin` records the
-  // result for a future on-caster label. A whiffed heal (nobody hurt) is just a bad spin — on-theme.
+  // SLOT MACHINE (rank 7's cast — the "spin", casting Riley 2026-07-15; OF-A-KIND GATED + tiered
+  // reels + 777 jackpot Riley 2026-07-23). The Gambler rank's hybrid ATTACK-mana cast: each time its
+  // (deliberately LOW) bar fills it SPINS one random reel from THIS TIER's pool — and every reel
+  // MIRRORS a real ability elsewhere in the game, reusing a primitive that ALREADY EXISTS
+  // (dealSpellDamage / chainTargets / applyStun / applyPoison / heal / enemiesNear / unitsAlongLine /
+  // u.shield / u.attackSpeed), so this kit stays PURE DISPATCH — zero combat-loop change. Enemy reels
+  // (hellfire/chain/poisonLine/stun) use ctx.target (nearest enemy in castRange, castTargeting
+  // "enemy"); self/ally reels (nova/shield/haste/heal) ignore it — the heal finds its OWN most-wounded
+  // ally. You don't pick which reel you spin, so a self-buff on a lone backliner is a wasted pull: that
+  // randomness IS the downside. `unit.lastSpin` records the result (incl. "777") for a future label.
+  // OF-A-KIND GATED (same pair/trips/quads dial as ranks 2-6): onRoundStart bakes unit.slotTier off
+  // packCount and KILLS a lone 7's mana bar (Gambler passive still lands). The tier picks which reel
+  // pool the spin draws from AND whether the 777 jackpot is on the wheel (trips+). Baked ONCE so a
+  // copy dying mid-fight can't shift the tier.
   slotMachine: {
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);          // this unit's 7s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 7 doesn't spin — kill its mana bar
+        unit.caster = false;                  // cast pass skips it; Gambler passive still runs
+        unit.slotTier = 0;
+        return;
+      }
+      unit.slotTier = Math.min(count, 4);     // 2=pair, 3=trips, 4=quads → which reel pool + jackpot
+    },
     onCast: function (unit, ctx, ability) {
-      const slots = ability.slots || [];
-      if (slots.length === 0) return;
-      const slot = slots[Math.floor(Math.random() * slots.length)];   // uniform spin
+      const tier = (unit.slotTier !== undefined && unit.slotTier > 0) ? unit.slotTier : 2;   // default pair (1v1 sim skips round-start prep)
+      const target = ctx.target;              // nearest enemy in castRange (may be null)
+      // 777 JACKPOT (trips+ only): a small chance, rolled BEFORE the normal spin. A heavy AoE nuke
+      // (spellPower×attack to the target + radius splash) that ALSO MINTS gold to the owner —
+      // generated, not stolen like the Gambler passive. Needs an enemy target for the nuke; the gold
+      // still pays out either way.
+      const jackpot = ability.jackpot && ability.jackpot[tier];
+      if (jackpot && Math.random() < jackpot.chance) {
+        unit.lastSpin = "777";
+        if (target) {
+          const dmg = Math.round(unit.attack * (jackpot.spellPower || 6));
+          dealSpellDamage(unit, target, dmg);
+          const radius = jackpot.radius || 0;
+          if (radius > 0) {
+            for (let i = 0; i < units.length; i++) {
+              const u = units[i];
+              if (u.team === unit.team || u === target || u.hp <= 0) continue;   // enemies only, not the primary
+              const dist = Math.max(Math.abs(u.x - target.x), Math.abs(u.y - target.y));
+              if (dist <= radius) dealSpellDamage(unit, u, dmg);
+            }
+          }
+        }
+        if (jackpot.gold) {                   // mint the payout (generated tokens)
+          chips[unit.team] = (chips[unit.team] || 0) + jackpot.gold;
+          if (!SIM_MODE) updateChipInfo();    // chip badges live-update mid-fight
+        }
+        return;
+      }
+      // NORMAL SPIN: pick one reel uniformly from this tier's pool and fire its effect.
+      const pool = (ability.tiers && ability.tiers[tier]) || [];
+      if (pool.length === 0) return;
+      const slot = pool[Math.floor(Math.random() * pool.length)];
       unit.lastSpin = slot.effect;
-      const target = ctx.target;                                      // nearest enemy in range (may be null)
       switch (slot.effect) {
-        case "hellfire":   // single-target nuke (dealSpellDamage flashes the impact itself)
+        case "hellfire":   // 🎯 single-target nuke (rank 6 ♣♠); dealSpellDamage flashes the impact
           if (!target) return;
           dealSpellDamage(unit, target, Math.round(unit.attack * (slot.spellPower || 2)));
           break;
-        case "chain": {     // bouncing bolt, damage decays each hop
+        case "chain": {     // 🎯 bouncing bolt, damage decays each hop (slot original)
           if (!target) return;
           const line = chainTargets(unit, target, slot.jumps || 3, slot.jumpRange || 3);
           const base = Math.round(unit.attack * (slot.spellPower || 1.5));
@@ -771,17 +815,37 @@ const ABILITIES = {
           }
           break;
         }
-        case "stun":        // freeze the target (Phase 1's stun primitive; the .stunned purple glow shows)
+        case "poisonLine": {   // 🎯 piercing poison down a straight row (rank 9 ♣♠ Poison Volley)
+          if (!target) return;
+          const line = unitsAlongLine(unit, target, slot.pierce || 2);
+          for (let i = 0; i < line.length; i++) {
+            applyPoison(unit, line[i], slot.stacks || 10);   // inherits the drain + plague-jump
+            line[i].spellHitUntil = tickCount + FLASH_TICKS;
+          }
+          break;
+        }
+        case "stun":        // 🎯 freeze the target (Phase 1's stun primitive; the .stunned purple glow shows)
           if (!target) return;
           applyStun(target, slot.ticks || 8);
           target.spellHitUntil = tickCount + FLASH_TICKS;
           break;
-        case "plague":      // dump poison stacks (inherits the drain + plague-jump)
-          if (!target) return;
-          applyPoison(unit, target, slot.stacks || 20);
-          target.spellHitUntil = tickCount + FLASH_TICKS;
+        case "nova": {      // 🛡 self-centered burn ring (rank 6 ♥♦ Hellfire Aura); no target needed
+          const foes = enemiesNear(unit, slot.radius || 1);
+          const dmg = Math.round(unit.attack * (slot.spellPower || 0.6));
+          for (let i = 0; i < foes.length; i++) {
+            dealSpellDamage(unit, foes[i], dmg);
+            foes[i].spellHitUntil = tickCount + FLASH_TICKS;
+          }
           break;
-        case "heal": {      // mend the most-wounded ally in range (self ok); a no-op if nobody's hurt
+        }
+        case "shield":      // 🛡 shield yourself (rank 2/5); same u.shield pool drained before HP
+          unit.shield = (unit.shield || 0) + Math.round(unit.maxHp * (slot.frac || 0.4));
+          break;
+        case "haste":       // 🛡 ramp your own attack speed, capped (rank 4 Haste)
+          unit.attackSpeed = Math.min((slot.cap !== undefined) ? slot.cap : Infinity,
+                                      unit.attackSpeed * (1 + (slot.mult || 0.2)));
+          break;
+        case "heal": {      // 🛡 mend the most-wounded ally in range (self ok); a no-op if nobody's hurt (Q♣ Cleric)
           const ally = lowestHpAllyInRange(unit, unit.castRange);
           if (ally) heal(unit, ally, Math.round(unit.attack * (slot.healPower || 4)));
           break;

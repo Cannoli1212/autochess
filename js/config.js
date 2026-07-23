@@ -185,26 +185,67 @@ const RANK_ABILITIES = {
           3: { radius: 2, spellPower: 0.9 },                  // trips — bigger ring + more damage
           4: { radius: 2, spellPower: 0.9, fullStart: true }, // quads — trips ring/damage + opens the fight FULLY charged
         } }],
-  // Rank 7 — GAMBLER + SLOT MACHINE (casting, Riley 2026-07-15): keeps the on-hit Gambler (every
-  // hit rolls a random damage factor `min`..`max`; the floor ramps `rampPerHit`/hit; fully ramped
-  // it pickpockets `stealAmount` chips, 7♦ +`diamondBonus`) AND gains a hybrid ATTACK-mana cast.
-  // Each full bar SPINS one random reel (uniform) from `slots` — the whole rank leans into the
-  // gambling theme. Every reel reuses an existing primitive so the kit is pure dispatch (see
-  // slotMachine): hellfire (single-target nuke), chain (bouncing bolt, decays `falloff`/jump up to
-  // `jumps` bounces within `jumpRange`), stun (freeze `ticks`), plague (poison `stacks`), heal
-  // (mend most-wounded ally for healPower×attack). Magnitudes are FIRST-PASS — tune by playtest.
+  // Rank 7 — GAMBLER + SLOT MACHINE, now OF-A-KIND GATED (redesigned Riley 2026-07-23 — same pair/
+  // trips/quads dial as ranks 2-6). Every 7 keeps the UNGATED Gambler passive (on-hit random damage
+  // roll `min`..`max`, floor ramps `rampPerHit`/hit, fully ramped it STEALS `stealAmount` chips, 7♦
+  // +`diamondBonus`). The SLOT MACHINE is the of-a-kind payoff — a hybrid ATTACK-mana cast on a
+  // DELIBERATELY LOW bar (manaMax 45 / manaPerAttack 15 = a spin every 3 swings, the fastest-cycling
+  // caster in the game: the "keep pulling the lever" feel). Each spin draws ONE random reel from THIS
+  // TIER's pool; every reel MIRRORS a real ability elsewhere in the game and dispatches through a
+  // primitive that ALREADY EXISTS (see slotMachine — pure dispatch, zero engine change). The reels
+  // MIX enemy-facing casts (hellfire/chain/poisonLine/stun) with self/ally ones (nova/shield/haste/
+  // heal) — you don't pick which you spin, so a self-buff is wasted on a lone backliner: that
+  // randomness IS the downside you signed up for.
+  //   • LONE 7  → no spin (mana bar killed in onRoundStart, like a lone 2/4/5/6); Gambler still runs.
+  //   • PAIR(2) → spin unlocked, draws the pair-tier pool. No jackpot.
+  //   • TRIPS(3)→ bigger reels AND the 777 jackpot joins the wheel at a small chance.
+  //   • QUADS(4)→ biggest reels, better jackpot odds + a bigger payout.
+  // 777 JACKPOT (trips+): rolled BEFORE the normal spin at `jackpot[tier].chance`. A heavy AoE nuke
+  // (`spellPower`×attack to the target + `radius` splash) that also MINTS `gold` chips to the owner —
+  // GENERATED, not stolen (the deliberate contrast with the Gambler's pickpocket). Tier baked once at
+  // round start off packCount (fielded 7s + the shared flop). Reel damage/heal numbers are ×the 7's
+  // current attack; shield `frac` is ×its max HP. Magnitudes are FIRST-PASS — tune by playtest.
   // NOTE the 6-7 fusion authors its OWN ability list, so slotMachine does NOT leak into it.
   7:  [{ kind: "gambler",     name: "Gambler",      min: 0.5, max: 2.0, rampPerHit: 0.15,
          stealChance: 0.25, stealAmount: 5, diamondBonus: 3 },
       { kind: "slotMachine", name: "Slot Machine", cast: true, castTargeting: "enemy",
-        manaMax: 60, manaPerAttack: 15, castRange: 5,
-        slots: [
-          { effect: "hellfire", spellPower: 2.5 },
-          { effect: "chain",    spellPower: 1.5, jumps: 3, jumpRange: 3, falloff: 0.7 },
-          { effect: "stun",     ticks: 8 },
-          { effect: "plague",   stacks: 20 },
-          { effect: "heal",     healPower: 4.0 },
-        ] }],
+        manaMax: 45, manaPerAttack: 15, castRange: 5,
+        jackpot: {
+          3: { chance: 0.08, spellPower: 6.0, radius: 2, gold: 10 },   // trips — small chance, heavy nuke + minted gold
+          4: { chance: 0.15, spellPower: 9.0, radius: 2, gold: 20 },   // quads — better odds, bigger payout
+        },
+        tiers: {
+          2: [ // PAIR — modest reels
+            { effect: "hellfire",   spellPower: 2.0 },
+            { effect: "chain",      spellPower: 1.5, jumps: 3, jumpRange: 3, falloff: 0.7 },
+            { effect: "poisonLine", stacks: 10, pierce: 2 },
+            { effect: "stun",       ticks: 8 },
+            { effect: "nova",       spellPower: 0.6, radius: 1 },
+            { effect: "shield",     frac: 0.4 },
+            { effect: "haste",      mult: 0.2, cap: 3.0 },
+            { effect: "heal",       healPower: 4.0 },
+          ],
+          3: [ // TRIPS — stronger reels
+            { effect: "hellfire",   spellPower: 3.0 },
+            { effect: "chain",      spellPower: 2.0, jumps: 4, jumpRange: 3, falloff: 0.7 },
+            { effect: "poisonLine", stacks: 16, pierce: 3 },
+            { effect: "stun",       ticks: 12 },
+            { effect: "nova",       spellPower: 0.9, radius: 2 },
+            { effect: "shield",     frac: 0.7 },
+            { effect: "haste",      mult: 0.3, cap: 4.0 },
+            { effect: "heal",       healPower: 5.5 },
+          ],
+          4: [ // QUADS — biggest reels
+            { effect: "hellfire",   spellPower: 4.0 },
+            { effect: "chain",      spellPower: 2.5, jumps: 5, jumpRange: 3, falloff: 0.7 },
+            { effect: "poisonLine", stacks: 22, pierce: 4 },
+            { effect: "stun",       ticks: 16 },
+            { effect: "nova",       spellPower: 1.2, radius: 2 },
+            { effect: "shield",     frac: 1.0 },
+            { effect: "haste",      mult: 0.4, cap: 6.0 },
+            { effect: "heal",       healPower: 7.0 },
+          ],
+        } }],
   // Rank 8 — BULWARK: flat `reduce` off every incoming hit (engine floors hits at
   // 1, never immune). Pack-scaling: +`reducePerExtra` per extra 8.
   // Rank 8 — BULWARK + TRAPLINE (casting Slice 1, Riley 2026-07-15): the 8s keep their
