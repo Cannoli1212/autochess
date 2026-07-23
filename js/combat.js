@@ -433,6 +433,10 @@ function combatStep() {
     if (tickCount < (u.stunUntil || 0)) continue;         // stunned → can't channel (and the bar freezes: this skips regen too)
     u.mana = Math.min(u.manaMax, u.mana + u.manaRegen);   // regen every tick, capped
     if (u.mana < u.manaMax) continue;                     // not charged yet
+    // SHIELD-HELD cast (rank 5 pair/trips Ward): a caster flagged holdCastWhileShielded sits on its
+    // full bar until its current shield is FULLY spent — one shield at a time, never refreshing a
+    // live one. (Quads leaves this flag off, so it stacks a fresh shield on each full bar instead.)
+    if (u.holdCastWhileShielded && (u.shield || 0) > 0) continue;
     // WHO does this cast need in range? "enemy" (Fireball) must have a target within
     // castRange or it holds the charged bar; "self" (Trapline) fires the instant the bar
     // fills, no target required — the handler reads the caster's own position.

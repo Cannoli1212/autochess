@@ -120,16 +120,34 @@ const RANK_ABILITIES = {
           3: { stepGain: 1, stepMax: 2 },   // trips — dash on kill, capped at +1 step
           4: { stepGain: 1, stepMax: 3 },   // quads — higher ceiling (+2 steps)
         } }],
-  // Rank 5 — SLIPPERY + WARD (casting, Riley 2026-07-15): the 5s are now DEFENSIVE
-  // attackers, not pure mages (Fireball moved to the devil-themed 6s). They auto-attack
-  // normally and keep the Slippery dodge, but on a REGEN-mana clock they self-cast Ward: a
-  // SHIELD worth `shieldFrac` of their max HP, banked on the existing u.shield damage pool
-  // (soaks hits before HP, exactly like the Ace of Diamonds' Aegis). Scaling with maxHp
-  // differentiates the four 5s for FREE — ♥5 (most HP) throws the fattest shield, ♠5 the
-  // thinnest. `castTargeting:"self"` fires on a full bar with no target. Reuses the shield pool.
+  // Rank 5 — SLIPPERY + WARD, OF-A-KIND GATED (redesigned 2026-07-22, Riley — same pair/trips/
+  // quads dial as ranks 2, 3 & 4). Every 5 keeps the ungated Slippery dodge (a chance to blank an
+  // incoming hit). The WARD cast is the of-a-kind payoff — a self-cast SHIELD banked on the
+  // existing u.shield damage pool (soaks hits before HP, exactly like the Ace of Diamonds' Aegis),
+  // sized as `shieldFrac` of the caster's max HP (so ♥5, most HP, wards fattest for free):
+  //   • A LONE 5 is a plain dodgy body — no Ward cast (gated like a lone 2/4; no mana bar renders).
+  //   • PAIR (2)  → Ward unlocks: a full bar grants ONE shield worth `shieldFrac`×maxHp. The unit
+  //     then HOLDS its full bar and will NOT cast again until that shield is FULLY DEPLETED — one
+  //     shield at a time, never refreshing a live one (so it can't grow on its own).
+  //   • TRIPS (3) → same one-at-a-time rule, but a BIGGER single shield.
+  //   • QUADS (4) → `stack:true` removes the hold: it casts on EVERY full bar and LAYERS a fresh
+  //     shield on top of whatever's left, so the shield builds up over a long fight — but on the
+  //     normal mana cadence (one stack per full bar), NOT every tick.
+  // Baked ONCE at round start off packCount (fielded 5s + the shared flop — the same count the poker
+  // synergies use). `castTargeting:"self"` fires on a full bar with no target. The pair/trips "hold
+  // until depleted" is enforced by unit.holdCastWhileShielded (set here, honored in combat.js's cast
+  // pass). `tiers` is keyed by of-a-kind count: 2=pair, 3=trips, 4=quads (caps at 4); counts <2 → no Ward.
+  //   shieldFrac — shield granted per cast, as a fraction of the caster's max HP
+  //   stack      — false: ONE shield at a time, reapplied only once depleted (pair/trips) ·
+  //                true: LAYER a new shield each full bar (quads)
   5:  [{ kind: "slippery",    name: "Slippery",     chance: 0.35 },
        { kind: "wardCast",    name: "Ward",         cast: true, castTargeting: "self",
-         manaMax: 50, manaRegen: 8, shieldFrac: 0.5 }],
+         manaMax: 50, manaRegen: 8,
+         tiers: {
+           2: { shieldFrac: 0.6, stack: false },   // pair  — one strong shield, reapplied once depleted
+           3: { shieldFrac: 1.0, stack: false },   // trips — a BIGGER single shield, same one-at-a-time rule
+           4: { shieldFrac: 0.5, stack: true },    // quads — layer a new shield on each full bar (builds up)
+         } }],
   // Rank 6 — EXECUTIONER + HELLFIRE, now SPLIT BY ROLE (casting, Riley 2026-07-15): the DEVIL
   // rank. All four 6s keep the Executioner passive (autos on targets at/below `threshold` of max
   // HP are EXACTLY lethal, through Bulwark and shields) — it has NO `role`, so it lands on every

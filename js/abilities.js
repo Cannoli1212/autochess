@@ -593,15 +593,37 @@ const ABILITIES = {
     },
   },
 
-  // WARD (rank 5's cast — a "self"-targeting SHIELD, casting, Riley 2026-07-15). On a full
-  // (regen) bar it banks a shield worth `shieldFrac` of its OWN max HP onto u.shield — the
-  // SAME damage pool the Ace of Diamonds' Aegis uses, which attackTarget/dealSpellDamage
-  // already drain before HP. So this reuses the shield mechanic wholesale: zero engine change,
-  // just a new source that fills it. Scales with maxHp, so the tanky ♥5 wards hardest. The
-  // blue cast-flash (set by the mana/cast pass) is its visual — no extra flash needed.
+  // WARD (rank 5's cast — a "self"-targeting SHIELD, casting; OF-A-KIND GATED 2026-07-22). Grants a
+  // shield worth `shieldFrac` of its OWN max HP on u.shield — the SAME damage pool the Ace of
+  // Diamonds' Aegis uses, which attackTarget/dealSpellDamage already drain before HP (so this reuses
+  // the shield mechanic wholesale, zero engine change). GATE (like rank 2/4): a LONE 5 (count < 2)
+  // doesn't cast — onRoundStart kills its caster flag so no dead mana bar renders; Slippery stays.
+  // A PAIR+ unlocks Ward; onRoundStart bakes the per-tier shield fraction + stacking mode off
+  // packCount. PAIR/TRIPS are ONE-SHIELD-AT-A-TIME: onRoundStart sets holdCastWhileShielded, so the
+  // cast pass holds the full bar until the current shield is spent (onCast just SETS a fresh shield —
+  // it only fires at 0, so set == a clean single shield). QUADS (stack:true) leave the hold off and
+  // ADD a new shield each full bar, layering up over the fight (on the normal mana cadence, not every tick).
   wardCast: {
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);
+      if (count < 2) {                        // lone 5 → no Ward cast, no mana bar (Slippery stays)
+        unit.caster = false;
+        unit.wardShieldFrac = 0;
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.wardShieldFrac = t.shieldFrac;     // bake the per-cast shield size for onCast
+      unit.wardStack = !!t.stack;             // quads: ADD (layer up) instead of one-at-a-time
+      unit.holdCastWhileShielded = !t.stack;  // pair/trips: hold the bar until the shield is spent (combat.js)
+    },
     onCast: function (unit, ctx, ability) {
-      unit.shield = (unit.shield || 0) + Math.round(unit.maxHp * (ability.shieldFrac || 0.5));
+      if (!unit.wardShieldFrac) return;       // lone 5 (gated) — no shield
+      const amount = Math.round(unit.maxHp * unit.wardShieldFrac);
+      if (unit.wardStack) {
+        unit.shield = (unit.shield || 0) + amount;   // quads — layer a new shield on top
+      } else {
+        unit.shield = amount;                        // pair/trips — a fresh single shield (only fires at 0)
+      }
     },
   },
 
