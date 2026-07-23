@@ -131,6 +131,33 @@ function renderTraitBar() {
 
 // The poker section of the sidebar: an of-a-kind ladder row per repeated rank (so you
 // see pair→trips→quads), plus a compact row for each active named/shaped hand.
+// Rank 2's of-a-kind reward is the Berserker ABILITY now, not the flat +atk/HP stat
+// buff (see pokerBuffs' rank-2 guard + abilities.js `berserker`). So the poker chips /
+// tooltips must NOT print "+50% atk/HP" for a pair/trips/quads of 2s — they'd lie. This
+// returns the correct rung text: the Berserker ladder for rank 2, the generic of-a-kind
+// text for everyone else. `rung` is the of-a-kind count clamped to 2/3/4.
+const BERSERKER_RUNG_TEXT = {
+  2: "unlock + HP · ramp when hurt · shields on cast",
+  3: "+more HP/ramp · bigger shield/cast",
+  4: "+big HP · biggest shield/cast",
+};
+// Rank 3 of-a-kind text (redesigned 2026-07-22): a pair/trips/quads of 3s rewards BOTH
+// the flat HP buff (still applied by pokerBuffs — keep advertising it) AND the Thorns
+// reflect %, which now SCALES with the of-a-kind count (see RANK_ABILITIES[3] tiers). Both
+// numbers are read LIVE from their source (POKER_HANDS.ofAKind for HP, the thorns tiers for
+// reflect) so the tooltip can never drift from the actual buffs when either is retuned.
+function thornsRungText(rung) {
+  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
+  const thorns = RANK_ABILITIES[3].find(function (a) { return a.kind === "thorns"; });
+  const reflect = Math.round(thorns.tiers[rung].reflect * 100);
+  return "+" + hp + "% HP · reflect " + reflect + "% of damage";
+}
+function ofAKindText(rank, rung) {
+  if (Number(rank) === 2) return BERSERKER_RUNG_TEXT[rung];
+  if (Number(rank) === 3) return thornsRungText(rung);
+  return POKER_HANDS.ofAKind[rung].text;
+}
+
 function renderPokerTraits(bar, team) {
   const pokerTitle = document.createElement("div");
   pokerTitle.className = "trait-section-title";
@@ -157,7 +184,7 @@ function renderPokerTraits(bar, team) {
         const t = POKER_HANDS.ofAKind[k];
         const on = shown === k;
         tip += '<div class="tip-tier' + (on ? " on" : "") + (n >= k ? " reached" : "") + '">' +
-               '<b>' + t.label + " · " + k + '</b> ' + t.text + '</div>';
+               '<b>' + t.label + " · " + k + '</b> ' + ofAKindText(rank, k) + '</div>';
       });
       const nameHTML = info.label + " of " + rankLabel(rank) +
                        ' <span class="trait-count">×' + n + '</span>';
@@ -310,7 +337,7 @@ function renderOnePoker(team) {
     const chip = document.createElement("span");
     chip.className = "synergy-chip";
     chip.innerHTML =
-      "<b>" + info.label + " of " + rankLabel(rank) + "</b> " + info.text;
+      "<b>" + info.label + " of " + rankLabel(rank) + "</b> " + ofAKindText(rank, n);
     el.appendChild(chip);
   });
 
@@ -419,6 +446,7 @@ function pokerBuffs(team) {
 
   // Of-a-kind: a rank appearing 2+ times buffs every unit of that rank.
   Object.keys(counts).forEach(function (rank) {
+    if (Number(rank) === 2) return;   // 2s' of-a-kind reward is the Berserker ability now
     let n = counts[rank];
     if (n < 2) return;
     if (n > 4) n = 4;                          // cap at quads

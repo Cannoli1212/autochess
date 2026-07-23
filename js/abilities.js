@@ -88,22 +88,20 @@ const ABILITIES = {
   // subtraction (not an attack), so it does NOT re-fire onDamaged and two thorns units
   // can't ping-pong forever. Skips fully-soaked/zero hits (nothing to reflect).
   thorns: {
-    // HP scaling (Batch A, replaced the old count-of-3s Phalanx): at fight start
-    // the reflect % grows with the wall's MAX HP — `reflectPer100Hp` added per 100
-    // max HP on top of the `reflect` base, capped at `reflectMax`. Runs AFTER
-    // applySynergies, so hearts/diamonds HP buffs (and DUMMY_HP_MULT) push the
-    // reflect up "for free" — the tankier the wall, the meaner it bites. Baked
-    // ONCE onto unit.thornsReflect, so losing HP mid-fight doesn't weaken it.
+    // OF-A-KIND scaling (redesigned 2026-07-22, replaced the maxHp formula): at fight
+    // start read packCount (this unit's 3s in the pool — fielded 3s + the shared flop),
+    // pick the tier, and bake its `reflect` % ONCE onto unit.thornsReflect. More 3s = a
+    // meaner wall; quads bounce back MORE than they take. Counts cap at 4 (5+ uses quads).
+    // Baked once so a copy dying mid-fight can't drop everyone's tier.
     onRoundStart: function (unit, ctx, ability) {
-      let pct = ability.reflect + (unit.maxHp / 100) * (ability.reflectPer100Hp || 0);
-      if (ability.reflectMax !== undefined) pct = Math.min(pct, ability.reflectMax);
-      unit.thornsReflect = pct;
+      const count = packCount(unit);          // this unit's 3s in the pool (units + flop)
+      unit.thornsReflect = ability.tiers[Math.min(count, 4)].reflect;
     },
     onDamaged: function (unit, ctx, ability) {
       if (ctx.attacker && ctx.damage > 0) {
-        // Use the Phalanx-scaled value if it was baked (onRoundStart ran); else the
-        // base reflect (e.g. the 1v1 sim skips round-start prep).
-        const pct = (unit.thornsReflect !== undefined) ? unit.thornsReflect : ability.reflect;
+        // Use the tier value baked at round start; else fall back to the lone-3 tier
+        // (e.g. the 1v1 sim skips round-start prep, so nothing was baked).
+        const pct = (unit.thornsReflect !== undefined) ? unit.thornsReflect : ability.tiers[1].reflect;
         const reflected = Math.round(ctx.damage * pct);
         ctx.attacker.hp = ctx.attacker.hp - reflected;
         // Reflected damage: the thorns holder (unit) is the dealer, the attacker the victim.
@@ -169,6 +167,50 @@ const ABILITIES = {
       // the 1v1 sim path that skips round-start prep).
       const gain = (unit.berserkGain !== undefined) ? unit.berserkGain : ability.gain;
       unit.attack = unit.attack + Math.round(unit.baseAttack * gain);
+    },
+  },
+
+  // Rank 2 — Berserker (redesigned 2026-07-22). GATED of-a-kind ability: a lone 2 is just a
+  // (base-HP-buffed) body; a PAIR+ unlocks the ability. onRoundStart reads packCount (fielded
+  // 2s + flop), picks the tier, and bakes the HP buff + per-hit ramp + per-cast shield fraction
+  // ONCE (like the other pack-scaled kits, so a dying copy can't weaken survivors). onDamaged
+  // applies the ramp each hit; onCast banks the shield each time the mana bar fills.
+  berserker: {
+    onRoundStart: function (unit, ctx, ability) {
+      unit.berserkerRamp = 0;                 // default: dormant (lone 2 → no ramp yet)
+      unit.berserkerShieldFrac = 0;           // default: no shield cast (lone 2)
+      // Base HP buff — UNGATED, so EVERY 2 (even a lone one) is a tankier body. Runs AFTER
+      // applySynergies, so it grows the already suit/synergy-buffed HP.
+      if (ability.baseHpMult) {
+        const base = Math.round(unit.maxHp * ability.baseHpMult);
+        unit.maxHp += base;
+        unit.hp += base;
+      }
+      const count = packCount(unit);          // this unit's 2s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 2 doesn't cast — kill its mana bar
+        unit.caster = false;                  // so the cast pass skips it and no dead bar renders
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      // HP buff (every rung). Runs AFTER applySynergies, so it grows the already-buffed HP.
+      const bonus = Math.round(unit.maxHp * t.hpMult);
+      unit.maxHp += bonus;
+      unit.hp += bonus;
+      unit.berserkerRamp = t.ramp;            // bake the per-hit ramp for onDamaged
+      unit.berserkerShieldFrac = t.shieldFrac;// bake the per-cast shield size for onCast
+    },
+    onDamaged: function (unit, ctx, ability) {
+      if (!unit.berserkerRamp || !(ctx.damage > 0)) return;   // dormant, or a fully-soaked hit
+      if (unit.baseAttack === undefined) unit.baseAttack = unit.attack;   // capture once → linear ramp
+      unit.attack += Math.round(unit.baseAttack * unit.berserkerRamp);
+    },
+    // Fires when the mana bar fills (castTargeting "self", so no target needed). Banks a shield
+    // worth the baked per-cast fraction of max HP onto u.shield — the SAME damage pool Ward and
+    // the Ace of Diamonds' Aegis use, drained before HP. Repeatable: it REFRESHES every full bar,
+    // so a paired 2 keeps re-shielding through a long fight. Gated: a lone 2's frac is 0 → no-op.
+    onCast: function (unit, ctx, ability) {
+      if (!unit.berserkerShieldFrac) return;
+      unit.shield = (unit.shield || 0) + Math.round(unit.maxHp * unit.berserkerShieldFrac);
     },
   },
 

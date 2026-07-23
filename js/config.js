@@ -33,31 +33,52 @@ const SUIT_NAMES = ["hearts", "diamonds", "clubs", "spades"];
 // shared flop, same count the poker synergies use) and grow per EXTRA copy. See
 // packCount in abilities.js. All the *PerExtra / *Max numbers here are the knobs.
 const RANK_ABILITIES = {
-  // Rank 2 — BERSERK: gains `gain` of its starting attack EVERY time it's hurt
-  // (an infinite ramp — the 2♦ carries it: lifesteal keeps it alive to keep
-  // ramping). Pack-scaling: each extra 2 adds `hpPerExtra` max HP (more bulk =
-  // more hits survived = more ramp) AND `gainPerExtra` to the per-hit gain.
-  // Rank 2 — BERSERK + ADRENALINE (casting, Riley 2026-07-15). The scrappy underdog keeps
-  // its "stronger when hurt" ramp AND gains a SELF-cast survival tool. ATTACK-mana
-  // (manaPerAttack) so swinging fuels it; when the bar fills it heals itself for `healFrac`
-  // of max HP AND boosts its ATTACK by `atkGain` of its STARTING attack (Riley 2026-07-15:
-  // scale DAMAGE, not speed — speed also fed the mana-charge snowball, damage is cleaner).
-  // Like Berserk, the ramp is additive off a captured base (shared `baseAttack`) so it grows
-  // linearly, not compounding — the two attack ramps stack cleanly. Berserk grows attack as
-  // it's HIT, Adrenaline grows it as it CASTS and keeps the body alive to keep both going.
-  // `castTargeting:"self"` = fires on a full bar, no target needed (handler acts on the caster).
-  2:  [{ kind: "berserk",     name: "Berserk",      gain: 0.2, gainPerExtra: 0.05, hpPerExtra: 0.25 },
-      { kind: "adrenaline",  name: "Adrenaline",   cast: true, castTargeting: "self",
-        manaMax: 50, manaPerAttack: 12, healFrac: 0.15, atkGain: 0.4 }],
+  // Rank 2 — BERSERKER (redesigned 2026-07-22, Riley). The of-a-kind COUNT is the power
+  // dial. Every 2 is a tanky BODY — `baseHpMult` is an UNGATED base HP buff that lands on
+  // EVEN A LONE 2 (Riley 2026-07-22: the 2s needed to be stronger at every rung, so give
+  // them bulk up front). A PAIR then unlocks the ABILITY; the `tiers` HP stacks ON TOP of
+  // the base buff, and higher tiers add a bigger attack RAMP when hurt. The SHIELD is no
+  // longer a one-time bank at fight start — it's a repeatable SELF-CAST (Riley 2026-07-22):
+  // the paired 2 charges a mana bar (regen clock, like rank 5's Ward) and REFRESHES its
+  // shield every time the bar fills, so it keeps re-shielding through a long fight. Per-cast
+  // `shieldFrac` starts small at a PAIR and GROWS with the count (trips bigger, quads
+  // biggest) — smaller than the old one-time values BECAUSE it now repeats. The cast is
+  // gated with the ability: a LONE 2 is not a caster (no mana bar). Baked ONCE at round start
+  // off packCount (fielded 2s + the shared flop — the same count the poker synergies use).
+  // `tiers` is keyed by of-a-kind count: 2=pair, 3=trips, 4=quads (caps at 4).
+  //   baseHpMult — extra max HP for EVERY 2 (ungated), as a fraction of its suit/synergy HP
+  //   hpMult     — ADDITIONAL max HP once paired, as a fraction of the base-buffed HP
+  //   ramp       — attack gained per hit taken, as a fraction of STARTING attack (Berserk ramp)
+  //   shieldFrac — shield banked PER CAST (on a full mana bar), as a fraction of buffed max HP
+  // The mana profile (cast/castTargeting/manaMax/manaRegen) is shared by every tier — only the
+  // per-cast shieldFrac scales. castTargeting "self" fires the instant the bar fills, no target.
+  2: [{ kind: "berserker", name: "Berserker", baseHpMult: 0.4,
+      cast: true, castTargeting: "self", manaMax: 50, manaRegen: 8,
+      tiers: {
+        2: { hpMult: 0.5, ramp: 0.15, shieldFrac: 0.3 },   // pair  — unlock + HP + SMALL shield/cast
+        3: { hpMult: 1.2, ramp: 0.30, shieldFrac: 0.5 },   // trips — more HP/ramp + BIGGER shield/cast
+        4: { hpMult: 2.5, ramp: 0.30, shieldFrac: 0.8 },   // quads — big HP + HUGE shield/cast
+      } }],
   // Rank 3 — TARGET DUMMY: a pure reflect-wall. The `targetDummy` marker makes the
   // card INERT (makeCardOf zeroes its attack + boosts HP by DUMMY_HP_MULT; combatStep
   // skips its turn so it never moves or attacks). Its ONLY output is Thorns, a
-  // PERCENTAGE of the damage it takes (`reflect` 0.3 = 30% bounced back) so a bigger
-  // hit stings more. HP scaling (Batch A, replaced the count-of-3s version): the
-  // reflect climbs by `reflectPer100Hp` per 100 max HP, capped at `reflectMax` —
-  // so hearts/diamonds HP synergies fatten the wall AND sharpen its spikes.
-  // Baked once at fight start by the thorns onRoundStart hook (see abilities.js).
-  3:  [{ kind: "thorns",      name: "Thorns",       reflect: 0.3, reflectPer100Hp: 0.03, reflectMax: 1.0 },
+  // PERCENTAGE of the damage it takes, bounced back at the attacker.
+  // OF-A-KIND scaling (redesigned 2026-07-22, Riley — same tier pattern as rank 2's
+  // Berserker): the reflect % is the of-a-kind COUNT dial instead of the old maxHp
+  // formula. A LONE 3 still reflects SOME damage (unlike rank 2, the 3 is never fully
+  // dormant — it's a wall by nature); a PAIR reflects a good chunk; and QUADS reflect
+  // MORE than they take in, so four 3s just STANDING there out-damage their attacker.
+  // Gated + baked ONCE at round start off packCount (fielded 3s + the shared flop — the
+  // same count the poker synergies use), so a copy dying mid-fight can't weaken it.
+  // `tiers` is keyed by of-a-kind count: 1=lone, 2=pair, 3=trips, 4=quads (caps at 4).
+  //   reflect — fraction of damage taken that is bounced back (1.0 = 100%, >1.0 = net gain)
+  3:  [{ kind: "thorns",      name: "Thorns",
+        tiers: {
+          1: { reflect: 0.20 },   // lone  — reflects SOME of the damage
+          2: { reflect: 0.50 },   // pair  — a good amount
+          3: { reflect: 0.85 },   // trips — most of the hit
+          4: { reflect: 1.35 },   // quads — reflects MORE than it takes (net damage while inert)
+        } },
       { kind: "targetDummy",  name: "Target Dummy" }],
   // Rank 4 — GIANT SLAYER + HASTE, with a MELEE move-burst rider (casting, Riley 2026-07-15):
   // keeps the "punch up" bonus vs bigger targets AND the SELF-cast attack-speed buff. Hybrid
