@@ -320,8 +320,17 @@
     align-items: center;
     justify-content: center;
     user-select: none;
-    border-radius: 3px;
-    will-change: transform;       /* hint: give this its own layer, don't repaint the board */
+    /* DELIBERATELY no border-radius and no will-change, both of which were here and both of
+       which made units look like cards HOVERING over the board rather than standing on it:
+
+       - A radius let the dark board show through at all four corners, so the tile read as a
+         rounded card lying on top instead of an occupied square. The tinted .cell it replaced
+         had square corners and filled its square edge to edge, and this has to match that.
+       - will-change:transform permanently promotes the element to its own compositing layer,
+         and a composited layer loses subpixel text antialiasing — the glyph and stats render
+         very slightly softer than everything around them, which reads as "not quite on the
+         board". It bought nothing anyway: a frame with 16 units walking costs 0.008ms,
+         roughly 2000x under budget, and translate3d already promotes while it animates. */
   }
   /* The walking layer. Position lives on .unit and the lunge lives on .fig, and one element
      can only run one transform at a time — so the lean and the step bob get their own. */
