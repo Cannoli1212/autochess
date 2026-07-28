@@ -246,39 +246,43 @@ const RANK_ABILITIES = {
             { effect: "heal",       healPower: 7.0 },
           ],
         } }],
-  // Rank 8 — BULWARK: flat `reduce` off every incoming hit (engine floors hits at
-  // 1, never immune). Pack-scaling: +`reducePerExtra` per extra 8.
-  // Rank 8 — BULWARK + TRAPLINE (casting Slice 1, Riley 2026-07-15): the 8s keep their
-  // flat damage-reduction tank identity AND gain a CAST. They still auto-attack (NOT
-  // noAutoAttack — a hybrid caster); on a deliberately SLOW mana clock they lay a line of
-  // single-use traps one cell TOWARD the enemy. An enemy that steps on a trap takes
-  // `damage` (minimal — the trap is about zoning, not killing) and is SLOWED for
-  // `slowTicks`. PACK-SCALING off how many 8s are pooled (packCount - 1 extras): the line
-  // WIDENS by `widthPerExtra` (capped at `widthMax`) and the slow lasts `slowPerExtra`
-  // longer — a stack of 8s lays a whole "wall of tar." `castTargeting:"self"` = fires
-  // whenever the bar fills, no enemy target needed. Slow cast on purpose so uncapped traps
-  // can't carpet the board (Riley's call). Baked at round start by trapline.onRoundStart.
-  // ROLE split (casting, Riley 2026-07-15): all four 8s keep the Bulwark tank passive (no
-  // `role`). The trap CAST differs by where the tank stands — Trapline lays a forward line
-  // (useful at the FRONT), so it's mechanically wasted on a backliner whose "one row forward"
-  // lands in its own empty territory. So:
-  //   • MELEE ♥/♦ → "Trapline" (unchanged): a forward minefield the frontline tank plants as it
-  //     advances, right in the contested lane where enemies walk.
-  //   • RANGED ♣/♠ → "Caltrops" (caltrops kit): a trap RING around itself — a defensive
-  //     perimeter that bites anything DIVING the backline tank, placed where a backliner needs
-  //     it. Same trap system (dropTrap + the combatStep trap pass), just ring geometry.
-  // Both are self-cast on the SAME slow regen clock (traps can't carpet the board), and both
-  // pack-scale their damage/slow off how many 8s are pooled (baked in onRoundStart).
-  8:  [{ kind: "bulwark",     name: "Bulwark",      reduce: 15, reducePerExtra: 10 },
-      { kind: "trapline",    name: "Trapline",     role: "melee", cast: true, castTargeting: "self",
+  // Rank 8 — BULWARK + TRAP CAST (redesigned 2026-07-23, Riley — the of-a-kind GATE dial, same
+  // pair/trips/quads pattern as ranks 2-7). The COUNT of pooled 8s (fielded 8s + the shared flop,
+  // via packCount) drives everything, baked ONCE at round start so a dying copy can't weaken the
+  // survivors. Unlike the other gated ranks, the BULWARK tank passive is NOT gated — a LONE 8 still
+  // soaks hits; only the trap CAST is gated behind a pair.
+  //   • BULWARK — flat `reduce` off every incoming hit (engine floors hits at 1, never immune). The
+  //     reduction CLIMBS every rung: lone 15 → pair 30 → trips 40 → quads 50 (tiers keyed by count,
+  //     caps at 4; count is always ≥ 1, so tiers[1] is the ungated base every 8 gets).
+  //   • TRAP CAST — GATED at a PAIR (a lone 8 lays no traps: its mana bar is killed like a lone 2/4/
+  //     5/6/7). Pair unlocks the base trap, trips places MORE, quads lays a full line across. Still a
+  //     hybrid caster (auto-attacks AND casts) on a deliberately SLOW mana clock so the traps can't
+  //     carpet the board (Riley's call). `castTargeting:"self"` = fires whenever the bar fills, no aim.
+  // ROLE split kept (casting, Riley 2026-07-15): all four 8s share the Bulwark passive (no `role`).
+  // The trap CAST differs by where the tank stands:
+  //   • MELEE ♥/♦ → "Trapline": a forward line one row TOWARD the enemy (right in the contested lane).
+  //     pair = 1 cell ahead → trips = 3-wide (±1) → quads = a line across the WHOLE row (`fullRow`).
+  //   • RANGED ♣/♠ → "Caltrops": a trap RING around itself (anti-dive perimeter for a backliner).
+  //     pair = radius-1 ring (8 cells) → trips = radius-2 ring (24 cells) → quads = max ring, hardest bite.
+  // Both self-cast on the SAME slow regen clock and share their tier tables' damage/slow ladder.
+  8:  [{ kind: "bulwark",  name: "Bulwark",
+        // DR by of-a-kind count; 1=lone is the UNGATED base (every 8 tanks). Caps at 4 (quads).
+        tiers: { 1: { reduce: 15 }, 2: { reduce: 30 }, 3: { reduce: 40 }, 4: { reduce: 50 } } },
+      { kind: "trapline", name: "Trapline", role: "melee", cast: true, castTargeting: "self",
         manaMax: 80, manaRegen: 8, manaStart: 0,
-        lineWidth: 1, widthPerExtra: 1, widthMax: 5,
-        damage: 15, damagePerExtra: 5,
-        slowTicks: 12, slowPerExtra: 6 },
-      { kind: "caltrops",    name: "Caltrops",     role: "ranged", cast: true, castTargeting: "self",
+        // Gated at a pair (no `1` row → a lone 8 kills its own cast). `fullRow` = a line across the whole row.
+        tiers: {
+          2: { lineWidth: 1,  damage: 15, slowTicks: 12 },   // pair  — unlock, one cell ahead
+          3: { lineWidth: 3,  damage: 20, slowTicks: 16 },   // trips — wider line (±1)
+          4: { fullRow: true, damage: 25, slowTicks: 20 },   // quads — a line ACROSS the whole row
+        } },
+      { kind: "caltrops", name: "Caltrops", role: "ranged", cast: true, castTargeting: "self",
         manaMax: 80, manaRegen: 8, manaStart: 0,
-        radius: 1, damage: 15, damagePerExtra: 5,
-        slowTicks: 12, slowPerExtra: 6 }],
+        tiers: {
+          2: { radius: 1, damage: 15, slowTicks: 12 },   // pair  — unlock, 8-cell ring
+          3: { radius: 2, damage: 20, slowTicks: 16 },   // trips — radius-2 ring (24 cells)
+          4: { radius: 2, damage: 25, slowTicks: 20 },   // quads — max ring, hardest bite
+        } }],
   // Rank 9 — POISON: each hit applies `stackDamage` damage-per-tick to the victim.
   // Pack-scaling: each stack is `stackPerExtra` fatter per extra 9. PLAGUE rank-up
   // (Batch B): with `transferAt`+ nines in the pool, a poisoned unit that DIES

@@ -152,9 +152,22 @@ function thornsRungText(rung) {
   const reflect = Math.round(thorns.tiers[rung].reflect * 100);
   return "+" + hp + "% HP · reflect " + reflect + "% of damage";
 }
+// Rank 8 of-a-kind text (redesigned 2026-07-23): a pair/trips/quads of 8s still gets the flat
+// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND the redesigned Bulwark/
+// trap ladder. DR CLIMBS every rung and the trap CAST unlocks at a pair, grows at trips, and
+// becomes a full line at quads. The DR number is read LIVE from RANK_ABILITIES[8]'s bulwark tiers
+// so the tooltip can never drift from the actual reduction when it's retuned. `rung` is 2/3/4.
+function bulwarkRungText(rung) {
+  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
+  const bulwark = RANK_ABILITIES[8].find(function (a) { return a.kind === "bulwark"; });
+  const dr = bulwark.tiers[rung].reduce;
+  const trap = { 2: "traps unlock", 3: "more traps", 4: "trap line across" }[rung];
+  return "+" + hp + "% HP · −" + dr + " dmg taken · " + trap;
+}
 function ofAKindText(rank, rung) {
   if (Number(rank) === 2) return BERSERKER_RUNG_TEXT[rung];
   if (Number(rank) === 3) return thornsRungText(rung);
+  if (Number(rank) === 8) return bulwarkRungText(rung);
   return POKER_HANDS.ofAKind[rung].text;
 }
 

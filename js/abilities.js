@@ -308,16 +308,19 @@ const ABILITIES = {
   // Rank 8 — Bulwark: flat damage reduction on incoming hits. Sets ctx.reduce,
   // which attackTarget subtracts AFTER crit/bonuses (floored at 1 so a shield is
   // never full immunity). Great vs many small hits, weak vs one big one.
-  // PHALANX pack-scaling: the reduction climbs by `reducePerExtra` per EXTRA 8 in
-  // the pool, baked onto unit.bulwarkReduce at fight start. No cap needed — the
-  // engine's floor-at-1 means a wall of 8s gets very sturdy but never immune.
+  // OF-A-KIND tiered (redesigned 2026-07-23, Riley — same pair/trips/quads dial as ranks 2-7,
+  // but NOT gated): the reduction CLIMBS with the count of pooled 8s — lone 15 → pair 30 →
+  // trips 40 → quads 50 (tiers keyed by count, caps at 4). packCount is always ≥ 1, so even a
+  // lone 8 gets tiers[1], the ungated base. Baked ONCE at round start so a copy dying mid-fight
+  // can't drop everyone's tier.
   bulwark: {
     onRoundStart: function (unit, ctx, ability) {
-      unit.bulwarkReduce = ability.reduce + (ability.reducePerExtra || 0) * (packCount(unit) - 1);
+      const t = ability.tiers[Math.min(packCount(unit), 4)];   // 1=lone,2=pair,3=trips,4=quads
+      unit.bulwarkReduce = t ? t.reduce : ability.tiers[1].reduce;
     },
     onIncomingHit: function (unit, ctx, ability) {
-      // The pack-scaled reduction if baked; else the base (the 1v1 sim path).
-      const reduce = (unit.bulwarkReduce !== undefined) ? unit.bulwarkReduce : ability.reduce;
+      // The tiered reduction if baked; else the lone base (the 1v1 sim path skips round-start prep).
+      const reduce = (unit.bulwarkReduce !== undefined) ? unit.bulwarkReduce : ability.tiers[1].reduce;
       ctx.reduce = (ctx.reduce || 0) + reduce;
     },
   },
@@ -557,21 +560,25 @@ const ABILITIES = {
     },
   },
 
-  // TRAPLINE (rank 8, casting Slice 1 — the first "self"-targeting cast). The 8s stay
-  // Bulwark tanks but ALSO lay a line of single-use traps one cell TOWARD the enemy each
-  // time their (deliberately slow) mana bar fills. onRoundStart bakes the pack-scaled
-  // numbers ONCE — more 8s pooled → a WIDER line and a LONGER slow — so a dying copy
-  // never weakens the survivors (same pattern as Bulwark/Poison). onCast just drops the
-  // cells. The trap's actual bite (minimal damage + slow, then consume) lives in
-  // combatStep's trap pass, because the hazard sits on the BOARD, not on a unit.
+  // TRAPLINE (rank 8's MELEE cast — redesigned 2026-07-23 to the of-a-kind GATE, Riley). The ♥/♦ 8s
+  // stay Bulwark tanks but ALSO lay a forward line of single-use traps one row TOWARD the enemy each
+  // time their (slow) mana bar fills. GATED at a PAIR: a lone 8 lays no traps — onRoundStart kills its
+  // caster flag (like a lone 2/4/5/6/7) so no dead mana bar renders; Bulwark still tanks. Pair/trips/
+  // quads bake the tier ONCE off packCount: pair = 1 cell ahead, trips = 3-wide (±1), quads = a line
+  // ACROSS the whole row (`fullRow`). onCast just drops the cells; the trap's bite (damage + slow, then
+  // consume) lives in combatStep's trap pass, because the hazard sits on the BOARD, not on a unit.
   trapline: {
     onRoundStart: function (unit, ctx, ability) {
-      const extras = packCount(unit) - 1;                   // extra 8s in the pool
-      let width = ability.lineWidth + (ability.widthPerExtra || 0) * extras;
-      if (ability.widthMax !== undefined) width = Math.min(width, ability.widthMax);
-      unit.trapWidth = width;
-      unit.trapDamage = ability.damage + (ability.damagePerExtra || 0) * extras;
-      unit.trapSlow = ability.slowTicks + (ability.slowPerExtra || 0) * extras;
+      const count = packCount(unit);
+      if (count < 2) {                    // GATE: a lone 8 tanks but lays no traps
+        unit.caster = false;              // kill the mana bar so the cast pass skips it / none renders
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.trapFullRow = !!t.fullRow;     // quads: a line across the WHOLE row (ignores width)
+      unit.trapWidth = t.lineWidth || 1;
+      unit.trapDamage = t.damage;
+      unit.trapSlow = t.slowTicks;
     },
     onCast: function (unit, ctx, ability) {
       // "In front" = one row toward the enemy: player1 sits low and pushes UP (-y),
@@ -579,11 +586,15 @@ const ABILITIES = {
       const forward = unit.team === "player1" ? -1 : 1;
       const ty = unit.y + forward;
       if (ty < 0 || ty >= ROWS) return;                     // caster on the far edge → no room
-      const width  = (unit.trapWidth  !== undefined) ? unit.trapWidth  : ability.lineWidth;
-      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.damage;
-      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.slowTicks;
-      // Center the line on the caster's column: width 1 → just ahead; 3 → ±1; 5 → ±2.
-      // dropTrap handles off-board + same-team-dedup, so this just walks the columns.
+      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.tiers[2].damage;
+      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.tiers[2].slowTicks;
+      // QUADS — a line ACROSS the whole row: drop on every column (dropTrap dedups off-board/same-team).
+      if (unit.trapFullRow) {
+        for (let x = 0; x < COLS; x++) dropTrap(unit.team, x, ty, damage, slow);
+        return;
+      }
+      // PAIR/TRIPS — a line centered on the caster's column: width 1 → just ahead; 3 → ±1.
+      const width = (unit.trapWidth !== undefined) ? unit.trapWidth : ability.tiers[2].lineWidth;
       const half = Math.floor((width - 1) / 2);
       for (let dx = -half; dx <= width - 1 - half; dx++) {
         dropTrap(unit.team, unit.x + dx, ty, damage, slow);
@@ -591,25 +602,30 @@ const ABILITIES = {
     },
   },
 
-  // CALTROPS (rank 8's RANGED cast — the anti-DIVE self-ring, casting, Riley 2026-07-15). The
-  // ranged ♣/♠ 8s can't use Trapline usefully — they sit at the BACK, so its "one row forward"
-  // traps land in their own empty territory. Caltrops instead lays traps in a RING around the
-  // caster (the cells within `radius`, Chebyshev), a defensive perimeter that bites anything
-  // diving the backline tank. Same trap-zoning identity as Trapline, just placed where a
-  // backliner actually needs it. Reuses the WHOLE trap system: dropTrap (bounds + same-team
-  // dedup) and combatStep's trap pass (damage + slow, then consume) — zero engine change. Bakes
-  // pack-scaled damage/slow at round start exactly like Trapline (more 8s pooled → nastier
-  // ring). Regen-mana on the same slow clock as Trapline so the perimeter can't carpet the board.
+  // CALTROPS (rank 8's RANGED cast — redesigned 2026-07-23 to the of-a-kind GATE, Riley). The ♣/♠ 8s
+  // sit at the BACK, so Trapline's "one row forward" would waste traps in their own empty territory;
+  // Caltrops instead lays a RING of traps around the caster (the cells within `radius`, Chebyshev) — a
+  // defensive perimeter that bites anything diving the backline tank. GATED at a PAIR exactly like
+  // Trapline (a lone 8 lays no ring — caster flag killed, Bulwark still tanks). The tier bakes the ring
+  // RADIUS + damage/slow ONCE off packCount: pair = radius 1 (the 8 hugging cells), trips = radius 2 (24
+  // cells), quads = radius 2 with the hardest bite. Reuses the WHOLE trap system — dropTrap (bounds +
+  // same-team dedup) and combatStep's trap pass (damage + slow, then consume) — zero engine change.
   caltrops: {
     onRoundStart: function (unit, ctx, ability) {
-      const extras = packCount(unit) - 1;                   // extra 8s in the pool
-      unit.trapDamage = ability.damage + (ability.damagePerExtra || 0) * extras;
-      unit.trapSlow = ability.slowTicks + (ability.slowPerExtra || 0) * extras;
+      const count = packCount(unit);
+      if (count < 2) {                    // GATE: a lone 8 tanks but lays no ring
+        unit.caster = false;              // kill the mana bar so the cast pass skips it / none renders
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.trapRadius = t.radius;
+      unit.trapDamage = t.damage;
+      unit.trapSlow = t.slowTicks;
     },
     onCast: function (unit, ctx, ability) {
-      const r = ability.radius || 1;                        // radius 1 = the 8 cells hugging it
-      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.damage;
-      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.slowTicks;
+      const r      = (unit.trapRadius !== undefined) ? unit.trapRadius : ability.tiers[2].radius;
+      const damage = (unit.trapDamage !== undefined) ? unit.trapDamage : ability.tiers[2].damage;
+      const slow   = (unit.trapSlow   !== undefined) ? unit.trapSlow   : ability.tiers[2].slowTicks;
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (dx === 0 && dy === 0) continue;               // not the caster's own cell
