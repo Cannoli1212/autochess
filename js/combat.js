@@ -414,9 +414,37 @@ function lowestHpAllyInRange(unit, range) {
   return best;
 }
 
+// MOVE A UNIT ONE SQUARE, and leave a note for the view about where it went.
+//
+// The note is the ONLY thing this adds — the engine still moves in whole squares and reads
+// nothing back from it. It exists because a tick is not always one square: a unit with the
+// rank-4 Kill Dash crosses two or three in a single tick, and the squares in between were
+// never written down anywhere. Without them the walk animation can only draw a straight
+// line from start to finish, straight through whatever the unit actually stepped around.
+//
+// A FRESH array each tick, deliberately. A recorded replay frame copies a unit with
+// Object.assign, which copies an array by REFERENCE, not by value — so pushing into last
+// tick's array would quietly rewrite a frame that had already been recorded. Starting a new
+// array whenever the tick changes means every frame owns a route nothing will touch again.
+function noteStep(unit, nx, ny) {
+  // A balance scan runs thousands of games with nobody watching, so it doesn't pay for this.
+  if (SIM_MODE && !RECORD_FX) { unit.x = nx; unit.y = ny; return; }
+  if (unit.stepSeq !== moveSeq) {
+    unit.stepPath = [{ x: unit.x, y: unit.y }];   // start the route where the unit is now
+    unit.stepSeq = moveSeq;
+  }
+  unit.x = nx;
+  unit.y = ny;
+  unit.stepPath.push({ x: nx, y: ny });
+}
+
 // One "tick" of battle: every unit acts once, then we clean up and redraw.
 // Returns the round result: a winner team, "draw", or null if still ongoing.
 function combatStep() {
+  // A new tick of movement (see moveSeq in state.js — deliberately not tickCount, which is
+  // incremented at the END of this function and so reads one ahead inside a replayed frame).
+  moveSeq = moveSeq + 1;
+
   // Loop over a COPY so removing the dead mid-loop doesn't skip anyone.
   const acting = units.slice();
 
@@ -472,8 +500,7 @@ function combatStep() {
           if (d <= engageRange) break;                     // in range now → stop, swing next tick
           const step = pathStep(unit);
           if (step !== null) {
-            unit.x = step.x;
-            unit.y = step.y;
+            noteStep(unit, step.x, step.y);
             moved = true;
           } else {
             // No enemy reachable (walled in) → the old straight-line shuffle: try the direct
@@ -482,8 +509,7 @@ function combatStep() {
             const stepX = unit.x + Math.sign(target.x - unit.x);
             const stepY = unit.y + Math.sign(target.y - unit.y);
             if (findUnitAt(stepX, stepY) === null) {       // step only if the square is free
-              unit.x = stepX;
-              unit.y = stepY;
+              noteStep(unit, stepX, stepY);
               moved = true;
             } else {
               break;                                       // blocked → end the dash

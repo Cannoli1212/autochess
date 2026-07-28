@@ -77,9 +77,28 @@ function motionCommit(u, node) {
     return;
   }
 
-  // It moved. Walk it there, in pixels, over the length of one tick.
-  const from = gridToPx(m.cell.x, m.cell.y);
-  m.pts = [{ x: from.left, y: from.top }, { x: target.left, y: target.top }];
+  // It moved. Work out the ROUTE it took, then walk it over the length of one tick.
+  //
+  // Usually that's just "from the old square to the new one". But a unit with the rank-4
+  // Kill Dash crosses two or three squares in a single tick, walking AROUND bodies as it
+  // goes, and a straight line from start to finish would cut clean through them. combat.js
+  // writes down the squares it actually crossed (see noteStep); use them when they're there.
+  //
+  // Checked rather than trusted: the recorded route has to start where we last drew this
+  // unit and end where the engine says it is now. Anything else — a route left over from a
+  // fight two rounds ago, a unit whose picture we lost track of — falls back to the straight
+  // line. That check is also what let the plain walk ship a slice before this existed.
+  let cells = [m.cell, { x: u.x, y: u.y }];
+  const rec = u.stepPath;
+  if (rec && rec.length > 1 &&
+      rec[0].x === m.cell.x && rec[0].y === m.cell.y &&
+      rec[rec.length - 1].x === u.x && rec[rec.length - 1].y === u.y) {
+    cells = rec;
+  }
+  m.pts = cells.map(function (c) {
+    const p = gridToPx(c.x, c.y);
+    return { x: p.left, y: p.top };
+  });
   m.n = m.pts.length - 1;
   m.dur = motionTickMs();
   m.t0 = performance.now();
