@@ -20,6 +20,14 @@ function initInput() {
       const u = findUnitAt(ux, uy);
       if (u === null) { e.preventDefault(); return; }  // empty cell: nothing to drag
       dragData = { kind: "unit", x: ux, y: uy, team: u.team };
+      // Drag the UNIT's picture, not the square's. The browser makes the drag preview by
+      // photographing the element you grabbed — which used to contain the glyph, and since
+      // the motion pass contains nothing, so you'd be dragging a blank tile. Point it at
+      // the unit's own shape instead; 28,28 puts the cursor at its middle.
+      const node = unitNodeFor(u);
+      if (node && e.dataTransfer && e.dataTransfer.setDragImage) {
+        e.dataTransfer.setDragImage(node, 28, 28);
+      }
     });
     // Plain click = mark/unmark an enemy square for the King of Clubs' airstrike.
     cell.addEventListener("click", function () {

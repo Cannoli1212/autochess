@@ -133,9 +133,22 @@ function statusText(u) {
 }
 
 // Redraw the whole board from the units array. The array is the TRUTH;
-// the board is just a picture of it. Clear every cell, then draw each unit.
+// the board is just a picture of it.
+//
+// Two halves since the motion pass, because the two things now live in different places:
+// the SQUARES (zone tint, traps, airstrike marks, and the drag targets) are redrawn from
+// scratch every tick as they always were, while the UNITS are reconciled — matched up with
+// the lasting shapes they already own on #unitLayer, rather than erased and recreated.
 function render() {
   if (SIM_MODE) return;   // headless batch sim: skip all DOM work (see sim.js)
+  renderCells();
+  renderUnits();
+  renderDmgPanel();       // keep the live damage tracker in lockstep with the board
+}
+
+// ── THE SQUARES ──────────────────────────────────────────────────────────────
+// Everything drawn that belongs to a SQUARE rather than to a unit.
+function renderCells() {
   const allCells = document.querySelectorAll(".cell");
   for (let i = 0; i < allCells.length; i++) {
     allCells[i].innerHTML = "";
@@ -151,87 +164,15 @@ function render() {
     allCells[i].className = "cell" + zone;
     allCells[i].draggable = false;            // empty cells can't be dragged
   }
+  // A square holding a unit is still what you pick up when you drag, and still what
+  // shows the hover tooltip — the unit's own shape sits on a sheet above that ignores
+  // the mouse entirely, so the square underneath stays the thing you interact with.
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
     const cell = cellAt(u.x, u.y);
-    const su = SUITS[u.suit];
-    // Health bar: how full is this unit's HP? maxHp is set when the unit is made
-    // (and again by applySynergies), so hp/maxHp is a 0..1 fraction of health left.
-    // Clamp to 0..1 so a poison overkill or a buff quirk can't overflow the bar.
-    const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
-    const pct = Math.round(frac * 100);
-    // Green when healthy, yellow when hurt, red when nearly dead — read at a glance.
-    const barColor = frac > 0.5 ? "#4caf50" : (frac > 0.25 ? "#ffb300" : "#e53935");
-    // Draw the unit as its rank + suit, a health bar, then attack / current-health.
-    // A fused unit shows both parts (7♠2♦) via the shared glyph helper (reads u.card).
-    const figInner = u.fused ? fusedGlyphHTML(u.card, "unitColor") : (rankLabel(u.rank) + su.symbol);
-
-    // MOTION (week 2 slice 2): the lunge and the flinch.
-    //
-    // Why these live on the .fig markup and not as a class on the cell: a CSS
-    // animation only plays when its element is CREATED or the class is NEWLY added,
-    // and the loop above strips + re-adds every cell class in the same frame, which
-    // the browser coalesces into "no change" — so a cell-class animation would fire
-    // once and then never again. The .fig div below is rebuilt from scratch on every
-    // render, so an animation class on IT replays every tick, reliably.
-    //
-    // Two layers, because one element can only run one transform animation: the
-    // outer .fig lunges, the inner .fig-glyph shakes. A unit trading blows with a
-    // neighbour does both in the same tick, which is the common case.
-    //
-    // Both are gated on inCombat: after the fight ends tickCount stops advancing, so
-    // a stale stamp would still read as "in the future" and the units would twitch
-    // forever on the results screen (the older box-shadow flashes have the same quirk,
-    // but a frozen glow is invisible where a looping animation would not be).
-    let figCls = "fig";
-    let figVars = "";
-    // Melee only: a ranged attacker already showed its shot as a tracer.
-    if ((inCombat || replaying) && tickCount < (u.lungeUntil || 0) && !isRangedSuit(u.suit)) {
-      figCls += " lunging";
-      // Turn "3 squares right, 4 up" into a short nudge in that direction: divide by
-      // the larger leg so a diagonal lunge travels the same distance as a straight one.
-      const reach = Math.max(Math.abs(u.lungeX), Math.abs(u.lungeY)) || 1;
-      figVars = ";--lunge-dx:" + Math.round((u.lungeX / reach) * 13) + "px" +
-                ";--lunge-dy:" + Math.round((u.lungeY / reach) * 13) + "px";
-    }
-    const glyphCls = ((inCombat || replaying) && tickCount < (u.flinchUntil || 0)) ? "fig-glyph flinching" : "fig-glyph";
-    // Mana bar (Phase 4): casters only. mana/manaMax as a blue fill under the HP bar.
-    const manaBar = u.caster
-      ? '<div class="manabar"><div class="manabar-fill" style="width:' +
-        Math.round(Math.min(1, u.mana / u.manaMax) * 100) + '%"></div></div>'
-      : '';
-    // Shield bar (casting, Riley 2026-07-15): shown ONLY when the unit carries a shield pool
-    // (rank-5 Ward / Ace of Diamonds' Aegis). A TALLER steel-white bar with the exact shield
-    // NUMBER centered ON it (not in the HP stat line), so armor reads as its own separate thing —
-    // you can SEE it soak hits before HP drops. Width = shield/maxHp clamped at 100% (shields
-    // stack past a full bar — a full white bar just means "≥ one health bar of shield").
-    const shieldBar = (u.shield > 0)
-      ? '<div class="shieldbar"><div class="shieldbar-fill" style="width:' +
-        Math.round(Math.min(1, u.shield / u.maxHp) * 100) + '%"></div>' +
-        '<span class="shield-amt">' + u.shield + '</span></div>'
-      : '';
-    cell.innerHTML =
-      statusBadges(u) +
-      '<div class="' + figCls + '" style="color:' + su.unitColor + figVars + '">' +
-        '<span class="' + glyphCls + '">' + figInner + '</span>' +
-      '</div>' +
-      '<div class="hpbar"><div class="hpbar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
-      shieldBar +
-      manaBar +
-      '<div class="stat">' + u.attack + " / " + u.hp + '</div>';
-    cell.classList.add("unit-" + u.team);
-    if (uniqueOf(u)) cell.classList.add("unique");   // legendary → purple glow
-    if (u.fused) cell.classList.add("fused");        // made hand → green glow
-    // Cast flashes (Phase 4): tick-stamps set in combat.js light the cell for one tick.
-    if (tickCount < (u.castFlashUntil || 0)) cell.classList.add("casting");   // mage discharging
-    if (tickCount < (u.spellHitUntil || 0)) cell.classList.add("spell-hit");  // fireball impact
-    if (tickCount < (u.healFlashUntil || 0)) cell.classList.add("healed");    // Cleric mend (green)
-    if (tickCount < (u.trapSprungUntil || 0)) cell.classList.add("trap-sprung"); // stepped on a trap
-    if (tickCount < (u.stunUntil || 0)) cell.classList.add("stunned");           // frozen (purple)
-    if (tickCount < (u.atkBuffUntil || 0)) cell.classList.add("buffed");          // K♥ rally on Q♥ (gold) — lingers while active
-    if (tickCount < (u.untargetableUntil || 0)) cell.classList.add("vanished");   // Ace of Spades hidden (faded) — lingers while active
+    if (!cell) continue;
     cell.title = figureTitle(u) + statusText(u);   // glyphs on the board, words on hover
-    cell.draggable = true;                     // a cell with a unit can be dragged
+    cell.draggable = true;                         // a cell with a unit can be dragged
   }
 
   // Airstrike marks (King of Clubs): overlay a red ✕ on each marked square so the
@@ -248,8 +189,9 @@ function render() {
 
   // Traplines (rank 8): overlay each live trap on its cell, colored by owner team, so
   // the player can see the hazard field. State owns the traps; the board just draws them.
-  // Drawn UNDER units — a trap on a cell an enemy is standing on still shows the unit's
-  // glyph (the trap sprang this tick anyway), so only add the marker to empty cells.
+  // The "only if empty" check now only stops a trap from overwriting an airstrike ✕ —
+  // squares no longer hold units at all, so a trap under a unit is simply drawn beneath
+  // the unit's tile, and reappears the moment the unit walks off it.
   for (let i = 0; i < traps.length; i++) {
     const trap = traps[i];
     const cell = cellAt(trap.x, trap.y);
@@ -259,8 +201,213 @@ function render() {
       cell.innerHTML = '<div class="trap-glyph">✵</div>';
     }
   }
+}
 
-  renderDmgPanel();   // keep the live damage tracker in lockstep with the board
+// ── THE UNITS ────────────────────────────────────────────────────────────────
+//
+// Every unit's lasting shape on #unitLayer, looked up by its uid (see state.js).
+// A shape outlives the tick that made it — that is the entire point, and the reason
+// units can now travel between squares instead of blinking from one to the next.
+const unitNodes = {};
+
+function unitNodeFor(u) { return u && unitNodes[u.uid] ? unitNodes[u.uid] : null; }
+
+// Build one unit's shape ONCE. The skeleton never changes after this; each tick only
+// rewrites the leaves (the numbers, the bar widths, the badge row).
+//
+// The nesting looks fussier than it is, and each layer earns its place — an element can
+// only run ONE transform at a time, and a unit in a busy tick is doing four things at once:
+//
+//   .unit       where it is on the board          (position — written by the motion pass)
+//   .body       leaning and bobbing as it walks   (the walk cycle)
+//   .fig        lunging at whatever it's hitting
+//   .fig-glyph  flinching from a hit it just took
+//
+// Collapse any two of those together and the later one silently cancels the earlier.
+function makeUnitNode(u) {
+  const node = document.createElement("div");
+  node.className = "unit";
+  node.dataset.uid = u.uid;
+  node.innerHTML =
+    '<div class="badges"></div>' +
+    '<div class="body"><div class="fig"><span class="fig-glyph"></span></div></div>' +
+    '<div class="hpbar"><div class="hpbar-fill"></div></div>' +
+    '<div class="shieldbar"><div class="shieldbar-fill"></div><span class="shield-amt"></span></div>' +
+    '<div class="manabar"><div class="manabar-fill"></div></div>' +
+    '<div class="stat"></div>';
+  // Remember the pieces now so the per-tick repaint never has to go looking for them.
+  node._badges    = node.querySelector(".badges");
+  node._body      = node.querySelector(".body");
+  node._fig       = node.querySelector(".fig");
+  node._glyph     = node.querySelector(".fig-glyph");
+  node._hpFill    = node.querySelector(".hpbar-fill");
+  node._shield    = node.querySelector(".shieldbar");
+  node._shieldFill= node.querySelector(".shieldbar-fill");
+  node._shieldAmt = node.querySelector(".shield-amt");
+  node._mana      = node.querySelector(".manabar");
+  node._manaFill  = node.querySelector(".manabar-fill");
+  node._stat      = node.querySelector(".stat");
+  return node;
+}
+
+// THE LUNGE. The attacker leans into its swing and settles back. 260ms of an 800ms tick —
+// clearly one swing, well finished before the next. Ranged units never lunge; they get a
+// tracer instead.
+//
+// This used to be a CSS class, and it worked only because render() destroyed and rebuilt
+// the .fig element every tick: a brand-new element wearing an animation class always plays.
+// Units keep the same element now, and re-adding a class the element already has is "no
+// change" to the browser — the lunge would have fired once and never again. animate() has
+// exactly the property the old rebuild gave us for free: calling it starts a NEW run, no
+// matter what the element was doing. It also cleans up after itself, so a lunge can't get
+// stuck mid-lean the way a leftover class could.
+function playLunge(node, dx, dy) {
+  // Turn "3 squares right, 4 up" into a short nudge in that direction: divide by the
+  // larger leg so a diagonal lunge travels the same distance as a straight one.
+  const reach = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
+  const lx = Math.round((dx / reach) * 13);
+  const ly = Math.round((dy / reach) * 13);
+  if (node._lungeAnim) node._lungeAnim.cancel();
+  node._lungeAnim = node._fig.animate([
+    { transform: "translate(0px, 0px)" },
+    { transform: "translate(" + lx + "px, " + ly + "px)", offset: 0.3 },
+    { transform: "translate(0px, 0px)" },
+  ], { duration: 260, easing: "ease-out" });
+}
+
+// THE FLINCH: the unit that actually took the hit recoils and flares for a moment.
+// Deliberately a SHAKE rather than a directional knock-back — the damage number already
+// says how hard, this only needs to say "this one, right here, got hit".
+function playFlinch(node) {
+  if (node._flinchAnim) node._flinchAnim.cancel();
+  node._flinchAnim = node._glyph.animate([
+    { transform: "translateX(0px)",   filter: "none" },
+    { transform: "translateX(-3px)",  filter: "brightness(1.9)", offset: 0.2 },
+    { transform: "translateX(3px)",   filter: "brightness(1.9)", offset: 0.5 },
+    { transform: "translateX(-2px)",  filter: "brightness(1.4)", offset: 0.75 },
+    { transform: "translateX(0px)",   filter: "none" },
+  ], { duration: 220, easing: "ease-in-out" });
+}
+
+// Repaint one unit's shape: the numbers, the bars, the badges, the glows.
+function paintUnitNode(node, u) {
+  const su = SUITS[u.suit];
+  // Health bar: how full is this unit's HP? maxHp is set when the unit is made (and again
+  // by applySynergies), so hp/maxHp is a 0..1 fraction of health left. Clamp to 0..1 so a
+  // poison overkill or a buff quirk can't overflow the bar.
+  const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
+  // Green when healthy, yellow when hurt, red when nearly dead — read at a glance.
+  node._hpFill.style.width = Math.round(frac * 100) + "%";
+  node._hpFill.style.background = frac > 0.5 ? "#4caf50" : (frac > 0.25 ? "#ffb300" : "#e53935");
+
+  // The unit's face: its rank + suit. A fused unit shows both parts (7♠2♦) via the shared
+  // glyph helper. Only rewritten when it actually changes — it almost never does, and
+  // rewriting HTML that already says the right thing is pure waste sixty times a second.
+  const figInner = u.fused ? fusedGlyphHTML(u.card, "unitColor") : (rankLabel(u.rank) + su.symbol);
+  if (node._lastGlyph !== figInner) {
+    node._glyph.innerHTML = figInner;
+    node._lastGlyph = figInner;
+  }
+  node._fig.style.color = su.unitColor;
+
+  node._badges.innerHTML = statusBadges(u);   // same pure function as before — can't go stale
+
+  // Shield bar: shown ONLY when the unit carries a shield pool (rank-5 Ward / Ace of
+  // Diamonds' Aegis). A TALLER steel-white bar with the exact shield NUMBER centered ON it
+  // (not in the HP stat line), so armor reads as its own separate thing — you can SEE it
+  // soak hits before HP drops. Width = shield/maxHp clamped at 100% (shields stack past a
+  // full bar — a full white bar just means "≥ one health bar of shield").
+  if (u.shield > 0) {
+    node._shield.style.display = "";
+    node._shieldFill.style.width = Math.round(Math.min(1, u.shield / u.maxHp) * 100) + "%";
+    node._shieldAmt.textContent = u.shield;
+  } else {
+    node._shield.style.display = "none";
+  }
+  // Mana bar: casters only. mana/manaMax as a blue fill under the HP bar.
+  if (u.caster) {
+    node._mana.style.display = "";
+    node._manaFill.style.width = Math.round(Math.min(1, u.mana / u.manaMax) * 100) + "%";
+  } else {
+    node._mana.style.display = "none";
+  }
+
+  node._stat.textContent = u.attack + " / " + u.hp;
+  node.title = figureTitle(u) + statusText(u);
+
+  // ONE class write, built fresh from scratch. Same discipline as the cell loop above and
+  // for the same reason: a rule can't drift out of date the way a hand-kept remove-list can.
+  let cls = "unit unit-" + u.team;
+  if (uniqueOf(u)) cls += " unique";                                  // legendary → purple glow
+  if (u.fused) cls += " fused";                                       // made hand → green glow
+  if (tickCount < (u.castFlashUntil || 0)) cls += " casting";         // mage discharging
+  if (tickCount < (u.spellHitUntil || 0)) cls += " spell-hit";        // fireball impact
+  if (tickCount < (u.healFlashUntil || 0)) cls += " healed";          // Cleric mend (green)
+  if (tickCount < (u.trapSprungUntil || 0)) cls += " trap-sprung";    // stepped on a trap
+  if (tickCount < (u.stunUntil || 0)) cls += " stunned";              // frozen (purple)
+  if (tickCount < (u.atkBuffUntil || 0)) cls += " buffed";            // K♥ rally on Q♥ (gold)
+  if (tickCount < (u.untargetableUntil || 0)) cls += " vanished";     // A♠ hidden (faded)
+  node.className = cls;
+
+  // The two motion animations. Both gated on a fight actually running: once it ends
+  // tickCount stops advancing, so a stale stamp would still read as "in the future" and the
+  // units would twitch forever on the results screen. The per-tick guard is because render()
+  // can be called several times outside the combat loop, and without it one swing would
+  // restart its lunge on every one of those.
+  if (inCombat || replaying) {
+    if (tickCount < (u.lungeUntil || 0) && !isRangedSuit(u.suit) && node._lungeTick !== tickCount) {
+      node._lungeTick = tickCount;
+      playLunge(node, u.lungeX, u.lungeY);
+    }
+    if (tickCount < (u.flinchUntil || 0) && node._flinchTick !== tickCount) {
+      node._flinchTick = tickCount;
+      playFlinch(node);
+    }
+  }
+}
+
+// Put a unit's shape on its square, immediately. The motion pass replaces this call with a
+// gliding version; until then (and always for a placement drag, which should snap rather
+// than slide) it's a straight jump to the square, exactly as the board has always behaved.
+function positionUnitNode(node, u) {
+  const p = gridToPx(u.x, u.y);
+  if (!p) return;
+  node.style.transform = "translate3d(" + p.left + "px, " + p.top + "px, 0)";
+}
+
+// Match the units array up with the shapes on screen: give any new unit a shape, repaint
+// every shape, and remove the shapes of units that are no longer on the board.
+function renderUnits() {
+  const layer = document.getElementById("unitLayer");
+  if (!layer) return;
+  const seen = {};
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    seen[u.uid] = true;
+    let node = unitNodes[u.uid];
+    if (!node) {
+      node = makeUnitNode(u);
+      unitNodes[u.uid] = node;
+      layer.appendChild(node);
+    }
+    paintUnitNode(node, u);
+    positionUnitNode(node, u);
+  }
+  // Anything left over belongs to a unit that died or was picked back up. Its shape goes.
+  for (const uid in unitNodes) {
+    if (seen[uid]) continue;
+    unitNodes[uid].remove();
+    delete unitNodes[uid];
+  }
+}
+
+// Wipe every unit shape off the board. Used when a fight is torn down or a replay starts,
+// so nothing carries over from whatever was on screen before.
+function clearUnitNodes() {
+  for (const uid in unitNodes) {
+    unitNodes[uid].remove();
+    delete unitNodes[uid];
+  }
 }
 
 // Build the grid: column/row coordinate labels + the ROWS×COLS cells.
@@ -312,6 +459,14 @@ function buildBoard() {
       board.appendChild(cell);
     }
   }
+
+  // THE UNIT LAYER (week 4, the motion pass). A transparent sheet over the grid where
+  // every unit's shape lives. Added before the fx layer so effects still draw on top of
+  // units, and cleared of any leftovers in case the board is being rebuilt.
+  clearUnitNodes();
+  const unitLayer = document.createElement("div");
+  unitLayer.id = "unitLayer";
+  board.appendChild(unitLayer);
 
   // THE FX LAYER (Week 1 of the effects pass). One transparent sheet stretched over
   // the whole grid, added LAST so it sits on top. Everything render() draws lives

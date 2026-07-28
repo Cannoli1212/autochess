@@ -283,33 +283,64 @@
   .bg-rally  { color: #ffd54f; }
   .bg-inert  { color: #90a4ae; }
 
+  /* THE UNIT LAYER (week 4, the motion pass).
+
+     Until now a unit WAS its square: render() wrote the glyph, bars and stats straight into
+     the .cell's innerHTML, so a unit could only ever be at one of 64 exact spots. That is
+     what made movement look like teleporting — nothing ever travelled, it was erased here
+     and re-drawn there.
+
+     So units moved out of the squares and onto their own transparent sheet stretched over
+     the grid, the same trick #fxLayer already uses. Each unit now owns ONE lasting piece of
+     the page that is nudged around with a transform, which can sit anywhere — including
+     halfway between two squares.
+
+     The .cell divs keep their other jobs unchanged: they are still what you drag onto, still
+     the zone tint, still where traps and airstrike marks are drawn. pointer-events:none here
+     is what makes that work — clicks and drags fall straight through this sheet to the
+     squares underneath, so the drag-and-drop code needed no changes at all. */
+  #unitLayer {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 10;                  /* over the squares, under #fxLayer's effects (z-index 20) */
+  }
+  /* One node per unit. Parked at the board's top-left and moved entirely by transform —
+     transform is the one thing a browser can change without re-doing page layout, which is
+     what makes moving sixteen of these sixty times a second cheap.
+
+     The negative margins are the centring: the code hands over where the unit's MIDDLE
+     should be, and CSS pulls the box back by half its own size. Keeping that here means the
+     JavaScript never has to know how big a unit is. */
+  .unit {
+    position: absolute; left: 0; top: 0;
+    width: 56px; height: 56px;
+    margin-left: -28px; margin-top: -28px;
+    display: flex;
+    flex-direction: column;       /* stack the figure above its stats — same as .cell did */
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    border-radius: 3px;
+    will-change: transform;       /* hint: give this its own layer, don't repaint the board */
+  }
+  /* The walking layer. Position lives on .unit and the lunge lives on .fig, and one element
+     can only run one transform at a time — so the lean and the step bob get their own. */
+  .body { display: block; }
+
   .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
   /* Inner glyph layer. inline-block so a transform applies to it at all — an inline
-     span ignores transforms. See the two-layer note in render(): .fig lunges, this
+     span ignores transforms. See the layer note in makeUnitNode(): .fig lunges, this
      shakes, so a unit can do both in the same tick. */
   .fig-glyph { display: inline-block; }
 
-  /* MELEE LUNGE (week 2 slice 2). The attacker leans into its swing and settles back.
-     Direction comes from --lunge-dx/--lunge-dy, set inline per unit by render() from
-     the square it swung at. 260ms of an 800ms tick — clearly one swing, well finished
-     before the next. Ranged units never get this class; they get a tracer instead. */
-  .fig.lunging { animation: figLunge 260ms ease-out; }
-  @keyframes figLunge {
-    0%   { transform: translate(0, 0); }
-    30%  { transform: translate(var(--lunge-dx, 0px), var(--lunge-dy, 0px)); }
-    100% { transform: translate(0, 0); }
-  }
+  /* NOTE: the lunge and flinch used to be CSS animation classes here. They worked only
+     because render() destroyed and rebuilt the .fig element every single tick, and a fresh
+     element with an animation class on it always plays. Units now keep the SAME element for
+     the whole fight, so that no longer holds — a class the element already has is "no
+     change" to the browser and nothing happens. They moved into JavaScript (playLunge /
+     playFlinch in board.js), which starts a new run on demand regardless of what the element
+     was doing a moment ago. Same motion, same 260ms/220ms, different trigger. */
 
-  /* FLINCH: the unit that actually took the hit recoils and flares for a moment.
-     Deliberately a SHAKE rather than a directional knock-back — the damage number
-     already says how hard, this only needs to say "this one, right here, got hit". */
-  .fig-glyph.flinching { animation: figFlinch 220ms ease-in-out; }
-  @keyframes figFlinch {
-    0%, 100% { transform: translateX(0);     filter: none; }
-    20%      { transform: translateX(-3px);  filter: brightness(1.9); }
-    50%      { transform: translateX(3px);   filter: brightness(1.9); }
-    75%      { transform: translateX(-2px);  filter: brightness(1.4); }
-  }
   .stat { font-size: 10px; color: #f0f0f0; margin-top: 1px; }
 
   /* Health bar under each unit. The dark track is a fixed width; the colored
@@ -357,28 +388,35 @@
   /* Cast flashes (Phase 4). Both are single-tick glows toggled by a tick-stamp in render:
      .casting = the mage lighting up blue as it discharges mana; .spell-hit = the orange
      fire burst on a unit the spell lands on. Distinct hues from unique/fused/strike. */
-  .cell.casting   { box-shadow: inset 0 0 0 2px #4fc3f7, 0 0 11px 2px rgba(79, 195, 247, 0.95); }
-  .cell.spell-hit { box-shadow: inset 0 0 0 2px #ff7043, 0 0 10px 2px rgba(255, 87, 34, 0.95); }
+  /* These all describe a UNIT, not a square, so since the motion pass they live on the unit
+     node. That is not just tidiness — it is the whole reason a walking unit carries its
+     stun ring and its cast glow WITH it. Left on .cell, every one of these would have stayed
+     behind on the square the unit stepped off. */
+  .unit.casting   { box-shadow: inset 0 0 0 2px #4fc3f7, 0 0 11px 2px rgba(79, 195, 247, 0.95); }
+  .unit.spell-hit { box-shadow: inset 0 0 0 2px #ff7043, 0 0 10px 2px rgba(255, 87, 34, 0.95); }
   /* Cleric heal (Slice 2): a green pulse on the mended ally the tick it's healed. */
-  .cell.healed    { box-shadow: inset 0 0 0 2px #66bb6a, 0 0 11px 2px rgba(102, 187, 106, 0.95); }
+  .unit.healed    { box-shadow: inset 0 0 0 2px #66bb6a, 0 0 11px 2px rgba(102, 187, 106, 0.95); }
   /* STUN (casting): a purple ring on a frozen unit while stunUntil is in the future.
      Distinct hue from cast-blue / spell-orange / heal-green / trap-amber. */
-  .cell.stunned   { box-shadow: inset 0 0 0 2px #ce93d8, 0 0 11px 2px rgba(186, 104, 200, 0.95); }
+  .unit.stunned   { box-shadow: inset 0 0 0 2px #ce93d8, 0 0 11px 2px rgba(186, 104, 200, 0.95); }
   /* ATTACK BUFF (King of Hearts' Rally on his Queen): a warm GOLD glow that LINGERS while the
      buff window is open (not a one-tick flash) — distinct from cast-blue/spell-orange/heal-green. */
-  .cell.buffed    { box-shadow: inset 0 0 0 2px #ffd54f, 0 0 11px 2px rgba(255, 213, 79, 0.95); }
+  .unit.buffed    { box-shadow: inset 0 0 0 2px #ffd54f, 0 0 11px 2px rgba(255, 213, 79, 0.95); }
   /* VANISHED (Ace of Spades' drop-aggro): the unit fades while untargetable so you can SEE it's
      slipped the enemy's aggro. A dashed outline reads as "not locked on". Lingers with the window. */
-  .cell.vanished  { opacity: 0.45; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
+  .unit.vanished  { opacity: 0.45; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
 
   /* The two players' home rows get a subtle tint so you can tell them apart.
-     Player 2 sits on top, Player 1 on the bottom (like a chess board). */
+     Player 2 sits on top, Player 1 on the bottom (like a chess board). A ZONE is a property
+     of the square, so this one stays on .cell. */
   .cell.player2-zone { background: #3a2b2b; }  /* faint red */
   .cell.player1-zone { background: #2b303a; }  /* faint blue */
 
-  /* A cell that HOLDS a unit gets a stronger team color. */
-  .cell.unit-player1 { background: #2b4a7a; }  /* Player 1 = blue */
-  .cell.unit-player2 { background: #7a2b2b; }  /* Player 2 = red */
+  /* The unit's own team colour. This used to tint the SQUARE the unit stood on; now the
+     coloured tile is the unit itself, so it travels — which is most of what makes a moving
+     unit read as a thing walking rather than a glyph sliding. */
+  .unit.unit-player1 { background: #2b4a7a; }  /* Player 1 = blue */
+  .unit.unit-player2 { background: #7a2b2b; }  /* Player 2 = red */
 
   #turnStatus { font-size: 18px; font-weight: bold; margin-top: 18px; }
   #message { color: #ffcf6b; min-height: 20px; }  /* warnings show here */
@@ -521,11 +559,11 @@
      as legendary and stay distinct from the GOLD held/flop borders. On a board cell
      the glow is an INSET box-shadow (not a border) so the cell keeps its exact size. */
   .card.unique { border: 2px solid #b06cff; box-shadow: 0 0 7px rgba(176, 108, 255, 0.9); }
-  .cell.unique { box-shadow: inset 0 0 0 2px #b06cff, 0 0 7px rgba(176, 108, 255, 0.9); }
+  .unit.unique { box-shadow: inset 0 0 0 2px #b06cff, 0 0 7px rgba(176, 108, 255, 0.9); }
 
   /* FUSION: a "made hand" (7-2) — GREEN glow, distinct from gold held + purple unique. */
   .card.fused { border: 2px solid #2ecc71; box-shadow: 0 0 7px rgba(46, 204, 113, 0.9); }
-  .cell.fused { box-shadow: inset 0 0 0 2px #2ecc71, 0 0 7px rgba(46, 204, 113, 0.9); }
+  .unit.fused { box-shadow: inset 0 0 0 2px #2ecc71, 0 0 7px rgba(46, 204, 113, 0.9); }
   /* While dragging a card over a valid fuse partner, dash its border as a hint. */
   .card.fuse-target { outline: 2px dashed #2ecc71; outline-offset: 1px; }
 
@@ -537,12 +575,19 @@
   .cell.trap-player1 { box-shadow: inset 0 0 0 2px rgba(79, 195, 247, 0.8), 0 0 6px rgba(79, 195, 247, 0.6); }
   .cell.trap-player2 { box-shadow: inset 0 0 0 2px rgba(255, 138, 138, 0.8), 0 0 6px rgba(255, 138, 138, 0.6); }
   /* A live trap's ✵ glyph: bigger + a slow pulse so it catches the eye on the board. */
-  .cell .trap-glyph  { font-size: 26px; color: #ffe082; line-height: 1;
+  /* pointer-events:none for the same reason .badges has it — this is decoration drawn
+     inside the square, and it must never be what the mouse hits instead of the square. It
+     matters more since the motion pass: a trap under a unit used to be suppressed, and is
+     now drawn beneath it, so without this it would sit between you and a unit you want to
+     pick up. */
+  .cell .trap-glyph  { font-size: 26px; color: #ffe082; line-height: 1; pointer-events: none;
                        text-shadow: 0 0 5px rgba(255, 214, 0, 0.8); animation: trapPulse 1s ease-in-out infinite; }
   @keyframes trapPulse { 0%,100% { opacity: 0.55; transform: scale(0.9); }
                          50%      { opacity: 1;    transform: scale(1.15); } }
-  /* The moment a trap SPRINGS: a bright amber burst on the victim's cell (FLASH_TICKS long). */
-  .cell.trap-sprung { box-shadow: inset 0 0 0 3px #ffca28, 0 0 13px 3px rgba(255, 179, 0, 0.95); }
+  /* The moment a trap SPRINGS: a bright amber burst on the VICTIM (FLASH_TICKS long). The
+     trap tints belong to the square, but this one describes the unit that walked into it —
+     so since the motion pass it rides on the unit node. */
+  .unit.trap-sprung { box-shadow: inset 0 0 0 3px #ffca28, 0 0 13px 3px rgba(255, 179, 0, 0.95); }
 
   /* Phase D: draw & discard pile "spots" (same size as a card). */
   .pile {
