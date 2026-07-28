@@ -65,15 +65,19 @@ function motionCommit(u, node) {
   if (!motionActive() || m.cell === null) {
     m.cell = { x: u.x, y: u.y };
     m.pts = null;
+    m.vout = { x: 0, y: 0 };            // it isn't travelling, so it carries no momentum
     m.px = target.left; m.py = target.top;
     motionWrite(m);
     return;
   }
 
   // Standing still. Leave it exactly where it is — and clear any finished route so the
-  // loop stops counting it as moving.
+  // loop stops counting it as moving. Momentum goes too: a unit that stopped for a tick to
+  // swing has genuinely stopped, and should set off fresh rather than leaning into a corner
+  // it was rounding several seconds ago.
   if (m.cell.x === u.x && m.cell.y === u.y) {
     m.pts = null;
+    m.vout = { x: 0, y: 0 };
     return;
   }
 
@@ -101,6 +105,21 @@ function motionCommit(u, node) {
   });
   m.n = m.pts.length - 1;
   m.dur = motionTickMs();
+
+  // THE CORNER. Carry over the speed and direction the unit FINISHED its last walk with, so
+  // this walk starts off heading the way it was already going instead of snapping onto a new
+  // heading. That is what turns a diagonal staircase into one flowing curve rather than a
+  // zigzag of hard right-angles. See motionSample for the shape it produces.
+  //
+  // Stored as pixels-per-millisecond rather than pixels-per-leg, because the two walks being
+  // joined may not be the same length in time at all: a one-square tick joining onto a
+  // three-square dash, or a live 800ms tick joining onto a 420ms replay tick. Speed is the
+  // thing that has to match across that join; distance-per-leg isn't.
+  const legMs = m.dur / m.n;
+  m.tin = { x: (m.vout ? m.vout.x : 0) * legMs, y: (m.vout ? m.vout.y : 0) * legMs };
+  const last = m.pts[m.n], prev = m.pts[m.n - 1];
+  m.vout = { x: (last.x - prev.x) / legMs, y: (last.y - prev.y) / legMs };
+
   m.t0 = performance.now();
   m.cell = { x: u.x, y: u.y };
 
@@ -136,7 +155,11 @@ function motionFrame(now) {
     // there. (Clearing it first reads as harmless and is not: it throws on the very last
     // frame of every single walk.)
     const p = motionSample(m, s);
+    // Keep a running total of how far this unit has walked, ever. The step bob is phased off
+    // it so the gait carries across tick boundaries instead of restarting each square.
+    m.dist = (m.dist || 0) + Math.hypot(p.x - m.px, p.y - m.py);
     m.px = p.x; m.py = p.y;
+    m.dx = p.dx;
     motionWrite(m);
 
     if (arrived) m.pts = null;    // that was the last frame we need to draw for it
@@ -147,9 +170,42 @@ function motionFrame(now) {
   if (stillMoving) motionRaf = requestAnimationFrame(motionFrame);
 }
 
-// Where along the route are we at progress s (0..1)? Straight line for now; the curve
-// comes later. Written to take a multi-point route from the start so that the dash work
-// and the corner-rounding both drop straight in.
+// How rounded are the corners? 1 = fully rounded, 0 = the old hard right-angles.
+// Not a fudge factor: at 1 a straight walk comes out EXACTLY straight and exactly even
+// (see below), so there is no cost to turning it all the way up.
+const CURVE_K = 1;
+
+// The direction a walk should SET OFF in.
+//
+// We know the leg just finished and the leg about to start, but never the one after — the
+// engine hasn't decided it yet. So we don't try to look ahead. Instead we fix the direction
+// each leg ARRIVES in (to the leg's own direction) and inherit the direction it LEAVES in
+// from the previous leg. Do that on every leg and every join matches by construction, with
+// nothing to predict.
+//
+// The one thing we change about the inherited direction is throwing away any BACKWARDS
+// part: when a unit turns around, carrying its old speed unaltered would make it visibly
+// walk backwards for a moment before setting off. The SIDEWAYS part is kept in full — that
+// part is the rounding.
+function startTangent(tin, d) {
+  const len = Math.hypot(d.x, d.y) || 1;
+  const ux = d.x / len, uy = d.y / len;
+  const along = tin.x * ux + tin.y * uy;        // how much of the old speed is "forwards"
+  const fwd = Math.max(0, along);               // ...and never less than none
+  return { x: (fwd * ux + (tin.x - along * ux)) * CURVE_K,
+           y: (fwd * uy + (tin.y - along * uy)) * CURVE_K };
+}
+
+// Where along the route are we at progress s (0..1), and which way are we facing?
+//
+// Each leg is a cubic Hermite curve: it starts at P0 heading in direction m0, and finishes
+// at P1 heading in direction m1. Feed it a start direction that matches how the last leg
+// ended and the whole route becomes one smooth line instead of a chain of hard turns.
+//
+// Worth knowing what this does in the ordinary case: on a straight leg following another
+// straight leg, m0 and m1 are both exactly the leg itself, the curve collapses to
+// P0 + s(P1-P0), and the unit walks dead straight at a dead constant speed. The curve only
+// costs anything where there is actually a corner to round.
 function motionSample(m, s) {
   const n = m.n;
   // Which leg of the route, kept inside the route's actual ends. The caller already clamps
@@ -158,14 +214,62 @@ function motionSample(m, s) {
   const i = Math.max(0, Math.min(n - 1, Math.floor(s * n)));
   const t = s * n - i;                            // how far along that leg
   const P0 = m.pts[i], P1 = m.pts[i + 1];
-  return { x: P0.x + (P1.x - P0.x) * t,
-           y: P0.y + (P1.y - P0.y) * t };
+  const d = { x: P1.x - P0.x, y: P1.y - P0.y };
+
+  // Which direction were we travelling as this leg began? For the first leg of a walk that
+  // is whatever we carried over from the previous tick; after that it's simply the leg before.
+  const tin = (i === 0)
+    ? (m.tin || { x: 0, y: 0 })
+    : { x: P0.x - m.pts[i - 1].x, y: P0.y - m.pts[i - 1].y };
+
+  const m0 = startTangent(tin, d);
+  const m1 = d;                                   // arrive heading along the leg itself
+
+  const t2 = t * t, t3 = t2 * t;
+  const h00 = 2*t3 - 3*t2 + 1;
+  const h10 = t3 - 2*t2 + t;
+  const h01 = -2*t3 + 3*t2;
+  const h11 = t3 - t2;
+
+  return {
+    x: h00 * P0.x + h10 * m0.x + h01 * P1.x + h11 * m1.x,
+    y: h00 * P0.y + h10 * m0.y + h01 * P1.y + h11 * m1.y,
+    dx: d.x,                                      // which way it's heading, for the lean
+  };
+}
+
+// FACING — a lean, not a mirror. The obvious way to show which way something is going is to
+// flip it horizontally, and it is the wrong way here: these figures are card glyphs, and a
+// mirrored 7♠ is simply wrong. So the unit leans the way it's running, like a person does.
+// Says the same thing, and the rank stays readable.
+function motionLean(m) {
+  if (!m.pts) return 0;
+  const t = Math.max(-1, Math.min(1, m.dx / 40));
+  return t * 8;                                   // up to 8 degrees
+}
+
+// STEP BOB — a small up-and-down, which is most of what separates "walking" from "sliding".
+//
+// Phased off DISTANCE TRAVELLED rather than off the tick, so it doesn't restart at every
+// square: a three-square dash is one continuous jog, not the same little hop three times.
+// m.dist just keeps counting up and is never reset, which is exactly what makes the gait
+// carry across one tick into the next.
+function motionBob(m) {
+  if (!m.pts) return 0;
+  const stride = boardMetrics() ? boardMetrics().px / 2 : 29;   // two steps per square
+  return -Math.abs(Math.sin(Math.PI * (m.dist / stride))) * 2.5;
 }
 
 // Put the shape where the numbers say. transform is the one thing a browser can change
 // without re-doing page layout, which is what makes this cheap enough to do every frame.
 function motionWrite(m) {
   m.node.style.transform = "translate3d(" + m.px + "px, " + m.py + "px, 0)";
+  // The walk cycle rides on its own inner element: .unit is already spending its transform
+  // on WHERE the unit is, and one element can only run one transform at a time.
+  if (m.body) {
+    m.body.style.transform = "translateY(" + motionBob(m).toFixed(2) + "px) rotate("
+                           + motionLean(m).toFixed(2) + "deg)";
+  }
 }
 
 // ── HOUSEKEEPING ─────────────────────────────────────────────────────────────
