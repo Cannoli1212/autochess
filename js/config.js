@@ -715,10 +715,22 @@ const MOVE_COOLDOWN_TICKS = 0;
 // this is only "how hard does a slow bite while it's active."
 const SLOW_MOVE_COOLDOWN = 2;
 
+// REAL-TIME SPEED of a live fight: how long the gameflow timer waits between combat
+// ticks. Purely a playback speed — a "tick" is one round of the engine no matter how
+// long the wall clock takes, so NOTHING about combat, balance or the headless sims
+// changes when you turn this knob (the sims don't wait at all). Slowed 500 → 800 on
+// 2026-07-28 so abilities and damage numbers are actually followable; drop it back
+// toward 500 once the effects pass makes the fight readable at speed. Every effect
+// duration in fx.js / styles.css is sized against this — keep them in proportion if
+// you change it (a tracer is ~a third of a tick, a flash is one whole tick).
+const COMBAT_TICK_MS = 800;
+
 // How many ticks a one-shot visual FLASH lingers (cast glow, spell/trap hit burst,
-// heal pulse). At 500ms/tick, 1 tick was blink-and-miss; 3 ≈ 1.5s so effects are
-// actually watchable during a live fight. Pure cosmetics — no gameplay effect.
-const FLASH_TICKS = 3;
+// heal pulse). Think of it in SECONDS, not ticks: this × COMBAT_TICK_MS is how long
+// the glow sits on screen. It was 3 back when a tick was 500ms (≈1.5s); now one tick
+// is already a full second, so 3 would smear a single flash across the next two
+// ticks' events and make things LESS clear. Pure cosmetics — no gameplay effect.
+const FLASH_TICKS = 1;
 
 // Global stat multiplier (B4). Final stat = suitBase × rank × STAT_SCALE.
 // Bump to 100 for even bigger numbers, or 1 to shrink — one knob.

@@ -239,8 +239,9 @@ function startRound() {
   liveFrames = [];
   if (tableActive) liveFrames.push(snapshotFrame());
 
-  // gameflow owns the combat loop: run a step every 500ms; when combatStep
-  // reports a result (non-null), stop the loop and finish the round.
+  // gameflow owns the combat loop: run a step every COMBAT_TICK_MS (config.js —
+  // playback speed only, the engine is unchanged); when combatStep reports a
+  // result (non-null), stop the loop and finish the round.
   combatTimer = setInterval(function () {
     const result = combatStep();
     if (tableActive) liveFrames.push(snapshotFrame());
@@ -248,7 +249,7 @@ function startRound() {
       clearInterval(combatTimer);
       finishRound(result);
     }
-  }, 500);
+  }, COMBAT_TICK_MS);
 }
 
 // Advance to the next round: clear the board; the placement limit rises by 1
