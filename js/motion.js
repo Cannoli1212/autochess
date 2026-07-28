@@ -71,13 +71,19 @@ function motionCommit(u, node) {
     return;
   }
 
-  // Standing still. Leave it exactly where it is — and clear any finished route so the
-  // loop stops counting it as moving. Momentum goes too: a unit that stopped for a tick to
-  // swing has genuinely stopped, and should set off fresh rather than leaning into a corner
-  // it was rounding several seconds ago.
+  // Standing still. Clear any finished route so the loop stops counting it as moving, drop
+  // the momentum (a unit that stopped for a tick to swing has genuinely stopped, and should
+  // set off fresh rather than leaning into a corner it rounded seconds ago), and settle it:
+  // squarely on its square, standing up straight.
+  //
+  // The settle matters even though the animation loop normally does it on arrival, because
+  // the loop does not run at all in a hidden tab. Without this, walking, switching away, and
+  // coming back to a unit that has since stopped would leave it stranded mid-stride.
   if (m.cell.x === u.x && m.cell.y === u.y) {
     m.pts = null;
     m.vout = { x: 0, y: 0 };
+    m.px = target.left; m.py = target.top;
+    motionWrite(m);
     return;
   }
 
@@ -162,8 +168,24 @@ function motionFrame(now) {
     m.dx = p.dx;
     motionWrite(m);
 
-    if (arrived) m.pts = null;    // that was the last frame we need to draw for it
-    else stillMoving = true;
+    if (arrived) {
+      // ARRIVED — and it has to be told to stand up straight.
+      //
+      // The frame above was drawn mid-stride, so the unit is still lifted by the step bob
+      // and still leaning into its direction of travel. Nothing writes to .body again after
+      // this, so without a second write the unit keeps that pose FOREVER — permanently
+      // hovering a pixel or two off its square and tilted over. Retiring the route first is
+      // what makes the second write neutral, because the bob and the lean both read as zero
+      // once there is no route left to be walking along.
+      //
+      // Easy to miss: a straight step across one square happens to be exactly two strides,
+      // so the bob lands on zero by luck and the bug is invisible. A diagonal is 82px rather
+      // than 58 and lands mid-stride, and a sideways walk never straightens up at all.
+      m.pts = null;
+      motionWrite(m);
+      continue;
+    }
+    stillMoving = true;
   }
 
   // Only keep the loop alive while something is actually going somewhere.
