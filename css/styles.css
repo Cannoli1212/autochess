@@ -117,6 +117,86 @@
     100% { opacity: 0;   transform: translate(-50%, -6%)  scale(0.5)  rotate(-72deg); }
   }
 
+  /* ORB (week 3): a spell projectile in flight. The distance it must cover is handed in
+     as --fx-dx/--fx-dy by fxOrb, so this ONE keyframe covers every direction and every
+     length on the board. It swells slightly on the way and pops at the end, which reads
+     as "it arrived" rather than "it faded out somewhere near there". */
+  .fx-orb {
+    position: absolute;
+    width: 10px; height: 10px; margin: -5px 0 0 -5px;   /* centre on the cell centre */
+    border-radius: 50%;
+    animation-name: fxOrbFly;
+    animation-timing-function: cubic-bezier(.4, .05, .6, 1);
+    animation-fill-mode: forwards;
+  }
+  @keyframes fxOrbFly {
+    0%   { transform: translate(0, 0) scale(0.55); opacity: 0.9; }
+    75%  { transform: translate(calc(var(--fx-dx) * 0.82), calc(var(--fx-dy) * 0.82)) scale(1.15); opacity: 1; }
+    100% { transform: translate(var(--fx-dx), var(--fx-dy)) scale(1.7); opacity: 0; }
+  }
+
+  /* RING (week 3): the expanding circle of a self-centred nova. fxRing sizes it from a
+     MEASURED cell, so the circle lands exactly on the squares the ability actually hits —
+     a pair's small ring and a quads' wide one are visibly different, which is the whole
+     reason it exists. Starts small and snaps outward, so it reads as a shockwave. */
+  .fx-ring {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border: 3px solid currentColor;
+    border-radius: 50%;
+    pointer-events: none;
+    animation-name: fxRingOut;
+    animation-timing-function: cubic-bezier(.15, .7, .4, 1);
+    animation-fill-mode: forwards;
+  }
+  @keyframes fxRingOut {
+    0%   { transform: translate(-50%, -50%) scale(0.18); opacity: 0; }
+    18%  { opacity: 0.95; }
+    100% { transform: translate(-50%, -50%) scale(1);    opacity: 0; }
+  }
+
+  /* The ability ICON pop. It reuses .fx-num wholesale (that's why it carries both
+     classes), so it inherits the float, the fade and the per-tick time stagger for free —
+     an icon can never collide with a damage number because they're the same machine. */
+  .fx-icon { font-size: 15px; text-shadow: 0 0 4px #000, 0 0 8px currentColor; }
+
+  /* The week-3 beams all reuse the fxTracer keyframes (streak out, hold, fade) and differ
+     only in thickness and speed. They MUST each name an animation: the cleanup listener
+     waits for animationend, so a beam with no animation would never fire it and would sit
+     on the layer until the fallback timer swept it up.
+
+     A spell beam (the Cleric's mend): thicker and slower than a shot tracer, so it reads
+     as a deliberate cast rather than a bullet. */
+  .fx-spellbeam { animation: fxTracer 380ms ease-out forwards; height: 3px; }
+
+  /* A PIERCING shot (Poison Volley, Sniper Round). The thickest, hardest line in the
+     game — it should read as something that went THROUGH people. Drawn to the last square
+     actually hit, so when a frontliner body-blocks a sniper the line visibly stops at the
+     blocker instead of reaching the victim it was aimed at. */
+  .fx-pierce { animation: fxTracer 420ms ease-out forwards; height: 4px; margin-top: -2px; }
+
+  /* One hop of a chain bolt. Thin and quick — the reading comes from the hops arriving one
+     after another (fxChain staggers them), not from any single segment. */
+  .fx-chain { animation: fxTracer 300ms ease-out forwards; height: 2px; }
+
+  /* A TETHER between two allied units (the King and Queen of Hearts). Dashed, so it reads
+     as a bond rather than an attack, and it HOLDS at full length pulsing instead of
+     streaking across and vanishing. The dashes are painted with a repeating gradient over
+     `currentColor`, which is why fxTether sets the element's COLOR rather than letting
+     fxBeam set its background — the background shorthand would wipe the gradient out. */
+  .fx-tether {
+    height: 2px;
+    background-image: repeating-linear-gradient(90deg,
+      currentColor 0 6px, transparent 6px 12px);
+    animation: fxTetherHold 900ms ease-out forwards;
+  }
+  @keyframes fxTetherHold {
+    0%   { transform: scaleX(0); opacity: 0; }
+    18%  { transform: scaleX(1); opacity: 1; }
+    70%  { transform: scaleX(1); opacity: 0.75; }
+    100% { transform: scaleX(1); opacity: 0; }
+  }
+
   /* One color per damage TYPE — the whole point is telling them apart at a glance.
      Matches the glow colors already used on the cells (spell-orange, heal-green,
      stun-purple, trap-amber, shield-steel) so the language stays consistent. */
@@ -137,6 +217,23 @@
   /* An execution is the opposite: the loudest thing on the board. */
   .fx-execute { color: #ff5252; font-size: 24px; text-shadow: 0 0 6px #000, 0 0 10px rgba(255,0,0,.9); }
 
+  /* WEEK 3 — the words for everything that ISN'T damage.
+     These are deliberately QUIETER than the damage numbers (smaller, softer colours).
+     A fight already throws a lot of white and orange; if a Bower's round-start buff
+     shouted as loudly as a crit, the numbers that decide the fight would get lost in
+     bookkeeping. Loud = "HP changed". Quiet = "a stat changed". */
+  .fx-buff    { color: #ffd54f; font-size: 12px; }   /* attack up — gold, the buff colour */
+  .fx-weaken  { color: #a1887f; font-size: 12px; }   /* attack down — muddy brown, gold gone dull */
+  .fx-guard   { color: #90a4ae; font-size: 12px; }   /* Bulwark shrugged — slate, cooler than absorb's steel */
+  .fx-reflect { color: #ff8a80; font-size: 13px; }   /* Thorns bounced back — rose, "your own damage" */
+  .fx-speed   { color: #4fc3f7; font-size: 13px; }   /* Haste — the same blue as the mana bar */
+  .fx-dash    { color: #80cbc4; font-size: 13px; letter-spacing: -.05em; }
+  .fx-summon  { color: #b39ddb; font-size: 15px; }   /* a body rose here — necromancer purple */
+  .fx-shield  { color: #cfd8dc; font-size: 12px; }   /* shield BANKED (fx-absorb is it being spent) */
+  /* Chips are the one "quiet" thing that isn't quiet — winning gold mid-fight is a
+     genuine event, and it's the only number here that changes the score. */
+  .fx-gold    { color: #ffd54f; font-size: 15px; text-shadow: 0 0 5px #000, 0 0 8px rgba(255,193,7,.7); }
+
   /* Row / column number labels around the board. */
   .coord-label {
     display: flex; align-items: center; justify-content: center;
@@ -152,7 +249,39 @@
     align-items: center;
     justify-content: center;
     user-select: none;
+    position: relative;           /* containing block for the status badge row below */
   }
+
+  /* STATUS BADGES (week 3). Absolutely positioned so they can NOT push the glyph and the
+     bars around — a 56px cell is already nearly full (figure 20 + hp 7 + shield 12 +
+     mana 4 + stat 11 ≈ 54px), and a badge row in the normal flow would shove the stat
+     line straight off the bottom. The dark pill behind each glyph is what keeps it
+     legible where it overlaps the figure. */
+  .badges {
+    position: absolute; top: -1px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 1px;
+    font-size: 9px; line-height: 1.2;
+    pointer-events: none;         /* never eat a drag meant for the cell underneath */
+    z-index: 2;
+  }
+  .badge {
+    background: rgba(0, 0, 0, 0.62);
+    border-radius: 3px; padding: 0 2px;
+    text-shadow: 0 0 2px #000;
+  }
+  /* One colour per status, matching the hue that status already uses elsewhere so the
+     language stays consistent: stun-purple, heal/immune-steel, poison-purple, buff-gold,
+     haste = the mana bar's blue, trap-amber. */
+  .bg-stun   { color: #ce93d8; }
+  .bg-invuln { color: #ffe082; }
+  .bg-hide   { color: #b9c2cf; }
+  .bg-poison { color: #ce93d8; }
+  .bg-slow   { color: #80cbc4; }
+  .bg-buff   { color: #ffd54f; }
+  .bg-haste  { color: #4fc3f7; }
+  .bg-dash   { color: #80cbc4; }
+  .bg-rally  { color: #ffd54f; }
+  .bg-inert  { color: #90a4ae; }
 
   .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
   /* Inner glyph layer. inline-block so a transform applies to it at all — an inline

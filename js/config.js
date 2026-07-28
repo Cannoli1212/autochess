@@ -732,6 +732,17 @@ const COMBAT_TICK_MS = 800;
 // ticks' events and make things LESS clear. Pure cosmetics — no gameplay effect.
 const FLASH_TICKS = 1;
 
+// How fast a RECORDED fight plays back on the "watch" tabs (week 3). Pure playback
+// speed — the fight was already fought, this only decides how quickly you flick through
+// the frames of it.
+//
+// It used to be a hard-coded 130ms, chosen when a replay was just glyphs sliding around
+// and skimming fast was the whole point. Now that replays carry effects, 130ms is too
+// quick to read: a damage number lives 900ms and a beam 320ms, so six ticks' worth would
+// pile up on screen at once. Slower than that, but still well under a live 800ms tick —
+// you're rewatching, not fighting. Turn it down if replays feel sluggish.
+const REPLAY_TICK_MS = 420;
+
 // Global stat multiplier (B4). Final stat = suitBase × rank × STAT_SCALE.
 // Bump to 100 for even bigger numbers, or 1 to shrink — one knob.
 const STAT_SCALE = 10;

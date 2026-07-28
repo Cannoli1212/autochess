@@ -151,7 +151,16 @@ function resolveStrikes() {
     const marks = strikeMarks[team].slice(0, strikeAllowance(team));
     marks.forEach(function (m) {
       const u = findUnitAt(m.x, m.y);
-      if (u && u.team === enemy) { u.hp = 0; killed = killed + 1; }
+      if (u && u.team === enemy) {
+        // Airstrike kills happen HERE, outside combatStep — which is why they were the one
+        // kind of death in the game that left no ghost. The unit's HP went to zero and the
+        // next render simply found an empty square, so a whole unit blinked out of
+        // existence with nothing to say it had been bombed. Emit the same death event
+        // combatStep does, so a struck unit topples and sinks like any other.
+        emitFx("death", { x: u.x, y: u.y, suit: u.suit, rank: u.rank, fused: u.fused, card: u.card });
+        u.hp = 0;
+        killed = killed + 1;
+      }
     });
   });
   if (killed > 0) units = units.filter(function (u) { return u.hp > 0; });
@@ -230,6 +239,13 @@ function startRound() {
   }
 
   render();
+  // Drain the queue NOW rather than letting the first combat tick do it. Everything above
+  // this line — the airstrike's deaths, and every round-start buff (the Bowers, Midas,
+  // Warlord's Levy, Rally) — emitted outside the combat loop, and playFx is only otherwise
+  // called from inside it. Left alone, those effects would sit queued for a full 800ms and
+  // then paint over a board where units have already moved, pointing at the wrong squares.
+  // clearFx() ran earlier in this function, so this drains only what round start produced.
+  playFx();
 
   message.textContent = "";
   turnStatus.textContent = (struck > 0 ? "✕ Airstrike hit " + struck + " unit(s)! " : "") + "⚔️ Fight!";
@@ -362,6 +378,10 @@ function runHeadlessMatchups(liveLine) {
   const size = armySize();                   // same army size as the live round just fought
   const saved = simInstall();                // swap live globals for a clean sandbox
   SIM_MODE = true;
+  // These two fights get REPLAYED on the watch tabs, so keep their effects even though
+  // they run headless (week 3). This is the only place the flag is ever turned on:
+  // simTableScan and sim.js don't touch it, so batch balance scans stay as cheap as ever.
+  RECORD_FX = true;
   tableRecap = [liveLine];
   tablePairing.headless.forEach(function (pair) {
     const a = seats[pair[0]], b = seats[pair[1]];
@@ -372,7 +392,13 @@ function runHeadlessMatchups(liveLine) {
       : (out.winnerId === a.id ? (a.name + " ✓ vs " + b.name) : (a.name + " vs " + b.name + " ✓"));
     matchRecordings.push({ label: tab, frames: frames });
   });
+  RECORD_FX = false;
   SIM_MODE = false;
+  // simInstall/simRestore don't know about the fx queue, so tidy it here: the last tick of
+  // the last headless matchup leaves its events behind, and they must not leak onto the
+  // live board or into the first frame of the next fight.
+  fxEvents = [];
+  lastTickFx = [];
   simRestore(saved);                         // restore the player's real board
 }
 

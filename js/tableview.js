@@ -45,11 +45,23 @@ function renderTable() {
 // reference kept as-is. snapshotFrame() does NO DOM work, so it's safe to call inside
 // the headless combat loop (SIM_MODE on) as well as the live one.
 function snapshotFrame() {
+  // WEEK 3: also capture the tick's EFFECTS. Everything else here is state — where units
+  // are, what their HP is — and a status badge is read straight off that state, which is
+  // why badges already replayed for free. Damage numbers, beams and death ghosts are
+  // different: they're events that happened AT a moment, and once playFx has drained them
+  // they're gone. lastTickFx is where playFx leaves them (see fx.js).
+  //
+  // Read and reset, because snapshotFrame is called exactly once per tick on both paths.
+  // Without the reset, a tick where nothing happened would replay the previous tick's
+  // effects all over again.
+  const fx = lastTickFx;
+  lastTickFx = [];
   return {
     units: units.map(function (u) { return Object.assign({}, u); }),
     traps: traps.map(function (t) { return Object.assign({}, t); }),
     strikeMarks: { player1: strikeMarks.player1.slice(), player2: strikeMarks.player2.slice() },
     tick: tickCount,
+    fx: fx,
   };
 }
 
@@ -58,6 +70,12 @@ function snapshotFrame() {
 function showFrame(f) {
   units = f.units; traps = f.traps; strikeMarks = f.strikeMarks; tickCount = f.tick;
   render();
+  // Replay the tick's effects in the same order the live fight does: render() first, so
+  // the numbers land over the board state they describe, then playFx. A copy is handed
+  // over because playFx empties the queue — the recording has to survive being watched
+  // more than once.
+  fxEvents = f.fx ? f.fx.slice() : [];
+  playFx();
 }
 
 // Draw the tab bar for this round's three fights (yours first). Hidden when there's
@@ -85,16 +103,25 @@ function watchMatch(idx) {
   renderMatchTabs();                    // refresh the active-tab highlight
   const rec = matchRecordings[idx];
   if (!rec || rec.frames.length === 0) return;
+  clearFx();                            // wipe effects from the last thing watched
+  replaying = true;                     // lets the lunge/flinch animations run (see board.js)
   let i = 0;
+  // REPLAY_TICK_MS, not the old hard-coded 130ms. Every effect in the game is sized
+  // against an 800ms combat tick — a beam runs 320ms, a damage number 900ms — so at 130ms
+  // a tick's effects would still be mid-flight when the next six ticks' worth landed on
+  // top of them. Fast enough to skim, slow enough that the effects read.
   replayTimer = setInterval(function () {
-    if (i >= rec.frames.length) { clearInterval(replayTimer); replayTimer = null; return; }
+    if (i >= rec.frames.length) {
+      clearInterval(replayTimer); replayTimer = null; replaying = false; return;
+    }
     showFrame(rec.frames[i]); i++;
-  }, 130);
+  }, REPLAY_TICK_MS);
 }
 
 // Tear down the tab bar + any running replay (called by nextRound / resetGame).
 function clearMatchTabs() {
   clearInterval(replayTimer); replayTimer = null;
+  replaying = false;
   matchRecordings = []; viewingTab = 0;
   const bar = document.getElementById("matchTabs");
   if (bar) { bar.style.display = "none"; bar.innerHTML = ""; }

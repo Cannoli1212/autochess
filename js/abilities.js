@@ -79,7 +79,14 @@ const ABILITIES = {
   // at its max HP. Migrated UNCHANGED from the old hard-coded check in combat.js.
   lifesteal: {
     onDealDamage: function (unit, ctx) {
+      // Emit the HP it ACTUALLY gained, not ctx.damage. A diamond at full health drinks
+      // nothing, and a green "+40" over a unit whose bar never moved would be a lie — the
+      // cap is exactly the thing worth seeing. (This is also why lifesteal can't just call
+      // heal(): that would fire the Cleric's green cell-pulse on every single swing.)
+      const before = unit.hp;
       unit.hp = Math.min(unit.maxHp, unit.hp + ctx.damage);
+      const drank = unit.hp - before;
+      if (drank > 0) emitFx("heal", { x: unit.x, y: unit.y, amount: drank });
     },
   },
 
@@ -106,6 +113,11 @@ const ABILITIES = {
         ctx.attacker.hp = ctx.attacker.hp - reflected;
         // Reflected damage: the thorns holder (unit) is the dealer, the attacker the victim.
         recordDamage(unit, ctx.attacker, reflected);
+        // Raw hp subtraction bypasses the whole damage pipeline, so it also bypassed the
+        // fx that pipeline emits — a Target Dummy could kill its attacker with the board
+        // showing NOTHING. Rose number on the ATTACKER's square: it's their own damage
+        // coming home, which is why it isn't white.
+        if (reflected > 0) emitFx("reflect", { x: ctx.attacker.x, y: ctx.attacker.y, amount: reflected });
       }
     },
   },
@@ -130,6 +142,7 @@ const ABILITIES = {
       const reflected = Math.round(ctx.damage * pct);
       ctx.attacker.hp = ctx.attacker.hp - reflected;
       recordDamage(unit, ctx.attacker, reflected);
+      if (reflected > 0) emitFx("reflect", { x: ctx.attacker.x, y: ctx.attacker.y, amount: reflected });
       // ...then get spikier for next time (the Berserk ramp), capped at rampCap.
       const cap = (ability.rampCap !== undefined) ? ability.rampCap : Infinity;
       unit.thornsReflect = Math.min(cap, pct + (ability.rampPerHit || 0));
@@ -288,6 +301,11 @@ const ABILITIES = {
       chips[enemy] = chips[enemy] - amount;
       chips[unit.team] = (chips[unit.team] || 0) + amount;
       if (!SIM_MODE) updateChipInfo();   // chip badges live-update mid-fight
+      // A chip badge ticking up in the corner is the only thing that used to happen here,
+      // and nobody watching a fight is looking at the corner. This is the one number in
+      // combat that changes the SCORE rather than the board, so it's emitted on the
+      // thief's own square, where the eye already is.
+      emitFx("gold", { x: unit.x, y: unit.y, amount: amount });
     },
   },
 
@@ -368,9 +386,20 @@ const ABILITIES = {
       const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
       const stacks = Math.round(base * (ability.stackMult || 1));
       const line = unitsAlongLine(unit, target, maxPierce);
+      // Draw the arrow to the LAST unit it actually reached — not to the one it was aimed
+      // at. That difference is the whole point of a piercing shot: you can see how deep
+      // this 9's pierce tier really goes, rather than guessing from where numbers landed.
+      if (line.length > 0) {
+        const last = line[line.length - 1];
+        emitAbilityShape(unit, "poisonVolley", "line", { x: last.x, y: last.y });
+      }
       for (let i = 0; i < line.length; i++) {
         applyPoison(unit, line[i], stacks);
         line[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the arrow strikes
+        // The volley's damage is a DoT, so nothing lands this tick and the one-tick cell
+        // flash was the entire feedback — you couldn't tell how many stacks went on, or
+        // even that the shot had fired. Purple, matching the poison ticks it becomes.
+        emitFx("poison", { x: line[i].x, y: line[i].y, amount: stacks });
       }
     },
   },
@@ -387,10 +416,13 @@ const ABILITIES = {
     onCast: function (unit, ctx, ability) {
       const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
       const stacks = Math.round(base * (ability.stackMult || 1));
-      const foes = enemiesNear(unit, ability.radius || 1);
+      const radius = ability.radius || 1;
+      emitAbilityShape(unit, "poisonNova", "ring", { radius: radius });   // the cloud's actual reach
+      const foes = enemiesNear(unit, radius);
       for (let i = 0; i < foes.length; i++) {
         applyPoison(unit, foes[i], stacks);
         foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the cloud touches
+        emitFx("poison", { x: foes[i].x, y: foes[i].y, amount: stacks });
       }
     },
   },
@@ -402,7 +434,12 @@ const ABILITIES = {
   // up first. Stacks across kills → a diamond Ace that keeps killing gets tanky.
   shieldOnKill: {
     onKill: function (unit, ctx, ability) {
-      unit.shield = (unit.shield || 0) + Math.round(ctx.target.maxHp * ability.fraction);
+      const banked = Math.round(ctx.target.maxHp * ability.fraction);
+      unit.shield = (unit.shield || 0) + banked;
+      // The shield BAR already showed the total, but a bar that silently gets wider on a
+      // kill doesn't connect the reward to the kill that earned it. "🛡+N" on the Ace's
+      // own square, the same tick its victim dies, does.
+      if (banked > 0) emitFx("shield", { x: unit.x, y: unit.y, amount: banked });
     },
   },
 
@@ -421,6 +458,10 @@ const ABILITIES = {
       const card = bench.splice(idx, 1)[0];             // pull a random bench card
       played[unit.team].push(card);                     // now a board card (discarded at round end)
       units.push(buildUnit(card, cell.x, cell.y, unit.team));
+      // Mark the square the body rose on. Without this a unit simply EXISTS next render,
+      // with nothing tying it to the kill that raised it — the most startling silent
+      // moment in the game, because a whole new fighter appears out of nowhere.
+      emitFx("summon", { x: cell.x, y: cell.y });
     },
   },
 
@@ -458,6 +499,10 @@ const ABILITIES = {
         if (dist <= ability.radius) {
           u.hp = u.hp - splash;
           recordDamage(unit, u, splash);   // cleave splash counts too
+          // Same blind spot as Thorns: raw hp subtraction never touched the fx layer, so
+          // a cleave through a packed crowd drained eight health bars in total silence.
+          // White, like an auto-attack — because that's what it is, spread sideways.
+          emitFx("hit", { x: u.x, y: u.y, amount: splash });
         }
       }
     },
@@ -496,6 +541,12 @@ const ABILITIES = {
       const dmg = Math.round(unit.attack * (power || 1));
       // QUADS — board-wide nuke: full fireball damage to EVERY living enemy, no target needed.
       if (unit.fireHitAll) {
+        // The quads nuke has NO target and no radius — it just hits everyone. Without a
+        // shape, a board-wide scorch is indistinguishable from several unrelated units
+        // taking damage in the same tick. One orb per victim would be eight projectiles;
+        // instead the caster throws a single huge ring, which says "this was ONE cast"
+        // and shows where it came from.
+        emitAbilityShape(unit, "fireball", "ring", { radius: Math.max(COLS, ROWS) });
         for (let i = 0; i < units.length; i++) {
           const u = units[i];
           if (u.team === unit.team || u.hp <= 0) continue;
@@ -507,6 +558,7 @@ const ABILITIES = {
       // PAIR/TRIPS — single target + splash (the classic Hellfire shape).
       const target = ctx.target;
       if (!target) return;
+      emitAbilityShape(unit, "fireball", "orb", { x: target.x, y: target.y, hasTarget: true });
       dealSpellDamage(unit, target, dmg);
       const radius = (unit.fireRadius !== undefined) ? unit.fireRadius : 0;
       if (radius <= 0) return;
@@ -552,6 +604,11 @@ const ABILITIES = {
       const power = (unit.auraSpellPower !== undefined) ? unit.auraSpellPower : ability.tiers[2].spellPower;
       const radius = (unit.auraRadius !== undefined) ? unit.auraRadius : 1;
       const dmg = Math.round(unit.attack * (power || 0.6));
+      // Draw the ring the handler is about to burn. This can't come from the central
+      // FX_KITS dispatch, because `radius` was baked per-tier onto this unit at round
+      // start — the table would have to guess it. Without the ring a pair and a quads
+      // look identical: numbers just appear on whoever happened to be standing close.
+      emitAbilityShape(unit, "burnAura", "ring", { radius: radius });
       const foes = enemiesNear(unit, radius);
       for (let i = 0; i < foes.length; i++) {
         dealSpellDamage(unit, foes[i], dmg);
@@ -716,8 +773,15 @@ const ABILITIES = {
     },
     onCast: function (unit, ctx, ability) {
       if (!unit.hasteSpeedMult) return;       // lone 4 (gated) — no ramp
+      // Capture the ORIGINAL speed the first time it ramps, so the board can tell "hasted"
+      // from "just naturally fast". Same captured-base pattern Berserk and Warpath already
+      // use for baseAttack — a stat you're about to change needs a before-picture.
+      if (unit.baseSpeed === undefined) unit.baseSpeed = unit.attackSpeed;
       const cap = (unit.hasteSpeedMax !== undefined) ? unit.hasteSpeedMax : Infinity;
+      const before = unit.attackSpeed;
       unit.attackSpeed = Math.min(cap, unit.attackSpeed * (1 + unit.hasteSpeedMult));
+      // Only announce a ramp that actually happened — at the cap the cast does nothing.
+      if (unit.attackSpeed > before) emitFx("speed", { x: unit.x, y: unit.y });
     },
   },
 
@@ -737,7 +801,12 @@ const ABILITIES = {
     },
     onKill: function (unit, ctx, ability) {
       if (!unit.killDashGain) return;                          // below trips — no dash
-      unit.moveSteps = Math.min(unit.killDashMax, (unit.moveSteps || 1) + unit.killDashGain);
+      const before = unit.moveSteps || 1;
+      unit.moveSteps = Math.min(unit.killDashMax, before + unit.killDashGain);
+      // Only announce a step actually GAINED — at the cap the kill banks nothing, and
+      // "»»" every kill would promise speed the unit isn't getting. Extra steps otherwise
+      // just read as the unit teleporting.
+      if (unit.moveSteps > before) emitFx("dash", { x: unit.x, y: unit.y });
     },
   },
 
@@ -792,6 +861,15 @@ const ABILITIES = {
       const jackpot = ability.jackpot && ability.jackpot[tier];
       if (jackpot && Math.random() < jackpot.chance) {
         unit.lastSpin = "777";
+        // THE JACKPOT ANNOUNCEMENT. This is the loudest thing that can happen in a fight —
+        // a heavy nuke that also MINTS chips — and it used to look exactly like any other
+        // spin. Three concentric gold rings expanding off the machine, so it reads as an
+        // event rather than a bigger number.
+        //
+        // Emitted as an event at cast time rather than drawn from `unit.lastSpin`: that
+        // field is never cleared, so anything reading it during render() would show a
+        // jackpot on that unit for the rest of the fight.
+        emitAbilityShape(unit, "slotMachine", "jackpot", {});
         if (target) {
           const dmg = Math.round(unit.attack * (jackpot.spellPower || 6));
           dealSpellDamage(unit, target, dmg);
@@ -808,6 +886,7 @@ const ABILITIES = {
         if (jackpot.gold) {                   // mint the payout (generated tokens)
           chips[unit.team] = (chips[unit.team] || 0) + jackpot.gold;
           if (!SIM_MODE) updateChipInfo();    // chip badges live-update mid-fight
+          emitFx("gold", { x: unit.x, y: unit.y, amount: jackpot.gold });   // say what it paid
         }
         return;
       }
@@ -819,11 +898,19 @@ const ABILITIES = {
       switch (slot.effect) {
         case "hellfire":   // 🎯 single-target nuke (rank 6 ♣♠); dealSpellDamage flashes the impact
           if (!target) return;
+          emitAbilityShape(unit, "slotMachine", "orb", { x: target.x, y: target.y, hasTarget: true });
           dealSpellDamage(unit, target, Math.round(unit.attack * (slot.spellPower || 2)));
           break;
         case "chain": {     // 🎯 bouncing bolt, damage decays each hop (slot original)
           if (!target) return;
           const line = chainTargets(unit, target, slot.jumps || 3, slot.jumpRange || 3);
+          // Hand the fx layer the hop order it can't work out for itself — chainTargets
+          // picks its route at cast time. fxChain staggers the segments so you can watch
+          // the bolt travel and literally count the jumps; before this the whole chain
+          // was just damage numbers appearing at once across the board.
+          emitAbilityShape(unit, "slotMachine", "chain", {
+            hits: line.map(function (u) { return { x: u.x, y: u.y }; }),
+          });
           const base = Math.round(unit.attack * (slot.spellPower || 1.5));
           const falloff = (slot.falloff !== undefined) ? slot.falloff : 0.7;
           for (let i = 0; i < line.length; i++) {
@@ -834,9 +921,14 @@ const ABILITIES = {
         case "poisonLine": {   // 🎯 piercing poison down a straight row (rank 9 ♣♠ Poison Volley)
           if (!target) return;
           const line = unitsAlongLine(unit, target, slot.pierce || 2);
+          if (line.length > 0) {
+            const last = line[line.length - 1];
+            emitAbilityShape(unit, "slotMachine", "line", { x: last.x, y: last.y });
+          }
           for (let i = 0; i < line.length; i++) {
             applyPoison(unit, line[i], slot.stacks || 10);   // inherits the drain + plague-jump
             line[i].spellHitUntil = tickCount + FLASH_TICKS;
+            emitFx("poison", { x: line[i].x, y: line[i].y, amount: slot.stacks || 10 });
           }
           break;
         }
@@ -846,6 +938,7 @@ const ABILITIES = {
           target.spellHitUntil = tickCount + FLASH_TICKS;
           break;
         case "nova": {      // 🛡 self-centered burn ring (rank 6 ♥♦ Hellfire Aura); no target needed
+          emitAbilityShape(unit, "slotMachine", "ring", { radius: slot.radius || 1 });
           const foes = enemiesNear(unit, slot.radius || 1);
           const dmg = Math.round(unit.attack * (slot.spellPower || 0.6));
           for (let i = 0; i < foes.length; i++) {
@@ -854,13 +947,21 @@ const ABILITIES = {
           }
           break;
         }
-        case "shield":      // 🛡 shield yourself (rank 2/5); same u.shield pool drained before HP
-          unit.shield = (unit.shield || 0) + Math.round(unit.maxHp * (slot.frac || 0.4));
+        case "shield": {    // 🛡 shield yourself (rank 2/5); same u.shield pool drained before HP
+          const banked = Math.round(unit.maxHp * (slot.frac || 0.4));
+          unit.shield = (unit.shield || 0) + banked;
+          emitFx("shield", { x: unit.x, y: unit.y, amount: banked });
           break;
-        case "haste":       // 🛡 ramp your own attack speed, capped (rank 4 Haste)
+        }
+        case "haste": {     // 🛡 ramp your own attack speed, capped (rank 4 Haste)
+          // Same captured base as hasteCast, so the ⚡ badge lights up for this reel too.
+          if (unit.baseSpeed === undefined) unit.baseSpeed = unit.attackSpeed;
+          const wasSpeed = unit.attackSpeed;
           unit.attackSpeed = Math.min((slot.cap !== undefined) ? slot.cap : Infinity,
                                       unit.attackSpeed * (1 + (slot.mult || 0.2)));
+          if (unit.attackSpeed > wasSpeed) emitFx("speed", { x: unit.x, y: unit.y });
           break;
+        }
         case "heal": {      // 🛡 mend the most-wounded ally in range (self ok); a no-op if nobody's hurt (Q♣ Cleric)
           const ally = lowestHpAllyInRange(unit, unit.castRange);
           if (ally) heal(unit, ally, Math.round(unit.attack * (slot.healPower || 4)));
@@ -894,6 +995,16 @@ const ABILITIES = {
       const back = farthestEnemy(unit);
       if (!back) return;                                   // no enemies → hold the shot
       const hit = firstEnemyOnLine(unit, back);            // first body on the ray (block) or the target
+      // Draw the line to whoever actually EATS the round, not to the backliner it was
+      // aimed at. That one choice is what makes a body-block readable: you see the shot
+      // stop dead at the frontliner, instead of watching the carry you were aiming for
+      // take no damage for no visible reason. This is the most confusing moment in the
+      // game today, and it's confusing purely because nothing was ever drawn.
+      //
+      // It has to be emitted here rather than by the central FX_KITS dispatch, because
+      // this ability targets "self" — ctx.target is null and the real aim is worked out
+      // inside this handler.
+      emitAbilityShape(unit, "sniperShot", "line", { x: hit.x, y: hit.y });
       dealSpellDamage(unit, hit, Math.round(unit.attack * (ability.spellPower || 2.5)));
     },
   },
@@ -906,7 +1017,13 @@ const ABILITIES = {
   warlordLevy: {
     onRoundStart: function (unit, ctx, ability) {
       const count = weakCardsPlayed[unit.team] || 0;
+      const before = unit.attack;
       unit.attack = Math.round(unit.attack * (1 + ability.perCard * count));
+      // Round-start buffs are the sneakiest silent abilities in the game: they finish
+      // before you've even looked at the board, so the King just IS stronger and nothing
+      // says the cheap bodies you fed him all game are the reason. One ▲ burst at the
+      // opening tick is the only moment this is ever visible.
+      if (unit.attack > before) emitFx("buff", { x: unit.x, y: unit.y, amount: unit.attack - before });
     },
   },
 
@@ -919,7 +1036,14 @@ const ABILITIES = {
     onRoundStart: function (unit, ctx, ability) {
       const gold = chips[unit.team] || 0;
       const mult = Math.max(ability.floor, 1 + (gold - ability.baseline) * ability.perChip);
+      const before = unit.attack;
       unit.attack = Math.round(unit.attack * mult);
+      // Midas swings BOTH ways — below the baseline he gets weaker. Show the loss too:
+      // "my chip lead is making this King" and "my chip deficit is unmaking him" are the
+      // same mechanic, and only seeing one of them would teach the wrong lesson.
+      const delta = unit.attack - before;
+      if (delta > 0) emitFx("buff",   { x: unit.x, y: unit.y, amount: delta });
+      if (delta < 0) emitFx("weaken", { x: unit.x, y: unit.y, amount: -delta });
     },
   },
 
@@ -939,6 +1063,11 @@ const ABILITIES = {
           u.maxHp = Math.round(u.maxHp * (1 + ability.hpMult));
         }
         if (ability.speedMult) u.attackSpeed = u.attackSpeed * (1 + ability.speedMult);
+        // One ▲ per unit touched — no amount, because it may have moved attack AND health
+        // AND speed and there's no single honest number for that (see playFx). The burst
+        // is the only thing that shows the blast radius, including the part players always
+        // forget: it just buffed the ENEMY's hearts too.
+        emitFx("buff", { x: u.x, y: u.y });
       }
     },
   },
@@ -970,6 +1099,12 @@ const ABILITIES = {
     onCast: function (unit, ctx, ability) {
       const partner = livingPartner(unit, ability.partnerRank);
       if (!partner) return;
+      // The royal bond drawn as a line between the two of them. The cast used to show a
+      // flash on HIM and a buff appearing on HER with nothing connecting the two, so the
+      // most interesting card interaction in the game read as two unrelated events.
+      // The partner is found by the bond, not by ctx.target, so only this handler knows
+      // where the other end of the line is.
+      emitAbilityShape(unit, "attackBuffPartner", "tether", { x: partner.x, y: partner.y, hasTarget: true });
       partner.atkBuffMult = ability.mult || 1.5;
       partner.atkBuffUntil = tickCount + (ability.buffTicks || 6);
     },
@@ -985,7 +1120,10 @@ const ABILITIES = {
     onCast: function (unit, ctx, ability) {
       const partner = livingPartner(unit, ability.partnerRank);
       if (!partner) return;
-      partner.shield = (partner.shield || 0) + Math.round(unit.maxHp * (ability.shieldFrac || 0.15));
+      const banked = Math.round(unit.maxHp * (ability.shieldFrac || 0.15));
+      emitAbilityShape(unit, "shieldPartner", "tether", { x: partner.x, y: partner.y, hasTarget: true });
+      partner.shield = (partner.shield || 0) + banked;
+      emitFx("shield", { x: partner.x, y: partner.y, amount: banked });
     },
   },
 
@@ -1030,6 +1168,13 @@ const ABILITIES = {
           }
           if (!has) ally.abilities.push({ kind: "lifesteal" });
         }
+        // Remember that this ally is standing inside a rally aura, purely so the board can
+        // show a ⚑ badge on it. The aura is baked from PLACEMENT positions and never
+        // re-checked, so without a mark there is no way at all to tell who caught the
+        // speech — which is exactly the decision the player made during placement.
+        // A counter, not a flag: two overlapping rallies both really do stack.
+        ally.ralliedBy = (ally.ralliedBy || 0) + 1;
+        emitFx("buff", { x: ally.x, y: ally.y });
       }
     },
   },
@@ -1054,7 +1199,13 @@ const ABILITIES = {
         const dist = Math.max(Math.abs(ally.x - unit.x), Math.abs(ally.y - unit.y));
         if (dist > ability.radius) continue;
         if (ally.baseAttack === undefined) ally.baseAttack = ally.attack;
-        ally.attack = ally.attack + Math.round(ally.baseAttack * ability.allyGain);
+        const gained = Math.round(ally.baseAttack * ability.allyGain);
+        ally.attack = ally.attack + gained;
+        // The ALLIES are the invisible half. The warpath unit's own ramp at least shows in
+        // its stat line, but a war cry that quietly strengthens everyone standing nearby
+        // looked exactly like nothing happening. Deliberately not emitted for the self
+        // ramp above: that would put a second number on every hit this unit already takes.
+        if (gained > 0) emitFx("buff", { x: ally.x, y: ally.y, amount: gained });
       }
     },
   },
@@ -1197,6 +1348,20 @@ function runAbilityHook(unit, hookName, ctx) {
     const ability = list[i];
     const kit = ABILITIES[ability.kind];
     if (kit && kit[hookName]) {
+      // WEEK 3: draw the ability, then run it. Everything about the LOOK is decided by
+      // FX_KITS in fxkits.js — this file stays free of colours and glyphs, exactly like
+      // combat.js stays free of them by emitting events instead of touching the DOM.
+      //
+      // Emitted BEFORE the handler so the picture is drawn from where things stood when
+      // the ability fired: a spell that kills its target still gets to show a projectile
+      // pointing at the square the target was standing on.
+      //
+      // The SIM_MODE check is here at the call site, not inside emitAbilityFx, and that
+      // placement is the whole point. This is the single hottest line in the game —
+      // every ability, on every hook, on every unit, on every tick, across thousands of
+      // headless games. Checking here means a balance scan pays one boolean and never
+      // builds an object. (combat.js's death loop guards itself the same way.)
+      if (!SIM_MODE) emitAbilityFx(unit, hookName, ability, ctx);
       kit[hookName](unit, ctx, ability);
     }
   }

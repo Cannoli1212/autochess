@@ -111,6 +111,12 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   applySynergies();                                // bake suit + poker buffs on the placed teams
   for (let i = 0; i < units.length; i++) runAbilityHook(units[i], "onRoundStart", {});
 
+  // Hand the round-start effects (the Bowers, Midas, Rally...) to the OPENING frame. They
+  // were emitted just above, outside the combat loop; without this they'd sit in the queue
+  // until the first combatStep drained them and would replay one tick late, on a board
+  // that had already moved. playFx does no DOM work here (SIM_MODE) — it only stashes them
+  // where snapshotFrame can pick them up. Mirrors the same call in gameflow's startRound.
+  if (frames) playFx();
   if (frames) frames.push(snapshotFrame());        // opening board (units placed, pre-fight)
   let result = null, guard = 0;
   while (result === null && guard < 1000) {

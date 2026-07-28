@@ -29,6 +29,71 @@ function findUnitAt(x, y) {
   return null;
 }
 
+// ── STATUS BADGES (week 3) ───────────────────────────────────────────────────
+//
+// A GLOW IS A MOMENT. A BADGE IS A STATE.
+//
+// Until now every status was a box-shadow on the cell. That works for a one-tick flash
+// ("this mage just cast"), but it fails for anything that LINGERS, for two reasons:
+//
+//  1. Every glow is a box-shadow on the same element at the same specificity, so only
+//     the last matching rule in styles.css wins. A stunned legendary showed the purple
+//     LEGENDARY glow and no hint of the stun — one status silently ate another.
+//  2. Some states never had any representation at all. Poison stacks were the worst:
+//     you saw purple damage ticking every tick with nothing saying the unit was poisoned,
+//     let alone how badly.
+//
+// Badges are separate flex children, so N statuses show N icons — nothing can eat
+// anything. The glows stay exactly as they were: when a glow wins its priority fight it
+// adds a nice bit of colour, and when it loses, the badge is still there. Additive, not
+// a replacement.
+//
+// This is a PURE function — unit in, HTML out, no DOM reads, no measurement. And because
+// render() blanks every cell's innerHTML each tick, a badge physically cannot go stale.
+// That's the whole reason it lives in the innerHTML template instead of being a class:
+// no second remove-list to fall out of sync (see the drift bug fixed above).
+//
+// The list is in PRIORITY order — only the first four fit in a 56px cell.
+// Each entry is [glyph, css class, plain-English name for the tooltip].
+function statusList(u) {
+  const b = [];
+  if (tickCount < (u.stunUntil || 0))         b.push(["✸", "bg-stun", "Stunned"]);
+  if (tickCount < (u.invulnUntil || 0))       b.push(["✦", "bg-invuln", "Invulnerable"]);
+  if (tickCount < (u.untargetableUntil || 0)) b.push(["◌", "bg-hide", "Untargetable"]);
+  // The count is the point: "poisoned" tells you far less than "poisoned for 30 a tick".
+  if (u.poison > 0)                           b.push(["☠" + u.poison, "bg-poison", "Poisoned (" + u.poison + "/tick)"]);
+  if (tickCount < (u.slowUntil || 0))         b.push(["🐌", "bg-slow", "Slowed"]);
+  if (tickCount < (u.atkBuffUntil || 0))      b.push(["▲", "bg-buff", "Attack buffed"]);
+  // Haste compares against the speed captured when the buff first applied. The epsilon is
+  // there because attackSpeed is a float multiplied repeatedly — an exact === would flicker.
+  if (u.baseSpeed && u.attackSpeed > u.baseSpeed + 0.001) b.push(["⚡", "bg-haste", "Hasted"]);
+  if ((u.moveSteps || 1) > 1)                 b.push(["»", "bg-dash", "Dashing"]);
+  if (u.ralliedBy > 0)                        b.push(["⚑", "bg-rally", "Rallied"]);
+  if (u.inert)                                b.push(["▣", "bg-inert", "Inert — cannot act"]);
+  return b;
+}
+
+// The badge row itself. Four fit; a fifth becomes a "+" so you know to check the tooltip
+// rather than being quietly lied to about how many statuses are running.
+function statusBadges(u) {
+  const b = statusList(u);
+  if (b.length === 0) return "";
+  const shown = b.slice(0, 4).map(function (x) {
+    return '<span class="badge ' + x[1] + '">' + x[0] + '</span>';
+  }).join("");
+  return '<div class="badges">' + shown + (b.length > 4 ? '<span class="badge">+</span>' : '') + '</div>';
+}
+
+// The same statuses in words, appended to the cell's hover tooltip. The board deliberately
+// speaks in glyphs — they read at a glance in a 56px square where words never could — so
+// this is the ONLY place the English lives. Not optional: a glyph you can't look up is
+// just decoration.
+function statusText(u) {
+  const b = statusList(u);
+  if (b.length === 0) return "";
+  return " · " + b.map(function (x) { return x[2]; }).join(" · ");
+}
+
 // Redraw the whole board from the units array. The array is the TRUTH;
 // the board is just a picture of it. Clear every cell, then draw each unit.
 function render() {
@@ -36,7 +101,16 @@ function render() {
   const allCells = document.querySelectorAll(".cell");
   for (let i = 0; i < allCells.length; i++) {
     allCells[i].innerHTML = "";
-    allCells[i].classList.remove("unit-player1", "unit-player2", "unique", "fused", "strike-mark", "casting", "spell-hit", "healed", "trap-sprung", "trap-player1", "trap-player2");
+    // Strip EVERY class except the permanent zone tint, rather than naming the ones to
+    // remove. The old list was a hand-maintained second copy of the add-list below, and it
+    // had already fallen three classes behind it — `stunned`, `buffed` and `vanished` were
+    // added but never removed, so the first unit to be stunned anywhere left that cell
+    // glowing purple for the rest of the fight, even after it moved away or died.
+    // A rule can't drift out of date the way a list can. player1-zone / player2-zone are
+    // the only classes buildBoard puts on a cell permanently (see below).
+    const zone = allCells[i].classList.contains("player1-zone") ? " player1-zone"
+               : allCells[i].classList.contains("player2-zone") ? " player2-zone" : "";
+    allCells[i].className = "cell" + zone;
     allCells[i].draggable = false;            // empty cells can't be dragged
   }
   for (let i = 0; i < units.length; i++) {
@@ -74,7 +148,7 @@ function render() {
     let figCls = "fig";
     let figVars = "";
     // Melee only: a ranged attacker already showed its shot as a tracer.
-    if (inCombat && tickCount < (u.lungeUntil || 0) && !isRangedSuit(u.suit)) {
+    if ((inCombat || replaying) && tickCount < (u.lungeUntil || 0) && !isRangedSuit(u.suit)) {
       figCls += " lunging";
       // Turn "3 squares right, 4 up" into a short nudge in that direction: divide by
       // the larger leg so a diagonal lunge travels the same distance as a straight one.
@@ -82,7 +156,7 @@ function render() {
       figVars = ";--lunge-dx:" + Math.round((u.lungeX / reach) * 13) + "px" +
                 ";--lunge-dy:" + Math.round((u.lungeY / reach) * 13) + "px";
     }
-    const glyphCls = (inCombat && tickCount < (u.flinchUntil || 0)) ? "fig-glyph flinching" : "fig-glyph";
+    const glyphCls = ((inCombat || replaying) && tickCount < (u.flinchUntil || 0)) ? "fig-glyph flinching" : "fig-glyph";
     // Mana bar (Phase 4): casters only. mana/manaMax as a blue fill under the HP bar.
     const manaBar = u.caster
       ? '<div class="manabar"><div class="manabar-fill" style="width:' +
@@ -99,6 +173,7 @@ function render() {
         '<span class="shield-amt">' + u.shield + '</span></div>'
       : '';
     cell.innerHTML =
+      statusBadges(u) +
       '<div class="' + figCls + '" style="color:' + su.unitColor + figVars + '">' +
         '<span class="' + glyphCls + '">' + figInner + '</span>' +
       '</div>' +
@@ -117,7 +192,7 @@ function render() {
     if (tickCount < (u.stunUntil || 0)) cell.classList.add("stunned");           // frozen (purple)
     if (tickCount < (u.atkBuffUntil || 0)) cell.classList.add("buffed");          // K♥ rally on Q♥ (gold) — lingers while active
     if (tickCount < (u.untargetableUntil || 0)) cell.classList.add("vanished");   // Ace of Spades hidden (faded) — lingers while active
-    cell.title = figureTitle(u);
+    cell.title = figureTitle(u) + statusText(u);   // glyphs on the board, words on hover
     cell.draggable = true;                     // a cell with a unit can be dragged
   }
 

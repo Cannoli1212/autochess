@@ -263,7 +263,18 @@ function attackTarget(attacker, target) {
 
   // Target's flat mitigation (Bulwark set incoming.reduce in onIncomingHit),
   // applied AFTER crit/bonuses. Floored at 1 so a shield is never full immunity.
-  if (incoming.reduce) ctx.damage = Math.max(1, ctx.damage - incoming.reduce);
+  //
+  // The fx is emitted HERE rather than in the bulwark kit, and it reports the damage
+  // ACTUALLY prevented, not the reduction the ability declared. Those differ constantly:
+  // the floor-at-1 means a 50-reduce tank hit for 12 only prevents 11. Emitting the
+  // declared number from the kit would have quietly overstated Bulwark on every small
+  // hit — exactly the hits it's supposed to be good against.
+  if (incoming.reduce) {
+    const before = ctx.damage;
+    ctx.damage = Math.max(1, ctx.damage - incoming.reduce);
+    const prevented = before - ctx.damage;
+    if (prevented > 0) emitFx("guard", { x: target.x, y: target.y, amount: prevented });
+  }
 
   // Royal redirect (K♥ bodyguards Q♥): if the target is a guarded Queen whose King
   // still lives, the hit's HP loss — and everything downstream of it (his shield,

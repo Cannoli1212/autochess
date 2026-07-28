@@ -25,6 +25,30 @@ let SIM_MODE = false;
 // a headless 10k-game scan never touches it.
 let fxEvents = [];
 
+// RECORDING FX FOR REPLAY (week 3). The table's "watch" tabs replay the two fights you
+// didn't personally fight, and those run headless — SIM_MODE on — so until now they
+// recorded no effects whatsoever and replayed as glyphs sliding silently around a board.
+//
+// The obvious fix (just let emitFx run in SIM_MODE) would tax every balance scan, which
+// is thousands of games where nobody is watching. So there are TWO flags, not one:
+//
+//   SIM_MODE   "there is no screen"    → skip DOM work
+//   RECORD_FX  "but keep the events"   → someone will want to WATCH this later
+//
+// Only runHeadlessMatchups turns RECORD_FX on, around the two fights that get recorded.
+// simTableScan and sim.js never touch it, so a 10,000-game scan is exactly as fast as
+// before. The two questions really are separate, which is why they're separate flags.
+let RECORD_FX = false;
+
+// The events from the tick that just finished, kept back after playFx drains the queue.
+//
+// The ordering problem this solves: a tick's snapshot is taken AFTER combatStep runs, and
+// combatStep ends by calling playFx — which empties fxEvents. So by the time anything
+// tries to record the tick, the events are already gone. playFx stashes them here on its
+// way out, and snapshotFrame picks them up. One mechanism, and it works identically for
+// the live fight and the headless ones.
+let lastTickFx = [];
+
 // Round system: which round we're on (1..5) and how many rounds each player
 // has won. The number of units you may place each round equals the round number.
 let roundNumber = 1;
@@ -114,6 +138,11 @@ let matchRecordings = [];    // [{ label, frames, ... }] for the round just foug
 let liveFrames = [];         // your live fight's snapshots, packaged at finishRound
 let viewingTab = 0;          // active tab in the match-tabs bar
 let replayTimer = null;      // setInterval driving a replay (null = not replaying)
+// True while a recorded fight is being played back on the board. render() gates the lunge
+// and flinch animations on `inCombat`, which finishRound switches off before any replay is
+// watchable — so without this flag the units in a replay would slide around without ever
+// swinging at each other. See board.js.
+let replaying = false;
 
 // Display identity for each seat (index 0 = you). Purely cosmetic — seats carry no
 // persistent deck in D1 (AI opponents draft a fresh hand each matchup, like the sim).
