@@ -41,6 +41,14 @@ function emitFx(type, data) {
 const FX_NUM_MS = 900;      // a floating damage number's lifetime  (fxFloat)
 const FX_BEAM_MS = 320;     // a shot tracer's lifetime             (fxTracer)
 const FX_REDIRECT_MS = 520; // a royal-redirect beam's lifetime     (fxRedirectBeam)
+const FX_DEATH_MS = 700;    // a dying unit's ghost glyph           (fxDeath)
+
+// How far apart the floating numbers of ONE tick are started, and how many of them
+// get pushed back before they start sharing a start time. 70 × 6 = 420ms of spread,
+// comfortably inside a 800ms tick, so a tick's numbers are all done before the next
+// tick's begin. See the note in playFx for why time beats space here.
+const FX_NUM_STAGGER_MS = 70;
+const FX_NUM_STAGGER_CAP = 6;
 
 // Effects between two units are colored by TEAM, not by suit. Suit colour would be
 // the obvious choice, but the two RANGED suits (♣ and ♠) share the exact same
@@ -144,6 +152,31 @@ function spawnFxRedirect(ev) {
   });
 }
 
+// A unit dying. The board can't show this itself: by the time render() next runs the
+// unit is already out of the units array, so the square just empties. Instead we leave
+// a GHOST of its glyph on the fx layer — the same rank+suit mark it had on the board,
+// including a fused unit's double glyph — and let it topple over and sink.
+//
+// Note this reads the SAME two helpers render() uses to draw a living unit, so a dead
+// unit's ghost always matches what was standing there a moment ago. The event carries
+// the plain facts (suit, rank, fused, card); building the glyph is the view's job.
+function spawnFxDeath(ev) {
+  const layer = document.getElementById("fxLayer");
+  if (!layer) return;
+  const pos = cellCenter(ev.x, ev.y);
+  if (!pos) return;
+  const su = SUITS[ev.suit];
+  const el = document.createElement("div");
+  el.className = "fx-ghost";
+  el.style.left = pos.left + "px";
+  el.style.top = pos.top + "px";
+  el.style.color = su.unitColor;
+  el.innerHTML = ev.fused ? fusedGlyphHTML(ev.card, "unitColor") : (rankLabel(ev.rank) + su.symbol);
+  layer.appendChild(el);
+  el.addEventListener("animationend", function () { el.remove(); });
+  setTimeout(function () { el.remove(); }, FX_DEATH_MS + 200);
+}
+
 // ── Playing ──────────────────────────────────────────────────────────────────
 
 // Drain the queue and animate everything in it. Called once per tick by combatStep,
@@ -159,6 +192,15 @@ function playFx() {
   // this tick and fan them out.
   const stackedOnCell = {};
 
+  // ...but fanning them out in SPACE only goes so far. A cell is 56px wide, and a
+  // busy tick puts a crit, a plain hit, a poison tick and a death ghost inside two
+  // neighbouring squares — they collide into soup no matter how they're nudged.
+  // So the numbers are also spread through TIME: each one in this tick starts a
+  // little after the last, in the order combat produced them, so you read them as a
+  // short sequence instead of a pile. Counted across the WHOLE tick, not per cell —
+  // the crowding is between adjacent cells, not just within one.
+  let numberIndex = 0;
+
   for (let i = 0; i < fxEvents.length; i++) {
     const ev = fxEvents[i];
 
@@ -166,6 +208,7 @@ function playFx() {
     // floating number anchored to one square.
     if (ev.type === "shot") { spawnFxShot(ev); continue; }
     if (ev.type === "redirect") { spawnFxRedirect(ev); continue; }
+    if (ev.type === "death") { spawnFxDeath(ev); continue; }
 
     const kind = FX_NUMBER_KINDS[ev.type];
     if (!kind) continue;                        // unknown type → ignore (never throw mid-fight)
@@ -188,6 +231,14 @@ function playFx() {
     // Sideways drift, alternating left/right, so a stack of numbers fans out into a
     // little spray instead of a single column. Read by the CSS animation.
     el.style.setProperty("--fx-drift", ((stack % 2 ? 1 : -1) * (4 + stack * 4)) + "px");
+    // The time stagger. Capped so a very busy tick can't push the last number past the
+    // end of the tick itself — beyond the cap they share a start, which is fine because
+    // by then they're spread across the board anyway. Needs animation-fill-mode: both
+    // in the CSS (not forwards) or the number would sit there fully opaque during its
+    // delay and the stagger would be invisible.
+    const delay = Math.min(numberIndex, FX_NUM_STAGGER_CAP) * FX_NUM_STAGGER_MS;
+    numberIndex = numberIndex + 1;
+    if (delay > 0) el.style.animationDelay = delay + "ms";
     layer.appendChild(el);
 
     // Clean up after yourself: the moment the float-and-fade finishes, the element
@@ -198,7 +249,7 @@ function playFx() {
     // paused animation never fires animationend — so alt-tabbing mid-fight would leave
     // the numbers stuck on the layer forever. A timer doesn't care about visibility.
     // (Removing an already-removed element is harmless, so the two can't conflict.)
-    setTimeout(function () { el.remove(); }, FX_NUM_MS + 200);
+    setTimeout(function () { el.remove(); }, FX_NUM_MS + delay + 200);
   }
 
   fxEvents = [];      // queue is spent

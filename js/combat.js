@@ -594,6 +594,23 @@ function combatStep() {
     if (units[i].hp <= 0) runAbilityHook(units[i], "onDeath", {});
   }
 
+  // FX (week 2 slice 4): announce the dead BEFORE they're removed — this is the last
+  // moment they exist, and up to now a dying unit simply blinked out of the array with
+  // no indication anything had happened. Deliberately its own pass, after every onDeath
+  // hook has run, so the list is exactly "who is about to be filtered out" rather than
+  // "who was at 0 HP earlier in the tick". Wrapped in the SIM_MODE check so a headless
+  // scan doesn't even walk the array (emitFx would no-op, but the loop still costs).
+  if (!SIM_MODE) {
+    for (let i = 0; i < units.length; i++) {
+      const dead = units[i];
+      if (dead.hp > 0) continue;
+      emitFx("death", {
+        x: dead.x, y: dead.y,
+        suit: dead.suit, rank: dead.rank, fused: dead.fused, card: dead.card,
+      });
+    }
+  }
+
   // Remove everyone who dropped to 0 hp this tick.
   units = units.filter(function (u) { return u.hp > 0; });
   render();

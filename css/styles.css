@@ -45,7 +45,11 @@
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 0 3px #000, 0 1px 2px #000;   /* stays legible over any cell color */
-    animation: fxFloat 900ms ease-out forwards;
+    /* `both`, not `forwards`: the numbers of one tick are started a little apart by
+       playFx (animation-delay), and only `both` applies the 0% keyframe — opacity 0 —
+       during that delay. With `forwards` a delayed number would sit on the board fully
+       opaque until its turn came, which is exactly the pile-up the stagger fixes. */
+    animation: fxFloat 900ms ease-out both;
   }
   @keyframes fxFloat {
     0%   { opacity: 0;   transform: translate(-50%, -50%) scale(0.7); }
@@ -92,6 +96,25 @@
     30%  { transform: scaleX(1); opacity: 1; }
     65%  { transform: scaleX(1); opacity: 0.95; }
     100% { transform: scaleX(1); opacity: 0; }
+  }
+
+  /* DEATH (week 2 slice 4): the ghost of a unit that just died. Same glyph and suit
+     colour it had on the board, left behind on the fx layer because the unit itself is
+     already gone from the units array by the next render. It rears up for a beat, then
+     topples over and sinks out of the square while fading — a fall, not a fade-out, so
+     a death is distinguishable at a glance from a unit merely walking away. */
+  .fx-ghost {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-size: 20px; font-weight: bold; line-height: 1;
+    white-space: nowrap;
+    text-shadow: 0 0 4px #000;
+    animation: fxDeath 700ms ease-in forwards;
+  }
+  @keyframes fxDeath {
+    0%   { opacity: 1;   transform: translate(-50%, -50%) scale(1)    rotate(0deg); }
+    22%  { opacity: 1;   transform: translate(-50%, -62%) scale(1.22) rotate(-10deg); }
+    100% { opacity: 0;   transform: translate(-50%, -6%)  scale(0.5)  rotate(-72deg); }
   }
 
   /* One color per damage TYPE — the whole point is telling them apart at a glance.
