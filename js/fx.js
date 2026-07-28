@@ -35,15 +35,27 @@ function emitFx(type, data) {
   fxEvents.push(data);
 }
 
+// ── Timings + palette ────────────────────────────────────────────────────────
+// Both MS values MUST match their animation durations in styles.css — they're the
+// fallback cleanup timers (see the note on hidden tabs in spawnFxNumber).
+const FX_NUM_MS = 900;      // a floating damage number's lifetime  (fxFloat)
+const FX_BEAM_MS = 320;     // a shot tracer's lifetime             (fxTracer)
+const FX_REDIRECT_MS = 520; // a royal-redirect beam's lifetime     (fxRedirectBeam)
+
+// Effects between two units are colored by TEAM, not by suit. Suit colour would be
+// the obvious choice, but the two RANGED suits (♣ and ♠) share the exact same
+// unitColor #e8e8e8 — so suit-colored tracers would be indistinguishable from each
+// other, while team color answers the question you actually have mid-fight: whose
+// shot was that? Chosen to match the blue/red the board already uses for the teams.
+const FX_TEAM_COLOR = { player1: "#6ca0ff", player2: "#ff7b7b" };
+
 // ── The look-up table: what each event TYPE looks like ───────────────────────
 // Data, not code — exactly like RANK_ABILITIES. Adding a new flavour of number is
 // a new line here, not a new branch in a function.
 //   cls    = the CSS class that colors it (see styles.css)
 //   prefix = text glued on the front of the amount
-// How long a floating number lives, in milliseconds. MUST match the fxFloat animation
-// duration in styles.css — it's the fallback cleanup timer below.
-const FX_NUM_MS = 900;
-
+//   text   = a FIXED word instead of a number (the "nothing happened" cases below);
+//            when present the event needs no `amount` at all
 const FX_NUMBER_KINDS = {
   hit:    { cls: "fx-hit",    prefix: "" },     // a normal auto-attack — white
   spell:  { cls: "fx-spell",  prefix: "" },     // spell damage (fireball etc.) — orange
@@ -51,7 +63,86 @@ const FX_NUMBER_KINDS = {
   poison: { cls: "fx-poison", prefix: "" },     // per-tick poison — purple
   trap:   { cls: "fx-trap",   prefix: "" },     // a trap springing — amber
   absorb: { cls: "fx-absorb", prefix: "🛡" },   // damage eaten by a shield — steel
+  // Why a hit you watched land did NOTHING. Until now these were completely silent:
+  // the swing animated, the HP bar didn't move, and there was no way to tell whether
+  // the unit dodged, was immune, or the game had a bug.
+  miss:    { cls: "fx-miss",    text: "MISS" },   // Slippery dodged it entirely
+  block:   { cls: "fx-block",   text: "IMMUNE" }, // an invulnerability window blanked it
+  execute: { cls: "fx-execute", text: "☠" },      // Executioner — lethal by rule, not by damage
 };
+
+// ── The BEAM primitive: draw a line between two board squares ────────────────
+// The second drawing tool after the floating number, and the one that unlocks most
+// of what's still to come — a shot tracer, a spell beam, a projectile path and an
+// aura tether are all "a line from A to B" with a different animation on top.
+//
+// How it works: a div is pinned at A's cell center, made exactly as WIDE as the
+// distance to B, and rotated to point at it. transform-origin "0 50%" (in the CSS)
+// means it pivots about its own left edge — the shooter — so the far end lands on
+// the target. The animation lives on an INNER div because the outer one's transform
+// is already spent on the rotation, and an animation would overwrite it.
+//
+// opts: { color, cls, ms }. Returns the element, or null if it can't be drawn.
+function fxBeam(from, to, opts) {
+  const layer = document.getElementById("fxLayer");
+  if (!layer) return null;
+  const a = cellCenter(from.x, from.y);
+  const b = cellCenter(to.x, to.y);
+  if (!a || !b) return null;                    // off-board square
+  const dx = b.left - a.left;
+  const dy = b.top - a.top;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return null;                     // same square — nothing to draw
+  // atan2 gives the angle in radians measured from "pointing right", which is exactly
+  // how an un-rotated div is already lying. × 180/π converts it to the degrees CSS wants.
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+  const beam = document.createElement("div");
+  beam.className = "fx-beam";
+  beam.style.left = a.left + "px";
+  beam.style.top = a.top + "px";
+  beam.style.width = len + "px";
+  beam.style.transform = "rotate(" + angle + "deg)";
+
+  const inner = document.createElement("div");
+  inner.className = "fx-beam-inner" + (opts.cls ? " " + opts.cls : "");
+  if (opts.color) {
+    inner.style.background = opts.color;
+    inner.style.boxShadow = "0 0 6px " + opts.color;   // a little glow so it reads on the dark board
+  }
+  beam.appendChild(inner);
+  layer.appendChild(beam);
+
+  // Same two-belt cleanup as the numbers — animationend never fires on a hidden tab.
+  inner.addEventListener("animationend", function () { beam.remove(); });
+  setTimeout(function () { beam.remove(); }, (opts.ms || FX_BEAM_MS) + 200);
+  return beam;
+}
+
+// A committed swing. RANGED suits get a tracer streaking to the target; melee gets
+// nothing here on purpose — a "tracer" across one adjacent square would just be a
+// smudge hidden under the glyphs. Melee motion is the next slice (a lunge on the
+// unit itself), which is why combat emits the event for every swing regardless.
+function spawnFxShot(ev) {
+  if (!isRangedSuit(ev.suit)) return;
+  fxBeam(ev.from, { x: ev.x, y: ev.y }, {
+    color: FX_TEAM_COLOR[ev.team] || "#ffffff",
+    cls: "fx-tracer",
+  });
+}
+
+// The royal redirect: a hit aimed at the Queen landed on her King instead. Drawn as
+// a GOLD beam from her square to his — gold because that's already the royal colour
+// on the board (the .buffed rally glow), and slower + thicker than a shot tracer so
+// it reads as "this hit was moved", not "someone fired". Second user of fxBeam, which
+// is the point of having built it as a primitive.
+function spawnFxRedirect(ev) {
+  fxBeam(ev.from, { x: ev.x, y: ev.y }, {
+    color: "#ffd54f",
+    cls: "fx-redirect",
+    ms: FX_REDIRECT_MS,
+  });
+}
 
 // ── Playing ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +161,12 @@ function playFx() {
 
   for (let i = 0; i < fxEvents.length; i++) {
     const ev = fxEvents[i];
+
+    // Effects that draw BETWEEN squares are handled first; everything else is a
+    // floating number anchored to one square.
+    if (ev.type === "shot") { spawnFxShot(ev); continue; }
+    if (ev.type === "redirect") { spawnFxRedirect(ev); continue; }
+
     const kind = FX_NUMBER_KINDS[ev.type];
     if (!kind) continue;                        // unknown type → ignore (never throw mid-fight)
     const pos = cellCenter(ev.x, ev.y);
@@ -81,7 +178,9 @@ function playFx() {
 
     const el = document.createElement("div");
     el.className = "fx-num " + kind.cls + (ev.crit ? " fx-crit" : "");
-    el.textContent = kind.prefix + Math.round(ev.amount) + (ev.crit ? "!" : "");
+    el.textContent = (kind.text !== undefined)
+      ? kind.text
+      : kind.prefix + Math.round(ev.amount) + (ev.crit ? "!" : "");
     // Position by the CENTER of the square. The CSS shifts it back by half its own
     // width (translateX(-50%)) so the number is centered no matter how wide it is.
     el.style.left = pos.left + "px";

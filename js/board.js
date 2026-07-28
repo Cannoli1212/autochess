@@ -53,6 +53,36 @@ function render() {
     // Draw the unit as its rank + suit, a health bar, then attack / current-health.
     // A fused unit shows both parts (7♠2♦) via the shared glyph helper (reads u.card).
     const figInner = u.fused ? fusedGlyphHTML(u.card, "unitColor") : (rankLabel(u.rank) + su.symbol);
+
+    // MOTION (week 2 slice 2): the lunge and the flinch.
+    //
+    // Why these live on the .fig markup and not as a class on the cell: a CSS
+    // animation only plays when its element is CREATED or the class is NEWLY added,
+    // and the loop above strips + re-adds every cell class in the same frame, which
+    // the browser coalesces into "no change" — so a cell-class animation would fire
+    // once and then never again. The .fig div below is rebuilt from scratch on every
+    // render, so an animation class on IT replays every tick, reliably.
+    //
+    // Two layers, because one element can only run one transform animation: the
+    // outer .fig lunges, the inner .fig-glyph shakes. A unit trading blows with a
+    // neighbour does both in the same tick, which is the common case.
+    //
+    // Both are gated on inCombat: after the fight ends tickCount stops advancing, so
+    // a stale stamp would still read as "in the future" and the units would twitch
+    // forever on the results screen (the older box-shadow flashes have the same quirk,
+    // but a frozen glow is invisible where a looping animation would not be).
+    let figCls = "fig";
+    let figVars = "";
+    // Melee only: a ranged attacker already showed its shot as a tracer.
+    if (inCombat && tickCount < (u.lungeUntil || 0) && !isRangedSuit(u.suit)) {
+      figCls += " lunging";
+      // Turn "3 squares right, 4 up" into a short nudge in that direction: divide by
+      // the larger leg so a diagonal lunge travels the same distance as a straight one.
+      const reach = Math.max(Math.abs(u.lungeX), Math.abs(u.lungeY)) || 1;
+      figVars = ";--lunge-dx:" + Math.round((u.lungeX / reach) * 13) + "px" +
+                ";--lunge-dy:" + Math.round((u.lungeY / reach) * 13) + "px";
+    }
+    const glyphCls = (inCombat && tickCount < (u.flinchUntil || 0)) ? "fig-glyph flinching" : "fig-glyph";
     // Mana bar (Phase 4): casters only. mana/manaMax as a blue fill under the HP bar.
     const manaBar = u.caster
       ? '<div class="manabar"><div class="manabar-fill" style="width:' +
@@ -69,7 +99,9 @@ function render() {
         '<span class="shield-amt">' + u.shield + '</span></div>'
       : '';
     cell.innerHTML =
-      '<div class="fig" style="color:' + su.unitColor + '">' + figInner + '</div>' +
+      '<div class="' + figCls + '" style="color:' + su.unitColor + figVars + '">' +
+        '<span class="' + glyphCls + '">' + figInner + '</span>' +
+      '</div>' +
       '<div class="hpbar"><div class="hpbar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
       shieldBar +
       manaBar +

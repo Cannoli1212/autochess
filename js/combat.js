@@ -202,15 +202,42 @@ function attackTarget(attacker, target) {
     attacker.mana = Math.min(attacker.manaMax, attacker.mana + attacker.manaPerAttack);
   }
 
+  // FX (week 2 slice 1): the swing COMMITS here. Emitted BEFORE the dodge and
+  // invulnerability checks below, so a shot that whiffs still shows the arrow
+  // flying — the miss label is the point, not a missing tracer. Note this carries
+  // `from` as well as the target square: the first event in the game that describes
+  // a RELATIONSHIP rather than a thing that happened to one unit. fx.js decides what
+  // a swing looks like (and whether a melee swing draws anything at all).
+  emitFx("shot", {
+    from: { x: attacker.x, y: attacker.y },
+    x: target.x, y: target.y,
+    team: attacker.team, suit: attacker.suit,
+  });
+
+  // FX (week 2 slice 2): remember WHICH WAY this unit just swung, for one tick. Unlike
+  // the queue above this is a STAMP on the unit — it isn't a moment in time, it's a
+  // property of how the unit should be drawn this tick, which is render()'s business.
+  // Same tick-stamp pattern as castFlashUntil. Stamped for every attacker; render()
+  // decides only melee units actually lunge (ranged already got a tracer).
+  attacker.lungeX = target.x - attacker.x;
+  attacker.lungeY = target.y - attacker.y;
+  attacker.lungeUntil = tickCount + 1;
+
   // Dodge: the target may avoid the hit entirely (Slippery). A whiff deals no
   // damage and fires no on-hit effects (crit, thorns, lifesteal).
   const incoming = { attacker: attacker, dodged: false };
   runAbilityHook(target, "onIncomingHit", incoming);
-  if (incoming.dodged) return;
+  if (incoming.dodged) {
+    emitFx("miss", { x: target.x, y: target.y });     // the swing came and did nothing — say so
+    return;
+  }
 
   // Invulnerability window (Q♥ mourning her fallen King) cancels the hit outright,
   // exactly like a dodge — no damage, no on-hit effects.
-  if (tickCount < (target.invulnUntil || 0)) return;
+  if (tickCount < (target.invulnUntil || 0)) {
+    emitFx("block", { x: target.x, y: target.y });    // blanked, not dodged — a different word
+    return;
+  }
 
   const s = SUITS[attacker.suit];
   const ctx = { target: target, damage: attacker.attack };
@@ -244,13 +271,23 @@ function attackTarget(attacker, target) {
   // unit royalSink returns null, so `sink` is just the target and nothing changes.
   const sink = royalSink(target) || target;
 
+  // FX: the King just stepped in front of a hit meant for his Queen. Without an arrow
+  // from her square to his, the damage simply appears on the wrong unit and the whole
+  // bodyguard mechanic is invisible. `sink !== target` is exactly "a redirect happened".
+  if (sink !== target) {
+    emitFx("redirect", { from: { x: target.x, y: target.y }, x: sink.x, y: sink.y });
+  }
+
   // Execute (rank 6's Executioner set ctx.execute in onAttack): the hit becomes
   // EXACTLY lethal — the sink's remaining HP plus any banked shield — so it kills
   // through Bulwark's floor-at-1 and the Aegis shield with no wasted overkill.
   // Math.max keeps a hit that was ALREADY lethal at its full number. Note the
   // royal redirect above: executing a guarded Queen kills her KING instead — the
   // bodyguard dies doing his job.
-  if (ctx.execute) ctx.damage = Math.max(ctx.damage, sink.hp + (sink.shield || 0));
+  if (ctx.execute) {
+    ctx.damage = Math.max(ctx.damage, sink.hp + (sink.shield || 0));
+    emitFx("execute", { x: sink.x, y: sink.y });   // this wasn't a big hit, it was an execution
+  }
 
   // Shield (Ace of Diamonds' Aegis): a damage POOL on the unit ACTUALLY taking the
   // hit that soaks damage before HP. It absorbs up to its remaining value and
@@ -276,6 +313,13 @@ function attackTarget(attacker, target) {
   // swallowed, white for the part that reached HP — so armor visibly does its job.
   if (absorbed > 0)    emitFx("absorb", { x: sink.x, y: sink.y, amount: absorbed });
   if (ctx.damage > 0)  emitFx("hit",    { x: sink.x, y: sink.y, amount: ctx.damage, crit: didCrit });
+
+  // FX: the unit that actually took the hit flinches for a tick (see render). Stamped
+  // on the SINK, so when the King eats a hit meant for his Queen, HE is the one who
+  // recoils — which is exactly the redirect you'd otherwise never see happening.
+  // Auto-attacks only: poison ticks every single tick, and a permanently shaking unit
+  // would read as noise rather than impact.
+  if (ctx.damage > 0 || absorbed > 0) sink.flinchUntil = tickCount + 1;
 
   // The unit that took the damage reacts (Thorns reflect, Berserk ramp).
   runAbilityHook(sink, "onDamaged", { attacker: attacker, damage: ctx.damage });
@@ -303,7 +347,10 @@ function attackTarget(attacker, target) {
 // onDamaged handlers only do raw HP math), so it can't recurse into another attack.
 function dealSpellDamage(caster, target, amount) {
   if (!target || target.hp <= 0 || amount <= 0) return;
-  if (tickCount < (target.invulnUntil || 0)) return;        // invulnerable → blanked
+  if (tickCount < (target.invulnUntil || 0)) {              // invulnerable → blanked
+    emitFx("block", { x: target.x, y: target.y });
+    return;
+  }
   const sink = royalSink(target) || target;                 // a guarded Queen redirects onto her King
   let dmg = amount;
   let soaked = 0;
@@ -496,6 +543,8 @@ function combatStep() {
         }
         if (trap.slow > 0) u.slowUntil = Math.max(u.slowUntil || 0, tickCount + trap.slow);
         u.trapSprungUntil = tickCount + FLASH_TICKS;      // flash the cell so you SEE it fire
+      } else {
+        emitFx("block", { x: u.x, y: u.y });              // invulnerable: the trap sprang for nothing
       }
       traps.splice(t, 1);                                 // single-use → gone once tripped
       break;                                              // one trap per unit per tick

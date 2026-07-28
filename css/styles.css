@@ -54,6 +54,46 @@
     100% { opacity: 0;   transform: translate(calc(-50% + var(--fx-drift, 0px)), -175%) scale(1); }
   }
 
+  /* ── The BEAM primitive (week 2 slice 1) ────────────────────────────────────
+     A line from one square to another: pinned at the shooter's cell center, made
+     as wide as the distance to the target, and rotated to point at it by fxBeam().
+     transform-origin 0 50% makes it pivot about its own left edge — the shooter —
+     and the negative margin lifts it so the line is centered on that point rather
+     than hanging below it. The outer div's transform is spent on the rotation, so
+     the animation goes on .fx-beam-inner. */
+  .fx-beam {
+    position: absolute;
+    height: 3px; margin-top: -1.5px;
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+  .fx-beam-inner {
+    width: 100%; height: 100%;
+    border-radius: 2px;
+    transform-origin: 0 50%;
+  }
+
+  /* A SHOT tracer: the bolt streaks out from the shooter (scaleX 0 → 1) and then
+     fades where it landed. Colored per TEAM inline by fxBeam, because the two
+     ranged suits share a unitColor and "whose shot was that" is the useful question.
+     320ms — a third of a 1000ms tick, so it's clearly one discrete shot. */
+  .fx-tracer { animation: fxTracer 320ms ease-out forwards; }
+  @keyframes fxTracer {
+    0%   { transform: scaleX(0); opacity: 0.9; }
+    55%  { transform: scaleX(1); opacity: 1; }
+    100% { transform: scaleX(1); opacity: 0; }
+  }
+
+  /* The ROYAL REDIRECT beam: thicker, gold, and slower than a shot — it holds at full
+     length for a beat so you can follow where the hit went before it fades. */
+  .fx-redirect { animation: fxRedirectBeam 520ms ease-out forwards; height: 5px; margin-top: -1px; }
+  @keyframes fxRedirectBeam {
+    0%   { transform: scaleX(0); opacity: 1; }
+    30%  { transform: scaleX(1); opacity: 1; }
+    65%  { transform: scaleX(1); opacity: 0.95; }
+    100% { transform: scaleX(1); opacity: 0; }
+  }
+
   /* One color per damage TYPE — the whole point is telling them apart at a glance.
      Matches the glow colors already used on the cells (spell-orange, heal-green,
      stun-purple, trap-amber, shield-steel) so the language stays consistent. */
@@ -65,6 +105,14 @@
   .fx-absorb { color: #cfd8dc; font-size: 12px; }
   /* A crit is the one number you should never miss: bigger and gold. */
   .fx-crit   { color: #ffd54f; font-size: 21px; text-shadow: 0 0 5px #000, 0 0 9px rgba(255,193,7,.8); }
+
+  /* The "nothing happened" words. Smaller and quieter than damage numbers — they're
+     an explanation, not an event, and shouldn't shout over the real numbers. MISS is
+     grey and italic (a whiff), IMMUNE is the same steel as the shield bar (a wall). */
+  .fx-miss    { color: #b9c2cf; font-size: 12px; font-style: italic; letter-spacing: .04em; }
+  .fx-block   { color: #cfd8dc; font-size: 12px; letter-spacing: .06em; }
+  /* An execution is the opposite: the loudest thing on the board. */
+  .fx-execute { color: #ff5252; font-size: 24px; text-shadow: 0 0 6px #000, 0 0 10px rgba(255,0,0,.9); }
 
   /* Row / column number labels around the board. */
   .coord-label {
@@ -84,6 +132,32 @@
   }
 
   .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
+  /* Inner glyph layer. inline-block so a transform applies to it at all — an inline
+     span ignores transforms. See the two-layer note in render(): .fig lunges, this
+     shakes, so a unit can do both in the same tick. */
+  .fig-glyph { display: inline-block; }
+
+  /* MELEE LUNGE (week 2 slice 2). The attacker leans into its swing and settles back.
+     Direction comes from --lunge-dx/--lunge-dy, set inline per unit by render() from
+     the square it swung at. 260ms of an 800ms tick — clearly one swing, well finished
+     before the next. Ranged units never get this class; they get a tracer instead. */
+  .fig.lunging { animation: figLunge 260ms ease-out; }
+  @keyframes figLunge {
+    0%   { transform: translate(0, 0); }
+    30%  { transform: translate(var(--lunge-dx, 0px), var(--lunge-dy, 0px)); }
+    100% { transform: translate(0, 0); }
+  }
+
+  /* FLINCH: the unit that actually took the hit recoils and flares for a moment.
+     Deliberately a SHAKE rather than a directional knock-back — the damage number
+     already says how hard, this only needs to say "this one, right here, got hit". */
+  .fig-glyph.flinching { animation: figFlinch 220ms ease-in-out; }
+  @keyframes figFlinch {
+    0%, 100% { transform: translateX(0);     filter: none; }
+    20%      { transform: translateX(-3px);  filter: brightness(1.9); }
+    50%      { transform: translateX(3px);   filter: brightness(1.9); }
+    75%      { transform: translateX(-2px);  filter: brightness(1.4); }
+  }
   .stat { font-size: 10px; color: #f0f0f0; margin-top: 1px; }
 
   /* Health bar under each unit. The dark track is a fixed width; the colored
