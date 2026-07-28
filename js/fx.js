@@ -212,12 +212,13 @@ function fxRing(x, y, radiusCells, opts) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return null;
   const pos = cellCenter(x, y);
-  const cell = cellAt(x, y);
-  if (!pos || !cell) return null;
-  // Cell width plus the grid's 2px gap = the distance from one cell's centre to the next.
+  const m = boardMetrics();
+  if (!pos || !m) return null;
+  // The distance from one cell's centre to the next — which is exactly what boardMetrics
+  // measured (see board.js). It used to be worked out here as "cell width + the 2px gap",
+  // which was the right number but assumed it knew the gap; this asks the grid itself.
   // A radius of N reaches N cells out in every direction, so the circle spans 2N+1 cells.
-  const pitch = cell.getBoundingClientRect().width + 2;
-  const diameter = (2 * radiusCells + 1) * pitch;
+  const diameter = (2 * radiusCells + 1) * m.px;
 
   const el = document.createElement("div");
   el.className = "fx-ring" + (opts.cls ? " " + opts.cls : "");

@@ -21,6 +21,44 @@ function cellCenter(x, y) {
   return { left: c.left - b.left + c.width / 2, top: c.top - b.top + c.height / 2 };
 }
 
+// ── BOARD GEOMETRY, MEASURED ONCE (week 4, the motion pass) ──────────────────
+//
+// cellCenter() above asks the browser where a square is, every single time it's called.
+// That is exactly right for something that happens once a tick — the browser always knows
+// the true answer, so nothing can drift out of date. It is exactly WRONG for something that
+// happens sixty times a second: each call is a querySelector plus two getBoundingClientRect
+// calls, and getBoundingClientRect forces the browser to stop and re-measure the whole page.
+// Sixteen units at 60fps would be roughly two thousand of those a second, and the game would
+// stutter — from measuring, not from moving.
+//
+// So: measure TWICE, at startup, and do arithmetic after that. The grid is perfectly regular
+// (every square the same size, every gap the same width), so where square 0,0 sits and how
+// far apart 0,0 and 1,1 are is enough to work out all 64 of them. Still measured rather than
+// hand-computed from the 56px/2px constants, for the same reason cellCenter is — the answer
+// stays correct if the CSS changes.
+let BOARD_METRICS = null;
+function boardMetrics() {
+  if (BOARD_METRICS) return BOARD_METRICS;
+  const a = cellCenter(0, 0);
+  const b = cellCenter(1, 1);
+  if (!a || !b) return null;                  // board not built yet
+  BOARD_METRICS = { ox: a.left, oy: a.top, px: b.left - a.left, py: b.top - a.top };
+  return BOARD_METRICS;
+}
+
+// Where should something at grid position x,y be drawn, in pixels from the board's top-left?
+// Same answer as cellCenter for whole numbers — but this one accepts FRACTIONS, which is the
+// whole point: 3.5 is halfway between squares 3 and 4, i.e. a unit mid-stride.
+function gridToPx(x, y) {
+  const m = boardMetrics();
+  if (!m) return null;
+  return { left: m.ox + x * m.px, top: m.oy + y * m.py };
+}
+
+// Throw the measurement away so the next call re-measures. Needed whenever the board is
+// rebuilt or the page is resized — otherwise every unit would be drawn against the old layout.
+function clearBoardMetrics() { BOARD_METRICS = null; }
+
 // Find the unit standing at x,y (or null if that square is empty).
 function findUnitAt(x, y) {
   for (let i = 0; i < units.length; i++) {
@@ -228,6 +266,9 @@ function render() {
 // Build the grid: column/row coordinate labels + the ROWS×COLS cells.
 // (Drag handlers are attached separately by placement.initInput.)
 function buildBoard() {
+  // The grid is about to change shape, so any cached measurement of it is now a lie.
+  clearBoardMetrics();
+
   // Tell the CSS grid its columns: a narrow first column for row numbers,
   // then COLS board columns of 56px.
   board.style.gridTemplateColumns = "26px repeat(" + COLS + ", 56px)";

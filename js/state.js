@@ -6,6 +6,31 @@
 // Each unit is an object that remembers where it stands AND which team it's on.
 let units = [];
 
+// A NAME TAG FOR THE VIEW (week 4, the motion pass). Every unit gets a `uid` — just a
+// number that counts up — stamped on it in buildUnit. The ENGINE never reads it: nothing
+// in combat, pathing or the abilities cares which unit is which, only where they stand.
+//
+// The renderer does care. Once each unit owns a lasting piece of the page that WALKS from
+// square to square (instead of being erased and re-drawn every tick), the drawing code has
+// to be able to ask "which unit is this shape for?" and get the same answer next tick. The
+// unit object itself can't answer that: a replay hands the board a fresh COPY of every unit
+// each frame, so comparing objects would say "all new units" sixty times a second. A plain
+// number survives being copied, so a replayed copy and the original agree.
+//
+// Never reset. Uids are unique for as long as the page is open, so two different recordings
+// can't accidentally claim the same shape on screen.
+let nextUid = 1;
+
+// Which tick's MOVEMENT are we in? Bumped once at the top of every combatStep. The motion
+// pass uses it to tell "this unit already stepped this tick, add to its route" from "this is
+// a brand new tick, start a fresh route" (see noteStep in combat.js).
+//
+// Deliberately NOT tickCount: tickCount is incremented at the END of combatStep, after the
+// board is drawn, and a recorded replay frame stores the already-incremented value — so a
+// replayed frame's tickCount is one ahead of what it was when the unit actually moved, and
+// a comparison against it would silently never match during a replay.
+let moveSeq = 0;
+
 // Combat state: whether a fight is happening, the repeating timer that
 // drives it, and a safety counter so a stuck battle can't loop forever.
 let inCombat = false;

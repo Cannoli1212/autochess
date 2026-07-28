@@ -63,6 +63,11 @@ document.getElementById("ptAddButton").addEventListener("click", function () {
 buildBoard();
 initInput();
 
+// The motion pass measures the board's geometry once and then does arithmetic (see
+// boardMetrics in board.js). A resize moves every square, so throw the measurement away
+// and let the next draw take a fresh one.
+window.addEventListener("resize", clearBoardMetrics);
+
 // Build the shoes + community deck, draw the opening hands, and paint the
 // starting board and texts.
 initShoes();

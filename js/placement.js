@@ -104,6 +104,8 @@ function buildUnit(card, x, y, team) {
   // Non-casters leave `caster` false and skip the pass entirely.
   const castAbility = castAbilityOf(card);
   return {
+    // The view's name tag for this unit (see nextUid in state.js). Not read by the engine.
+    uid: nextUid++,
     x: x, y: y, attack: card.attack, hp: card.hp, maxHp: card.hp,
     range: range,
     suit: card.suit, rank: card.rank, team: team,
