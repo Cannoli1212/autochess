@@ -208,9 +208,13 @@ function attackTarget(attacker, target) {
   // `from` as well as the target square: the first event in the game that describes
   // a RELATIONSHIP rather than a thing that happened to one unit. fx.js decides what
   // a swing looks like (and whether a melee swing draws anything at all).
+  // The uids let the view draw this from where the units actually ARE on screen rather than
+  // from the middle of their squares — mid-walk those differ, and a tracer to an empty
+  // square looks broken. Harmless everywhere else: anything that doesn't recognise a uid
+  // falls straight back to the square (see unitPos in motion.js).
   emitFx("shot", {
-    from: { x: attacker.x, y: attacker.y },
-    x: target.x, y: target.y,
+    from: { x: attacker.x, y: attacker.y, uid: attacker.uid },
+    x: target.x, y: target.y, uid: target.uid,
     team: attacker.team, suit: attacker.suit,
   });
 
@@ -228,14 +232,14 @@ function attackTarget(attacker, target) {
   const incoming = { attacker: attacker, dodged: false };
   runAbilityHook(target, "onIncomingHit", incoming);
   if (incoming.dodged) {
-    emitFx("miss", { x: target.x, y: target.y });     // the swing came and did nothing — say so
+    emitFx("miss", { x: target.x, y: target.y, uid: target.uid });   // the swing came and did nothing — say so
     return;
   }
 
   // Invulnerability window (Q♥ mourning her fallen King) cancels the hit outright,
   // exactly like a dodge — no damage, no on-hit effects.
   if (tickCount < (target.invulnUntil || 0)) {
-    emitFx("block", { x: target.x, y: target.y });    // blanked, not dodged — a different word
+    emitFx("block", { x: target.x, y: target.y, uid: target.uid });  // blanked, not dodged — a different word
     return;
   }
 
@@ -273,7 +277,7 @@ function attackTarget(attacker, target) {
     const before = ctx.damage;
     ctx.damage = Math.max(1, ctx.damage - incoming.reduce);
     const prevented = before - ctx.damage;
-    if (prevented > 0) emitFx("guard", { x: target.x, y: target.y, amount: prevented });
+    if (prevented > 0) emitFx("guard", { x: target.x, y: target.y, uid: target.uid, amount: prevented });
   }
 
   // Royal redirect (K♥ bodyguards Q♥): if the target is a guarded Queen whose King
@@ -286,7 +290,7 @@ function attackTarget(attacker, target) {
   // from her square to his, the damage simply appears on the wrong unit and the whole
   // bodyguard mechanic is invisible. `sink !== target` is exactly "a redirect happened".
   if (sink !== target) {
-    emitFx("redirect", { from: { x: target.x, y: target.y }, x: sink.x, y: sink.y });
+    emitFx("redirect", { from: { x: target.x, y: target.y, uid: target.uid }, x: sink.x, y: sink.y, uid: sink.uid });
   }
 
   // Execute (rank 6's Executioner set ctx.execute in onAttack): the hit becomes
@@ -297,7 +301,7 @@ function attackTarget(attacker, target) {
   // bodyguard dies doing his job.
   if (ctx.execute) {
     ctx.damage = Math.max(ctx.damage, sink.hp + (sink.shield || 0));
-    emitFx("execute", { x: sink.x, y: sink.y });   // this wasn't a big hit, it was an execution
+    emitFx("execute", { x: sink.x, y: sink.y, uid: sink.uid });   // this wasn't a big hit, it was an execution
   }
 
   // Shield (Ace of Diamonds' Aegis): a damage POOL on the unit ACTUALLY taking the
@@ -322,8 +326,8 @@ function attackTarget(attacker, target) {
   // hooks run pins the numbers to where the hit actually happened. Two separate
   // numbers when a shield partly ate the swing — steel for the part the shield
   // swallowed, white for the part that reached HP — so armor visibly does its job.
-  if (absorbed > 0)    emitFx("absorb", { x: sink.x, y: sink.y, amount: absorbed });
-  if (ctx.damage > 0)  emitFx("hit",    { x: sink.x, y: sink.y, amount: ctx.damage, crit: didCrit });
+  if (absorbed > 0)    emitFx("absorb", { x: sink.x, y: sink.y, uid: sink.uid, amount: absorbed });
+  if (ctx.damage > 0)  emitFx("hit",    { x: sink.x, y: sink.y, uid: sink.uid, amount: ctx.damage, crit: didCrit });
 
   // FX: the unit that actually took the hit flinches for a tick (see render). Stamped
   // on the SINK, so when the King eats a hit meant for his Queen, HE is the one who
@@ -359,7 +363,7 @@ function attackTarget(attacker, target) {
 function dealSpellDamage(caster, target, amount) {
   if (!target || target.hp <= 0 || amount <= 0) return;
   if (tickCount < (target.invulnUntil || 0)) {              // invulnerable → blanked
-    emitFx("block", { x: target.x, y: target.y });
+    emitFx("block", { x: target.x, y: target.y, uid: target.uid });
     return;
   }
   const sink = royalSink(target) || target;                 // a guarded Queen redirects onto her King
@@ -374,8 +378,8 @@ function dealSpellDamage(caster, target, amount) {
   sink.spellHitUntil = tickCount + FLASH_TICKS;             // Phase 4: flash the fireball impact
   recordDamage(caster, sink, dmg);                          // book it (ignores 0 = fully soaked)
   // Orange number so spell damage is unmistakably NOT a sword swing (see fx.js).
-  if (soaked > 0) emitFx("absorb", { x: sink.x, y: sink.y, amount: soaked });
-  if (dmg > 0)    emitFx("spell",  { x: sink.x, y: sink.y, amount: dmg });
+  if (soaked > 0) emitFx("absorb", { x: sink.x, y: sink.y, uid: sink.uid, amount: soaked });
+  if (dmg > 0)    emitFx("spell",  { x: sink.x, y: sink.y, uid: sink.uid, amount: dmg });
   runAbilityHook(sink, "onDamaged", { attacker: caster, damage: dmg });
   if (sink.hp <= 0) runAbilityHook(caster, "onKill", { target: sink });
 }
@@ -392,7 +396,7 @@ function heal(healer, target, amount) {
   const healed = target.hp - before;
   // Green "+N" — the ACTUAL amount restored, not the amount requested, so an
   // overheal on a nearly-full ally honestly shows the small number it really was.
-  if (healed > 0) emitFx("heal", { x: target.x, y: target.y, amount: healed });
+  if (healed > 0) emitFx("heal", { x: target.x, y: target.y, uid: target.uid, amount: healed });
   return healed;
 }
 
@@ -576,12 +580,12 @@ function combatStep() {
         if (trap.damage > 0) {
           u.hp = u.hp - trap.damage;
           recordDamage(null, u, trap.damage, trap.team);  // credit the trap owner's team
-          emitFx("trap", { x: u.x, y: u.y, amount: trap.damage });   // amber number
+          emitFx("trap", { x: u.x, y: u.y, uid: u.uid, amount: trap.damage });   // amber number
         }
         if (trap.slow > 0) u.slowUntil = Math.max(u.slowUntil || 0, tickCount + trap.slow);
         u.trapSprungUntil = tickCount + FLASH_TICKS;      // flash the cell so you SEE it fire
       } else {
-        emitFx("block", { x: u.x, y: u.y });              // invulnerable: the trap sprang for nothing
+        emitFx("block", { x: u.x, y: u.y, uid: u.uid });   // invulnerable: the trap sprang for nothing
       }
       traps.splice(t, 1);                                 // single-use → gone once tripped
       break;                                              // one trap per unit per tick
@@ -597,7 +601,7 @@ function combatStep() {
       units[i].hp = units[i].hp - units[i].poison;
       // Purple tick-damage number: poison is the one damage source with no attacker,
       // so without this it looks like units are losing HP for no reason at all.
-      emitFx("poison", { x: units[i].x, y: units[i].y, amount: units[i].poison });
+      emitFx("poison", { x: units[i].x, y: units[i].y, uid: units[i].uid, amount: units[i].poison });
       // Poison has no remembered source (stacks live on the victim), so there's no
       // dealer unit — pass null + the enemy team as the fallback so the enemy's
       // DEALT total still balances. The victim IS a unit, so its TAKEN is credited
@@ -642,7 +646,7 @@ function combatStep() {
       const dead = units[i];
       if (dead.hp > 0) continue;
       emitFx("death", {
-        x: dead.x, y: dead.y,
+        x: dead.x, y: dead.y, uid: dead.uid,
         suit: dead.suit, rank: dead.rank, fused: dead.fused, card: dead.card,
       });
     }

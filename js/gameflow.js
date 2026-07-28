@@ -157,7 +157,7 @@ function resolveStrikes() {
         // next render simply found an empty square, so a whole unit blinked out of
         // existence with nothing to say it had been bombed. Emit the same death event
         // combatStep does, so a struck unit topples and sinks like any other.
-        emitFx("death", { x: u.x, y: u.y, suit: u.suit, rank: u.rank, fused: u.fused, card: u.card });
+        emitFx("death", { x: u.x, y: u.y, uid: u.uid, suit: u.suit, rank: u.rank, fused: u.fused, card: u.card });
         u.hp = 0;
         killed = killed + 1;
       }

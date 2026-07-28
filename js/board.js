@@ -386,11 +386,14 @@ function renderUnits() {
     // over the course of the tick (motion.js); the rest of the time it just puts it there.
     motionCommit(u, node);
   }
-  // Anything left over belongs to a unit that died or was picked back up. Its shape goes.
+  // Anything left over belongs to a unit that died or was picked back up. Its shape goes —
+  // but motion.js keeps a note of where it was last drawn, so a death effect can appear
+  // where you last SAW the unit rather than where the engine had already moved it to.
   for (const uid in unitNodes) {
     if (seen[uid]) continue;
     unitNodes[uid].remove();
     delete unitNodes[uid];
+    motionDrop(uid);
   }
 }
 

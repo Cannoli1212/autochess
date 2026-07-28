@@ -123,8 +123,11 @@ const FX_NUMBER_KINDS = {
 function fxBeam(from, to, opts) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return null;
-  const a = cellCenter(from.x, from.y);
-  const b = cellCenter(to.x, to.y);
+  // unitPos, not cellCenter: a beam should touch the sprite you can SEE. If either end is a
+  // unit mid-walk, its square's centre is empty board by now. (motion.js — falls back to the
+  // square's centre for anything that isn't a unit, so nothing else changes.)
+  const a = unitPos(from);
+  const b = unitPos(to);
   if (!a || !b) return null;                    // off-board square
   const dx = b.left - a.left;
   const dy = b.top - a.top;
@@ -174,8 +177,8 @@ function fxBeam(from, to, opts) {
 function fxOrb(from, to, opts) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return null;
-  const a = cellCenter(from.x, from.y);
-  const b = cellCenter(to.x, to.y);
+  const a = unitPos(from);                      // where they're DRAWN, not their squares
+  const b = unitPos(to);
   if (!a || !b) return null;                    // off-board square
 
   const el = document.createElement("div");
@@ -208,10 +211,12 @@ function fxOrb(from, to, opts) {
 // lies about what the ability reaches.
 //
 // opts: { color, cls, ms }.
-function fxRing(x, y, radiusCells, opts) {
+// `ref` is normally the fx event's `from` ({x, y} plus a uid when a unit is involved), so a
+// nova is centred on the caster you can SEE rather than on the square it is walking off.
+function fxRing(ref, radiusCells, opts) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return null;
-  const pos = cellCenter(x, y);
+  const pos = unitPos(ref);
   const m = boardMetrics();
   if (!pos || !m) return null;
   // The distance from one cell's centre to the next — which is exactly what boardMetrics
@@ -274,7 +279,10 @@ function spawnFxRedirect(ev) {
 function spawnFxDeath(ev) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return;
-  const pos = cellCenter(ev.x, ev.y);
+  // Where the unit was last DRAWN, which for a unit that died mid-stride is not the square
+  // the engine had already walked it to. motion.js keeps that spot after the unit's shape is
+  // removed, precisely so the ghost appears where you last saw it instead of jumping ahead.
+  const pos = unitPos(ev);
   if (!pos) return;
   const su = SUITS[ev.suit];
   const el = document.createElement("div");
@@ -356,10 +364,13 @@ function emitAbilityFx(unit, hookName, ability, ctx) {
   emitFx("ability", {
     kind: ability.kind,
     shape: shape,
-    from: { x: unit.x, y: unit.y },
+    // uid on both ends so the shape is drawn from where these units actually are on screen
+    // rather than the middle of their squares (see unitPos in motion.js).
+    from: { x: unit.x, y: unit.y, uid: unit.uid },
     // With no target the effect happens ON the caster — that's what "pulse" is.
     x: t ? t.x : unit.x,
     y: t ? t.y : unit.y,
+    uid: t ? t.uid : unit.uid,
     hasTarget: !!t,
   });
 }
@@ -378,9 +389,10 @@ function emitAbilityShape(unit, kind, shape, data) {
   const ev = data || {};
   ev.kind = kind;
   ev.shape = shape;
-  ev.from = { x: unit.x, y: unit.y };
+  ev.from = { x: unit.x, y: unit.y, uid: unit.uid };
   if (ev.x === undefined) ev.x = unit.x;
   if (ev.y === undefined) ev.y = unit.y;
+  if (ev.uid === undefined) ev.uid = unit.uid;
   emitFx("ability", ev);
 }
 
@@ -389,8 +401,12 @@ function emitAbilityShape(unit, kind, shape, data) {
 function drawAbilityFx(ev) {
   const kit = FX_KITS[ev.kind];
   if (!kit) return;
-  const to = { x: ev.x, y: ev.y };
-  const icon = function () { fxIcon(ev.from.x, ev.from.y, kit.icon, kit.color); };
+  // Carry the uid along with the coordinates — without it the far end of every beam and orb
+  // falls back to the square's centre, which is the wrong place for a target mid-walk.
+  const to = { x: ev.x, y: ev.y, uid: ev.uid };
+  // Pass `ev.from` whole rather than picking x/y off it, so a uid on it rides along and the
+  // icon pops over the caster you can see instead of over the square it left (motion.js).
+  const icon = function () { fxIcon(ev.from, kit.icon, kit.color); };
 
   switch (ev.shape) {
     // A projectile, and a line, both need somewhere to travel TO. If the ability turned
@@ -407,7 +423,7 @@ function drawAbilityFx(ev) {
     // Self-centred nova. The radius comes from the handler because only it knows which
     // tier baked which size.
     case "ring":
-      fxRing(ev.from.x, ev.from.y, ev.radius || 1, { color: kit.color });
+      fxRing(ev.from, ev.radius || 1, { color: kit.color });
       icon();
       return;
     // A piercing shot. It's drawn to the LAST square actually struck, not to the square
@@ -436,7 +452,7 @@ function drawAbilityFx(ev) {
       if (bigEffectThisTick) { icon(); return; }
       bigEffectThisTick = true;
       for (let i = 0; i < 3; i++) {
-        const ring = fxRing(ev.from.x, ev.from.y, 1 + i * 2, { color: "#ffd54f", ms: 700 });
+        const ring = fxRing(ev.from, 1 + i * 2, { color: "#ffd54f", ms: 700 });
         if (ring) ring.style.animationDelay = (i * 110) + "ms";
       }
       icon();
@@ -449,10 +465,12 @@ function drawAbilityFx(ev) {
 // inherits their float-and-fade animation and their cleanup for free. It does NOT go
 // through the number loop's time stagger — it's lifted 14px instead, which keeps it clear
 // of the damage numbers on the caster's own square without needing to be sequenced.
-function fxIcon(x, y, glyph, color) {
+// `ref` is normally the fx event itself ({x, y} plus a uid when a unit is involved), so the
+// icon pops over the unit you can see rather than over its square.
+function fxIcon(ref, glyph, color) {
   const layer = document.getElementById("fxLayer");
   if (!layer) return;
-  const pos = cellCenter(x, y);
+  const pos = unitPos(ref);
   if (!pos || !glyph) return;
   const el = document.createElement("div");
   el.className = "fx-num fx-icon";
@@ -507,7 +525,7 @@ function playFx() {
 
     const kind = FX_NUMBER_KINDS[ev.type];
     if (!kind) continue;                        // unknown type → ignore (never throw mid-fight)
-    const pos = cellCenter(ev.x, ev.y);
+    const pos = unitPos(ev);                    // over the unit you can see, not its square
     if (!pos) continue;                         // off-board square
 
     const key = ev.x + "," + ev.y;

@@ -281,11 +281,34 @@ function motionReset() {
   for (const uid in MOTION) delete MOTION[uid];
 }
 
-// Where is this unit DRAWN right now, in board pixels? Mid-walk that is NOT the middle of
-// the square the engine says it occupies. Falls back to the square's centre when the unit
-// has no record yet.
-function motionPos(u) {
-  const m = u && MOTION[u.uid];
-  if (m && m.pts !== undefined) return { left: m.px, top: m.py };
-  return gridToPx(u.x, u.y);
+// A unit's shape has gone (it died, or was picked back up). Let go of the element, but KEEP
+// the last place we drew it. That remembered spot is what a death effect needs: a unit that
+// walked and then died should leave its ghost where you last SAW it, not one square further
+// on where the engine had already moved it to. Without this, dying looks like a small jump
+// forward — the exact thing this whole pass exists to get rid of.
+function motionDrop(uid) {
+  const m = MOTION[uid];
+  if (!m) return;
+  m.node = null;
+  m.body = null;
+  m.pts = null;
+}
+
+// WHERE IS THIS DRAWN RIGHT NOW, in board pixels?
+//
+// Effects should come out of the muzzle you can SEE, not out of the square the engine says
+// a unit occupies — mid-walk those are two different places, and a beam drawn to the
+// engine's square points at empty board.
+//
+// Takes anything with x and y on it, and uses the drawn position only when it also carries
+// a uid it recognises. So the fallback IS the old behaviour: a trap, an airstrike square, or
+// any effect whose emitter hasn't been taught about uids yet behaves exactly as it always
+// has. That is what makes switching every call site over safe in one go.
+function unitPos(ref) {
+  if (!ref) return null;
+  if (ref.uid) {
+    const m = MOTION[ref.uid];
+    if (m && m.px !== undefined && m.cell !== null) return { left: m.px, top: m.py };
+  }
+  return cellCenter(ref.x, ref.y);
 }
