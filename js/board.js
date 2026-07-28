@@ -7,6 +7,20 @@ function cellAt(x, y) {
   return document.querySelector('.cell[data-x="' + x + '"][data-y="' + y + '"]');
 }
 
+// Where is the CENTER of cell x,y, in pixels, measured from the board's top-left?
+// The fx overlay (#fxLayer) is stretched across the board, so these are exactly the
+// coordinates to place an effect at. Measured live with getBoundingClientRect instead
+// of computed from the 56px cell / 2px gap constants — the coordinate labels and any
+// future size change would break hand-done math, and the browser already knows the
+// answer. Returns null for an off-board coordinate.
+function cellCenter(x, y) {
+  const cell = cellAt(x, y);
+  if (!cell) return null;
+  const c = cell.getBoundingClientRect();
+  const b = board.getBoundingClientRect();
+  return { left: c.left - b.left + c.width / 2, top: c.top - b.top + c.height / 2 };
+}
+
 // Find the unit standing at x,y (or null if that square is empty).
 function findUnitAt(x, y) {
   for (let i = 0; i < units.length; i++) {
@@ -150,4 +164,15 @@ function buildBoard() {
       board.appendChild(cell);
     }
   }
+
+  // THE FX LAYER (Week 1 of the effects pass). One transparent sheet stretched over
+  // the whole grid, added LAST so it sits on top. Everything render() draws lives
+  // inside a .cell and is wiped every single tick (see the innerHTML clear above) —
+  // which means no animation there can ever last longer than one tick. Effects go
+  // here instead: render() never touches this element, so a damage number can float
+  // and fade across several ticks. pointer-events:none (in the CSS) keeps it from
+  // eating the drag-and-drop clicks meant for the cells underneath.
+  const fxLayer = document.createElement("div");
+  fxLayer.id = "fxLayer";
+  board.appendChild(fxLayer);
 }

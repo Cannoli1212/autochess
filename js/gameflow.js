@@ -199,6 +199,7 @@ function startRound() {
   placementOpen = false;         // lock the board once the fight begins
   tickCount = 0;
   traps = [];                    // clear any traplines from a prior fight
+  clearFx();                     // and any effects still floating from the last one
   resetRoundStats();             // zero the live damage panel for this fight
   startButton.disabled = true;
 
@@ -254,6 +255,7 @@ function startRound() {
 // automatically because it equals roundNumber.
 function nextRound() {
   clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
+  clearFx();                    // wipe any effects still floating from the fight just ended
   // Every unplayed leftover card carries into the next round automatically (holding
   // is no longer optional). We just clear any stale `held` flag; nothing is discarded
   // here — drawHands only tops the carried hand up to the new round's HAND_SCHEDULE.
@@ -307,6 +309,7 @@ function addPlaytestCard(team, suit, rank) {
 function resetGame() {
   clearInterval(combatTimer);   // stop any battle that's running
   clearMatchTabs();             // Phase D2: stop any replay + drop recordings
+  clearFx();                    // and clear the effect layer
   units = [];
   strikeMarks = { player1: [], player2: [] };
   roundNumber = 1;

@@ -17,6 +17,14 @@ let tickCount = 0;
 // skips all DOM work — that's what makes running thousands of fights fast.
 let SIM_MODE = false;
 
+// VISUAL FX QUEUE (Week 1 of the effects pass). Combat doesn't draw anything — it
+// EMITS what happened as plain data (see emitFx in fx.js), one entry per event, and
+// the view drains this list once a tick to animate it. Same inversion as the ability
+// hooks: the engine reports, the renderer decides how it looks. Always emptied by
+// playFx() at the end of a tick, so it never grows; emitFx is a no-op in SIM_MODE, so
+// a headless 10k-game scan never touches it.
+let fxEvents = [];
+
 // Round system: which round we're on (1..5) and how many rounds each player
 // has won. The number of units you may place each round equals the round number.
 let roundNumber = 1;

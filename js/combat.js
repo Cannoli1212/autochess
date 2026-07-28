@@ -218,7 +218,8 @@ function attackTarget(attacker, target) {
   // Crit (stat): chance to double damage (spade base + spade synergy, baked into
   // critChance at Round Start). Fall back to the suit's base crit.
   const critChance = (attacker.critChance !== undefined) ? attacker.critChance : (s.crit || 0);
-  if (Math.random() < critChance) ctx.damage = ctx.damage * 2;
+  let didCrit = false;                                     // remembered only so the fx layer can flag it
+  if (Math.random() < critChance) { ctx.damage = ctx.damage * 2; didCrit = true; }
 
   // TEMPORARY ATTACK BUFF (King of Hearts' rally on his Queen): a timed outgoing-damage
   // window, checked like invulnUntil/stunUntil. While `tickCount < atkBuffUntil`, the
@@ -255,8 +256,9 @@ function attackTarget(attacker, target) {
   // hit that soaks damage before HP. It absorbs up to its remaining value and
   // depletes by that much, so only the leftover reaches HP. Done before HP is
   // touched so a banked shield can fully negate a hit (unlike Bulwark, floored at 1).
+  let absorbed = 0;                                        // hoisted so the fx layer can show it
   if (sink.shield > 0) {
-    const absorbed = Math.min(sink.shield, ctx.damage);
+    absorbed = Math.min(sink.shield, ctx.damage);
     sink.shield = sink.shield - absorbed;
     ctx.damage = ctx.damage - absorbed;
   }
@@ -267,6 +269,13 @@ function attackTarget(attacker, target) {
   // as damage the ATTACKER dealt and the sink's team took. ctx.damage is 0 when a
   // shield fully soaked the hit, and recordDamage ignores 0 — soaked hits don't count.
   recordDamage(attacker, sink, ctx.damage);
+
+  // Tell the fx layer what just landed (see fx.js). Emitting BEFORE the reaction
+  // hooks run pins the numbers to where the hit actually happened. Two separate
+  // numbers when a shield partly ate the swing — steel for the part the shield
+  // swallowed, white for the part that reached HP — so armor visibly does its job.
+  if (absorbed > 0)    emitFx("absorb", { x: sink.x, y: sink.y, amount: absorbed });
+  if (ctx.damage > 0)  emitFx("hit",    { x: sink.x, y: sink.y, amount: ctx.damage, crit: didCrit });
 
   // The unit that took the damage reacts (Thorns reflect, Berserk ramp).
   runAbilityHook(sink, "onDamaged", { attacker: attacker, damage: ctx.damage });
@@ -297,14 +306,18 @@ function dealSpellDamage(caster, target, amount) {
   if (tickCount < (target.invulnUntil || 0)) return;        // invulnerable → blanked
   const sink = royalSink(target) || target;                 // a guarded Queen redirects onto her King
   let dmg = amount;
+  let soaked = 0;
   if (sink.shield > 0) {                                     // shield soaks before HP (like autos)
-    const absorbed = Math.min(sink.shield, dmg);
-    sink.shield = sink.shield - absorbed;
-    dmg = dmg - absorbed;
+    soaked = Math.min(sink.shield, dmg);
+    sink.shield = sink.shield - soaked;
+    dmg = dmg - soaked;
   }
   sink.hp = sink.hp - dmg;
   sink.spellHitUntil = tickCount + FLASH_TICKS;             // Phase 4: flash the fireball impact
   recordDamage(caster, sink, dmg);                          // book it (ignores 0 = fully soaked)
+  // Orange number so spell damage is unmistakably NOT a sword swing (see fx.js).
+  if (soaked > 0) emitFx("absorb", { x: sink.x, y: sink.y, amount: soaked });
+  if (dmg > 0)    emitFx("spell",  { x: sink.x, y: sink.y, amount: dmg });
   runAbilityHook(sink, "onDamaged", { attacker: caster, damage: dmg });
   if (sink.hp <= 0) runAbilityHook(caster, "onKill", { target: sink });
 }
@@ -318,7 +331,11 @@ function heal(healer, target, amount) {
   const before = target.hp;
   target.hp = Math.min(target.maxHp, target.hp + amount);
   target.healFlashUntil = tickCount + FLASH_TICKS;           // Slice 2: glow the mended unit green
-  return target.hp - before;
+  const healed = target.hp - before;
+  // Green "+N" — the ACTUAL amount restored, not the amount requested, so an
+  // overheal on a nearly-full ally honestly shows the small number it really was.
+  if (healed > 0) emitFx("heal", { x: target.x, y: target.y, amount: healed });
+  return healed;
 }
 
 // The most-WOUNDED living ally within `range` of `unit` (itself included — a Cleric can
@@ -475,6 +492,7 @@ function combatStep() {
         if (trap.damage > 0) {
           u.hp = u.hp - trap.damage;
           recordDamage(null, u, trap.damage, trap.team);  // credit the trap owner's team
+          emitFx("trap", { x: u.x, y: u.y, amount: trap.damage });   // amber number
         }
         if (trap.slow > 0) u.slowUntil = Math.max(u.slowUntil || 0, tickCount + trap.slow);
         u.trapSprungUntil = tickCount + FLASH_TICKS;      // flash the cell so you SEE it fire
@@ -491,6 +509,9 @@ function combatStep() {
   for (let i = 0; i < units.length; i++) {
     if (units[i].poison) {
       units[i].hp = units[i].hp - units[i].poison;
+      // Purple tick-damage number: poison is the one damage source with no attacker,
+      // so without this it looks like units are losing HP for no reason at all.
+      emitFx("poison", { x: units[i].x, y: units[i].y, amount: units[i].poison });
       // Poison has no remembered source (stacks live on the victim), so there's no
       // dealer unit — pass null + the enemy team as the fallback so the enemy's
       // DEALT total still balances. The victim IS a unit, so its TAKEN is credited
@@ -527,6 +548,7 @@ function combatStep() {
   // Remove everyone who dropped to 0 hp this tick.
   units = units.filter(function (u) { return u.hp > 0; });
   render();
+  playFx();     // drain this tick's effect queue over the board we just drew (fx.js)
 
   // Safety valve: if a battle somehow stalls, end it as a draw.
   tickCount = tickCount + 1;

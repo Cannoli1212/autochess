@@ -16,7 +16,55 @@
     background: #333;              /* shows through the gaps as grid lines */
     padding: 2px;
     border-radius: 6px;
+    position: relative;            /* anchors #fxLayer on top of the grid */
   }
+
+  /* ── THE FX LAYER (effects pass, week 1) ────────────────────────────────────
+     A transparent sheet stretched over the whole board. render() rebuilds the
+     cells every tick, but it never touches this element — so an effect spawned
+     here survives across ticks and can run a real animation. pointer-events:none
+     means clicks and drags pass straight through to the cells underneath. */
+  #fxLayer {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    overflow: hidden;              /* an effect can't spill outside the board */
+    z-index: 20;
+    border-radius: 6px;
+  }
+
+  /* A floating damage/heal number. Spawned by playFx() at a square's center; the
+     -50% pull centers it on that point regardless of how many digits it has. It
+     rises, drifts sideways (--fx-drift, set per number so a stack fans out) and
+     fades, then deletes itself on animationend. 900ms is deliberately LONGER than
+     the 500ms combat tick — overlapping numbers are exactly what makes a busy
+     fight readable, and the layer is what makes that possible. */
+  .fx-num {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-size: 15px; font-weight: bold; line-height: 1;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;   /* stays legible over any cell color */
+    animation: fxFloat 900ms ease-out forwards;
+  }
+  @keyframes fxFloat {
+    0%   { opacity: 0;   transform: translate(-50%, -50%) scale(0.7); }
+    15%  { opacity: 1;   transform: translate(-50%, -60%) scale(1.1); }
+    35%  { opacity: 1;   transform: translate(calc(-50% + var(--fx-drift, 0px)), -85%) scale(1); }
+    100% { opacity: 0;   transform: translate(calc(-50% + var(--fx-drift, 0px)), -175%) scale(1); }
+  }
+
+  /* One color per damage TYPE — the whole point is telling them apart at a glance.
+     Matches the glow colors already used on the cells (spell-orange, heal-green,
+     stun-purple, trap-amber, shield-steel) so the language stays consistent. */
+  .fx-hit    { color: #ffffff; }
+  .fx-spell  { color: #ff8a50; }
+  .fx-heal   { color: #7bd67f; }
+  .fx-poison { color: #ce93d8; }
+  .fx-trap   { color: #ffca28; }
+  .fx-absorb { color: #cfd8dc; font-size: 12px; }
+  /* A crit is the one number you should never miss: bigger and gold. */
+  .fx-crit   { color: #ffd54f; font-size: 21px; text-shadow: 0 0 5px #000, 0 0 9px rgba(255,193,7,.8); }
 
   /* Row / column number labels around the board. */
   .coord-label {
