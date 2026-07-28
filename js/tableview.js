@@ -104,6 +104,8 @@ function watchMatch(idx) {
   const rec = matchRecordings[idx];
   if (!rec || rec.frames.length === 0) return;
   clearFx();                            // wipe effects from the last thing watched
+  motionReset();                        // and forget where the last thing watched left its units,
+                                        // or they'd walk in from those old squares (motion.js)
   replaying = true;                     // lets the lunge/flinch animations run (see board.js)
   let i = 0;
   // REPLAY_TICK_MS, not the old hard-coded 130ms. Every effect in the game is sized
@@ -122,6 +124,7 @@ function watchMatch(idx) {
 function clearMatchTabs() {
   clearInterval(replayTimer); replayTimer = null;
   replaying = false;
+  motionReset();                        // no half-finished walks left running (motion.js)
   matchRecordings = []; viewingTab = 0;
   const bar = document.getElementById("matchTabs");
   if (bar) { bar.style.display = "none"; bar.innerHTML = ""; }

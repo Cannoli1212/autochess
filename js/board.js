@@ -366,15 +366,6 @@ function paintUnitNode(node, u) {
   }
 }
 
-// Put a unit's shape on its square, immediately. The motion pass replaces this call with a
-// gliding version; until then (and always for a placement drag, which should snap rather
-// than slide) it's a straight jump to the square, exactly as the board has always behaved.
-function positionUnitNode(node, u) {
-  const p = gridToPx(u.x, u.y);
-  if (!p) return;
-  node.style.transform = "translate3d(" + p.left + "px, " + p.top + "px, 0)";
-}
-
 // Match the units array up with the shapes on screen: give any new unit a shape, repaint
 // every shape, and remove the shapes of units that are no longer on the board.
 function renderUnits() {
@@ -391,7 +382,9 @@ function renderUnits() {
       layer.appendChild(node);
     }
     paintUnitNode(node, u);
-    positionUnitNode(node, u);
+    // Where to draw it. During a fight this sets the unit WALKING toward its new square
+    // over the course of the tick (motion.js); the rest of the time it just puts it there.
+    motionCommit(u, node);
   }
   // Anything left over belongs to a unit that died or was picked back up. Its shape goes.
   for (const uid in unitNodes) {
@@ -408,6 +401,7 @@ function clearUnitNodes() {
     unitNodes[uid].remove();
     delete unitNodes[uid];
   }
+  motionReset();   // the walk records point at shapes that no longer exist
 }
 
 // Build the grid: column/row coordinate labels + the ROWS×COLS cells.
