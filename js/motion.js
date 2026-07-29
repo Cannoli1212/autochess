@@ -105,10 +105,12 @@ function motionCommit(u, node) {
       rec[rec.length - 1].x === u.x && rec[rec.length - 1].y === u.y) {
     cells = rec;
   }
-  m.pts = cells.map(function (c) {
-    const p = gridToPx(c.x, c.y);
-    return { x: p.left, y: p.top };
-  });
+  // Keep the route as SQUARES as well as as pixels. The pixels are what the animation
+  // actually walks along, but if the board is ever re-measured mid-walk (see
+  // motionRegeometry) the squares are the only thing still meaningful — pixels measured
+  // against the old layout are just wrong numbers.
+  m.cells = cells.map(function (c) { return { x: c.x, y: c.y }; });
+  m.pts = motionRoutePx(m.cells);
   m.n = m.pts.length - 1;
   m.dur = motionTickMs();
 
@@ -295,6 +297,69 @@ function motionWrite(m) {
 }
 
 // ── HOUSEKEEPING ─────────────────────────────────────────────────────────────
+
+// Turn a route of SQUARES into a route of pixels, using the board's geometry as it is now.
+function motionRoutePx(cells) {
+  return cells.map(function (c) {
+    const p = gridToPx(c.x, c.y);
+    return { x: p.left, y: p.top };
+  });
+}
+
+// ── THE BOARD QUIETLY RESIZES ITSELF ─────────────────────────────────────────
+//
+// This is the one that bit, and it is worth spelling out because nothing about it is
+// obvious. The board sits in a flex row next to the damage panel, and that panel GROWS as a
+// fight goes on — more cards have dealt damage, so the list gets longer. The row stretches
+// the BOARD to match, and the eight grid rows share out the extra height between them. The
+// distance from one square's centre to the next stops being 58px and becomes 58.4375px.
+//
+// While units lived inside the squares this did not matter in the slightest: a unit WAS its
+// square, so whatever the square did, the unit did too. Now that units are drawn at measured
+// positions, a stale measurement puts every one of them out — and because the error is per
+// row it accumulates down the board, so the back rank sits ~3px high while the front rank
+// looks about right. Which is exactly what "the pieces are floating" looks like.
+//
+// It also explains why it only showed up from round 2 onward: the damage panel is short
+// enough not to stretch anything until a couple of fights' worth of cards are listed in it.
+
+// The geometry we last drew against, so a change can be noticed.
+let lastGeom = null;
+
+// Re-measure the board, and if it has changed shape, rebuild every drawn position from the
+// SQUARES — the thing that is still true when the pixels are not. A unit mid-walk keeps
+// walking: its route is re-derived at the new scale rather than cancelled, so nothing jumps.
+//
+// Called at the top of every renderUnits, which is roughly once a tick. That costs two
+// measurements a tick, which is nothing — the reason boardMetrics caches at all is to keep
+// measurements out of the sixty-times-a-second animation loop, not out of the once-a-tick
+// redraw. The animation loop still never measures: it walks a route of pixels worked out
+// here, in advance.
+function motionSyncGeometry() {
+  clearBoardMetrics();
+  const g = boardMetrics();
+  if (!g) return;                          // board not on screen yet
+  if (lastGeom && g.ox === lastGeom.ox && g.oy === lastGeom.oy
+                && g.px === lastGeom.px && g.py === lastGeom.py) return;   // nothing moved
+  lastGeom = { ox: g.ox, oy: g.oy, px: g.px, py: g.py };
+  motionRegeometry();
+}
+
+// Redraw every position against whatever the board's geometry currently says.
+function motionRegeometry() {
+  if (!boardMetrics()) return;
+  for (const uid in MOTION) {
+    const m = MOTION[uid];
+    if (!m.node) continue;
+    if (m.pts && m.cells) {
+      m.pts = motionRoutePx(m.cells);      // same squares, new pixels — the walk continues
+    } else if (m.cell) {
+      const p = gridToPx(m.cell.x, m.cell.y);
+      m.px = p.left; m.py = p.top;         // standing still — put it back on its square
+      motionWrite(m);
+    }
+  }
+}
 
 // Forget everything. Called when a fight is torn down or a replay is about to start, so a
 // unit can't glide in from wherever the last thing you watched happened to leave it.

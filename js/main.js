@@ -64,9 +64,25 @@ buildBoard();
 initInput();
 
 // The motion pass measures the board's geometry once and then does arithmetic (see
-// boardMetrics in board.js). A resize moves every square, so throw the measurement away
-// and let the next draw take a fresh one.
-window.addEventListener("resize", clearBoardMetrics);
+// boardMetrics in board.js), so anything that changes that geometry has to say so —
+// otherwise units get drawn against a layout that no longer exists.
+//
+// A window resize is the obvious case. The one that actually caused trouble is not obvious
+// at all: the board shares a flex row with the damage panel, that panel grows taller as a
+// fight goes on, and the row stretches the BOARD to match — so the squares change size
+// without the window moving at all. Watching the board itself catches both, and anything
+// else that ever nudges it (a font finishing loading, browser zoom, a new side panel).
+// renderUnits already re-measures before every redraw, so correctness does not depend on
+// what follows — this only makes the board catch up SOONER, within the same frame it
+// resized rather than at the next redraw. Kept in a variable because an observer with no
+// reference to it is a thing the browser is allowed to throw away.
+let boardResizeObserver = null;
+if (typeof ResizeObserver !== "undefined") {
+  boardResizeObserver = new ResizeObserver(function () { motionSyncGeometry(); });
+  boardResizeObserver.observe(board);
+} else {
+  window.addEventListener("resize", motionSyncGeometry);
+}
 
 // Build the shoes + community deck, draw the opening hands, and paint the
 // starting board and texts.

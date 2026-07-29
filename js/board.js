@@ -142,8 +142,14 @@ function statusText(u) {
 function render() {
   if (SIM_MODE) return;   // headless batch sim: skip all DOM work (see sim.js)
   renderCells();
-  renderUnits();
+  // The damage panel goes BEFORE the units, and the order genuinely matters. The panel
+  // shares a flex row with the board, and it grows as a fight goes on — which stretches the
+  // board and moves every square (see motionSyncGeometry in motion.js). Drawn afterwards, it
+  // would move the squares out from under units that had just been positioned, leaving them
+  // sitting slightly high until the next redraw. Drawn first, the board has finished
+  // changing shape by the time anything measures it.
   renderDmgPanel();       // keep the live damage tracker in lockstep with the board
+  renderUnits();
 }
 
 // ── THE SQUARES ──────────────────────────────────────────────────────────────
@@ -371,6 +377,12 @@ function paintUnitNode(node, u) {
 function renderUnits() {
   const layer = document.getElementById("unitLayer");
   if (!layer) return;
+  // Re-measure the board before drawing anything on it. The board changes size on its own
+  // as the damage panel next to it grows, which shifts every square — see the long note on
+  // motionSyncGeometry in motion.js. Two measurements once a tick is a rounding error; the
+  // point of caching them was to keep measuring out of the 60fps animation loop, not out of
+  // here.
+  motionSyncGeometry();
   const seen = {};
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
