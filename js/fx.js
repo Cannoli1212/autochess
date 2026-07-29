@@ -289,8 +289,19 @@ function spawnFxDeath(ev) {
   el.className = "fx-ghost";
   el.style.left = pos.left + "px";
   el.style.top = pos.top + "px";
-  el.style.color = su.unitColor;
-  el.innerHTML = ev.fused ? fusedGlyphHTML(ev.card, "unitColor") : (rankLabel(ev.rank) + su.symbol);
+  // Whatever the unit was WEARING is what topples over. The event carries the plain facts
+  // (suit, rank, fused, card) and unitArtFor reads suit+rank off anything, so the ghost
+  // resolves the same picture paintUnitNode did — a dying Pyromancer leaves a Pyromancer,
+  // not a ghostly "6♣". Falls back to the glyph on its own when a unit has no sprite, which
+  // keeps this branch honest whether or not the art pack is installed.
+  const art = (typeof unitArtFor === "function") ? unitArtFor(ev) : null;
+  if (art) {
+    el.classList.add("ghost-art");
+    applyUnitArt(el, art);
+  } else {
+    el.style.color = su.unitColor;
+    el.innerHTML = ev.fused ? fusedGlyphHTML(ev.card, "unitColor") : (rankLabel(ev.rank) + su.symbol);
+  }
   layer.appendChild(el);
   el.addEventListener("animationend", function () { el.remove(); });
   setTimeout(function () { el.remove(); }, FX_DEATH_MS + 200);

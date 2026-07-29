@@ -111,6 +111,17 @@
     text-shadow: 0 0 4px #000;
     animation: fxDeath 700ms ease-in forwards;
   }
+  /* A ghost of a unit that HAD a sprite: same picture it was wearing, toppling over.
+     Sized rather than text-sized, and scaled through background-size like every other
+     sprite — the fxDeath animation owns this element's transform, so a static scale here
+     would be overwritten the moment the ghost started falling. */
+  .fx-ghost.ghost-art {
+    width: var(--art-px, 32px);
+    height: var(--art-px, 32px);
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    text-shadow: none;
+  }
   @keyframes fxDeath {
     0%   { opacity: 1;   transform: translate(-50%, -50%) scale(1)    rotate(0deg); }
     22%  { opacity: 1;   transform: translate(-50%, -62%) scale(1.22) rotate(-10deg); }
@@ -342,6 +353,46 @@
      shakes, so a unit can do both in the same tick. */
   .fig-glyph { display: inline-block; }
 
+  /* THE SPRITE (the unit identity pass). Same element as the text glyph, so it inherits
+     the flinch for free — see the scaling note in applyUnitArt() for why the sheet is
+     blown up with background-size instead of the transform that would collide with it.
+
+     --art-px is written onto :root by unitart.js from ART_DRAW_PX, so the sprite's size
+     is decided in ONE place (ART_SCALE) and CSS follows it rather than being a second
+     number to keep in sync.
+
+     THE NEGATIVE MARGINS ARE THE POINT. A 56px cell is already ~54px full (figure 20 +
+     hp 7 + shield 12 + mana 4 + stat 11), so a 32px sprite where a 20px glyph used to be
+     would shove the stat line out of the square — worst case a rank-5 mage showing a
+     shield bar AND a mana bar. Pulling back half the difference top and bottom leaves the
+     sprite's FLOW footprint at exactly 20px, the same as the glyph it replaced: it
+     overhangs into the empty space above and below and every bar stays put. */
+  .fig-glyph.art {
+    display: block;                        /* no inline baseline gap under the sprite */
+    width: var(--art-px, 32px);
+    height: var(--art-px, 32px);
+    margin: calc((20px - var(--art-px, 32px)) / 2) 0;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;            /* crisp integer upscale, not a blurry smear */
+  }
+
+  /* THE RANK/SUIT TAG. Shown only when the figure is a sprite — with a text glyph the
+     figure IS the label and a tag would just say it twice.
+
+     Top-LEFT because .badges is centered at the top, so the two never fight for the same
+     pixels until a unit is wearing four statuses at once. Same dark pill as .badge on
+     purpose: that treatment is already proven legible over a busy figure, and reusing it
+     means the board keeps one visual language instead of inventing a second one. */
+  .rank-tag {
+    position: absolute; top: -1px; left: 1px;
+    font-size: 9px; line-height: 1.2; font-weight: bold;
+    background: rgba(0, 0, 0, 0.62);
+    border-radius: 3px; padding: 0 2px;
+    text-shadow: 0 0 2px #000;
+    pointer-events: none;                  /* never eat a drag meant for the square below */
+    z-index: 3;                            /* over the sprite, over the badge row */
+  }
+
   /* NOTE: the lunge and flinch used to be CSS animation classes here. They worked only
      because render() destroyed and rebuilt the .fig element every single tick, and a fresh
      element with an animation class on it always plays. Units now keep the SAME element for
@@ -555,6 +606,20 @@
   }
   .card .cfig  { font-size: 15px; line-height: 1.1; font-weight: bold; }
   .card .cstat { font-size: 9px; color: #333; line-height: 1.2; }
+
+  /* A hand card carrying its unit's picture. The extra height is deliberately scoped to
+     .has-art rather than added to .card, because the COMMUNITY cards share .card and are
+     text-only — growing them would leave four empty boxes in the flop for no reason.
+     Budget at 72px: art 32 + figure 17 + stats 11 + the optional "📌 held" line 10 = 70,
+     with 2px of slack. .hand-row's min-height is 70, so the band grows to fit rather than
+     clipping. */
+  .card.has-art { height: 72px; }
+  .card .cart {
+    width: var(--art-px, 32px);
+    height: var(--art-px, 32px);
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+  }
 
   /* Phase E: a card marked to hold for next round. */
   .card.held {

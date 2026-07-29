@@ -236,6 +236,7 @@ function makeUnitNode(u) {
   node.dataset.uid = u.uid;
   node.innerHTML =
     '<div class="badges"></div>' +
+    '<div class="rank-tag"></div>' +
     '<div class="body"><div class="fig"><span class="fig-glyph"></span></div></div>' +
     '<div class="hpbar"><div class="hpbar-fill"></div></div>' +
     '<div class="shieldbar"><div class="shieldbar-fill"></div><span class="shield-amt"></span></div>' +
@@ -243,6 +244,10 @@ function makeUnitNode(u) {
     '<div class="stat"></div>';
   // Remember the pieces now so the per-tick repaint never has to go looking for them.
   node._badges    = node.querySelector(".badges");
+  // The rank/suit tag, shown ONLY when the figure is a sprite. It's a sibling of .body
+  // rather than a child, which is deliberate: it's a LABEL, so it should travel with the
+  // unit but not bob and lean with its walk — exactly the same call the hp bar makes.
+  node._tag       = node.querySelector(".rank-tag");
   node._body      = node.querySelector(".body");
   node._fig       = node.querySelector(".fig");
   node._glyph     = node.querySelector(".fig-glyph");
@@ -306,15 +311,52 @@ function paintUnitNode(node, u) {
   node._hpFill.style.width = Math.round(frac * 100) + "%";
   node._hpFill.style.background = frac > 0.5 ? "#4caf50" : (frac > 0.25 ? "#ffb300" : "#e53935");
 
-  // The unit's face: its rank + suit. A fused unit shows both parts (7♠2♦) via the shared
-  // glyph helper. Only rewritten when it actually changes — it almost never does, and
-  // rewriting HTML that already says the right thing is pure waste sixty times a second.
+  // THE UNIT'S FACE. Two ways to wear one, and which you get depends only on whether
+  // unitart.js has a sprite for this unit:
+  //
+  //   SPRITE — the picture says what the unit DOES (a 9 looks like a plague bearer), and
+  //            the rank/suit tag in the corner keeps "9♠" readable, because reading your
+  //            poker hands off the board is the core loop and art must never cost you that.
+  //   TEXT   — the original "9♠" glyph. Not a degraded mode: it's what every unit shows
+  //            until a sprite is assigned, so the board is always fully playable whether
+  //            the art pack is installed or not.
+  //
+  // Both live behind ONE memo. The face changes almost never, and rewriting HTML that
+  // already says the right thing is pure waste sixty times a second — the same reasoning
+  // the old _lastGlyph guard was built on, just widened to cover the sprite too.
   const figInner = u.fused ? fusedGlyphHTML(u.card, "unitColor") : (rankLabel(u.rank) + su.symbol);
-  if (node._lastGlyph !== figInner) {
-    node._glyph.innerHTML = figInner;
-    node._lastGlyph = figInner;
+  const art = unitArtFor(u);
+  const faceKey = art ? ("art:" + art.key + "|" + figInner) : ("txt:" + figInner);
+  if (node._lastFace !== faceKey) {
+    node._lastFace = faceKey;
+    if (art) {
+      node._glyph.className = "fig-glyph art";
+      node._glyph.innerHTML = "";
+      applyUnitArt(node._glyph, art);
+      node._tag.innerHTML = figInner;
+      node._tag.style.color = su.unitColor;   // the tag carries the suit colour the glyph used to
+      node._tag.style.display = "";
+    } else {
+      node._glyph.className = "fig-glyph";
+      node._glyph.innerHTML = figInner;
+      node._glyph.style.backgroundImage = "";
+      node._tag.style.display = "none";     // no sprite = the glyph IS the label already
+    }
   }
   node._fig.style.color = su.unitColor;
+
+  // DEPTH ORDER. A 32px sprite in a 20px slot overhangs ~6px upward, and the squares are
+  // only 2px apart, so a unit wearing the full stack (shield bar AND mana bar) reaches
+  // about 4px over the stat line of whoever is standing directly above it.
+  //
+  // Shrinking the sprite to dodge that would mean a fractional scale — 16px art at 1.5×
+  // draws some source pixels 1px wide and others 2px, which looks visibly wrong on pixel
+  // art. So the overlap stays and is made to read correctly instead: whoever is FURTHER
+  // DOWN the board is nearer the viewer, so it occludes what's behind it. That is how a
+  // board with depth is supposed to stack, and it turns a 4px collision into the thing
+  // your eye already expects. Nothing here escapes #unitLayer's own z-index 10, so effects
+  // (z-index 20) still draw over every unit.
+  node.style.zIndex = u.y;
 
   node._badges.innerHTML = statusBadges(u);   // same pure function as before — can't go stale
 

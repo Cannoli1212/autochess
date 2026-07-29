@@ -118,8 +118,17 @@ function renderOneHand(team) {
   for (let i = 0; i < hand.length; i++) {
     const c = hand[i];
     const card = document.createElement("div");
-    card.className = "card" + (c.held ? " held" : "") + (uniqueOf(c) ? " unique" : "") +
-      (c.fused ? " fused" : "");
+    // The unit this card BECOMES, drawn on the card itself — so choosing what to play is a
+    // choice between visible things rather than between two numbers and a suit symbol.
+    // unitArtFor takes a card as happily as a unit (both carry suit+rank), so the hand and
+    // the board can't disagree about what a 9♠ looks like.
+    //
+    // Note the priority flips between the two views. On the BOARD the sprite is the figure
+    // and the rank/suit is a corner tag; in the HAND the rank/suit stays the headline and
+    // the sprite is the supporting cue — because a hand is read as a poker hand first.
+    const art = (typeof unitArtFor === "function") ? unitArtFor(c) : null;
+    card.className = "card" + (art ? " has-art" : "") + (c.held ? " held" : "") +
+      (uniqueOf(c) ? " unique" : "") + (c.fused ? " fused" : "");
     // Phase E: in hold mode cards are clicked (not dragged) to hold/release.
     card.draggable = !holdMode;
     const cs = SUITS[c.suit];
@@ -127,10 +136,12 @@ function renderOneHand(team) {
     // A fused card shows BOTH parts (7♠2♦); a normal card its single rank+suit.
     const figInner = c.fused ? fusedGlyphHTML(c, "cardColor") : (rankLabel(c.rank) + cs.symbol);
     card.innerHTML =
+      (art ? '<div class="cart"></div>' : '') +
       '<div class="cfig" style="color:' + cs.cardColor + '">' + figInner + '</div>' +
       '<div class="cstat">' + c.attack + "/" + c.hp + "</div>" +
       (c.held ? '<div class="chold">📌 held</div>'
               : (cardCannotDiscard(c) ? '<div class="chold">🔒 stuck</div>' : ""));
+    if (art) applyUnitArt(card.querySelector(".cart"), art);
     // Remember which hand and which card this is when a drag begins.
     const cardIndex = i;
     card.addEventListener("dragstart", function () {

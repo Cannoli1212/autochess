@@ -1334,8 +1334,17 @@ function figureTitle(obj) {
   }
   const s = SUITS[obj.suit];
   let t = rankLabel(obj.rank) + s.symbol + " — " + s.desc + " (range " + obj.range + ")";
-  if (rankAbilityText(obj)) t += " · " + rankAbilityText(obj);
   const uniq = uniqueOf(obj);
+  // The archetype the SPRITE is showing, in words — "Plague Bearer", "Bulwark". The board
+  // speaks in pictures on purpose (a 56px square has no room for a name), so this is where
+  // you go when you don't recognise one yet. Legendaries skip it: their ★ line below
+  // already names them, and saying it twice reads like a bug. Empty string when the unit
+  // has no sprite, so a text-glyph board's tooltip is byte-for-byte what it always was.
+  if (!uniq && typeof unitArtName === "function") {
+    const artName = unitArtName(obj);
+    if (artName) t += " — " + artName;
+  }
+  if (rankAbilityText(obj)) t += " · " + rankAbilityText(obj);
   if (uniq) t += " · ★ " + uniq.name + ": " + uniq.blurb;
   return t;
 }
