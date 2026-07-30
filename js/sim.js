@@ -96,8 +96,7 @@ function simInstall() {
   communityDeck = buildShoe();               // fresh flop deck for AI-vs-AI rounds
   strikeMarks = { player1: [], player2: [] };
   dmgStats = {
-    round:   { player1: blankTeamStat(), player2: blankTeamStat() },
-    session: { player1: blankTeamStat(), player2: blankTeamStat() },
+    round: { player1: blankTeamStat(), player2: blankTeamStat() },
   };
   return saved;
 }

@@ -34,7 +34,7 @@ function cellCenter(x, y) {
 // So: measure TWICE, at startup, and do arithmetic after that. The grid is perfectly regular
 // (every square the same size, every gap the same width), so where square 0,0 sits and how
 // far apart 0,0 and 1,1 are is enough to work out all 64 of them. Still measured rather than
-// hand-computed from the 56px/2px constants, for the same reason cellCenter is — the answer
+// hand-computed from CELL_PX and the 2px gap, for the same reason cellCenter is — the answer
 // stays correct if the CSS changes.
 let BOARD_METRICS = null;
 function boardMetrics() {
@@ -467,9 +467,14 @@ function buildBoard() {
   // The grid is about to change shape, so any cached measurement of it is now a lie.
   clearBoardMetrics();
 
+  // Hand CELL_PX to CSS so .cell and .unit size themselves from the same number
+  // this function lays the grid out with — one constant, no chance of drift.
+  document.documentElement.style.setProperty("--cell", CELL_PX + "px");
+
   // Tell the CSS grid its columns: a narrow first column for row numbers,
-  // then COLS board columns of 56px.
-  board.style.gridTemplateColumns = "26px repeat(" + COLS + ", 56px)";
+  // then COLS board columns one square wide.
+  board.style.gridTemplateColumns =
+    COORD_GUTTER_PX + "px repeat(" + COLS + ", " + CELL_PX + "px)";
 
   // Top row of coordinate labels: an empty corner, then a number per column.
   const corner = document.createElement("div");

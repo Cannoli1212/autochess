@@ -280,7 +280,8 @@ function motionLean(m) {
 // carry across one tick into the next.
 function motionBob(m) {
   if (!m.pts) return 0;
-  const stride = boardMetrics() ? boardMetrics().px / 2 : 29;   // two steps per square
+  // Two steps per square. The fallback only matters before the board is measured.
+  const stride = boardMetrics() ? boardMetrics().px / 2 : CELL_PX / 2;
   return -Math.abs(Math.sin(Math.PI * (m.dist / stride))) * 2.5;
 }
 

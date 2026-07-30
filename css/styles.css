@@ -1,6 +1,8 @@
   body {
     font-family: Arial, sans-serif;
-    margin: 40px;
+    /* Narrow SIDE margins: the 80px board makes the arena ~1240px, and 40px each
+       side would push it off a 1280-wide window. Vertical margin is unchanged. */
+    margin: 40px 16px;
     background: #1e1e1e;
     color: #eaeaea;
     text-align: center;
@@ -41,7 +43,7 @@
   .fx-num {
     position: absolute;
     transform: translate(-50%, -50%);
-    font-size: 15px; font-weight: bold; line-height: 1;
+    font-size: 18px; font-weight: bold; line-height: 1;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 0 3px #000, 0 1px 2px #000;   /* stays legible over any cell color */
@@ -248,12 +250,15 @@
   /* Row / column number labels around the board. */
   .coord-label {
     display: flex; align-items: center; justify-content: center;
-    color: #bbb; font-size: 12px; user-select: none;
+    color: #bbb; font-size: 14px; user-select: none;
   }
 
+  /* --cell is written onto :root by buildBoard() from CELL_PX (config.js), so a
+     square's size is decided in ONE place. The fallback is only for the instant
+     before the board is built. */
   .cell {
-    width: 56px;
-    height: 56px;
+    width: var(--cell, 80px);
+    height: var(--cell, 80px);
     background: #2b2b2b;
     display: flex;
     flex-direction: column;       /* stack the figure above its stats */
@@ -264,14 +269,14 @@
   }
 
   /* STATUS BADGES (week 3). Absolutely positioned so they can NOT push the glyph and the
-     bars around — a 56px cell is already nearly full (figure 20 + hp 7 + shield 12 +
-     mana 4 + stat 11 ≈ 54px), and a badge row in the normal flow would shove the stat
+     bars around — even an 80px cell is mostly full (figure 32 + hp 7 + shield 12 +
+     mana 4 + stat 13 ≈ 68px), and a badge row in the normal flow would shove the stat
      line straight off the bottom. The dark pill behind each glyph is what keeps it
      legible where it overlaps the figure. */
   .badges {
     position: absolute; top: -1px; left: 0; right: 0;
     display: flex; justify-content: center; gap: 1px;
-    font-size: 9px; line-height: 1.2;
+    font-size: 11px; line-height: 1.2;
     pointer-events: none;         /* never eat a drag meant for the cell underneath */
     z-index: 2;
   }
@@ -324,8 +329,9 @@
      JavaScript never has to know how big a unit is. */
   .unit {
     position: absolute; left: 0; top: 0;
-    width: 56px; height: 56px;
-    margin-left: -28px; margin-top: -28px;
+    width: var(--cell, 80px); height: var(--cell, 80px);
+    margin-left: calc(var(--cell, 80px) / -2);
+    margin-top: calc(var(--cell, 80px) / -2);
     display: flex;
     flex-direction: column;       /* stack the figure above its stats — same as .cell did */
     align-items: center;
@@ -347,7 +353,7 @@
      can only run one transform at a time — so the lean and the step bob get their own. */
   .body { display: block; }
 
-  .fig  { font-size: 20px; line-height: 1; font-weight: bold; }
+  .fig  { font-size: 28px; line-height: 1; font-weight: bold; }
   /* Inner glyph layer. inline-block so a transform applies to it at all — an inline
      span ignores transforms. See the layer note in makeUnitNode(): .fig lunges, this
      shakes, so a unit can do both in the same tick. */
@@ -361,17 +367,17 @@
      is decided in ONE place (ART_SCALE) and CSS follows it rather than being a second
      number to keep in sync.
 
-     THE NEGATIVE MARGINS ARE THE POINT. A 56px cell is already ~54px full (figure 20 +
-     hp 7 + shield 12 + mana 4 + stat 11), so a 32px sprite where a 20px glyph used to be
-     would shove the stat line out of the square — worst case a rank-5 mage showing a
-     shield bar AND a mana bar. Pulling back half the difference top and bottom leaves the
-     sprite's FLOW footprint at exactly 20px, the same as the glyph it replaced: it
-     overhangs into the empty space above and below and every bar stays put. */
+     THE NEGATIVE MARGINS ARE THE POINT. An 80px cell runs ~68px full (figure 32 + hp 7 +
+     shield 12 + mana 4 + stat 13), so a 48px sprite laid out at its true height would
+     shove the stat line out of the square — worst case a rank-5 mage showing a shield bar
+     AND a mana bar. Pulling back half the difference top and bottom pins the sprite's FLOW
+     footprint at 32px, matching .fig's text size: it overhangs into the empty space above
+     and below and every bar stays put. */
   .fig-glyph.art {
     display: block;                        /* no inline baseline gap under the sprite */
-    width: var(--art-px, 32px);
-    height: var(--art-px, 32px);
-    margin: calc((20px - var(--art-px, 32px)) / 2) 0;
+    width: var(--art-px, 48px);
+    height: var(--art-px, 48px);
+    margin: calc((32px - var(--art-px, 48px)) / 2) 0;
     background-repeat: no-repeat;
     image-rendering: pixelated;            /* crisp integer upscale, not a blurry smear */
   }
@@ -385,7 +391,7 @@
      means the board keeps one visual language instead of inventing a second one. */
   .rank-tag {
     position: absolute; top: -1px; left: 1px;
-    font-size: 9px; line-height: 1.2; font-weight: bold;
+    font-size: 11px; line-height: 1.2; font-weight: bold;
     background: rgba(0, 0, 0, 0.62);
     border-radius: 3px; padding: 0 2px;
     text-shadow: 0 0 2px #000;
@@ -401,13 +407,14 @@
      playFlinch in board.js), which starts a new run on demand regardless of what the element
      was doing a moment ago. Same motion, same 260ms/220ms, different trigger. */
 
-  .stat { font-size: 10px; color: #f0f0f0; margin-top: 1px; }
+  .stat { font-size: 12px; color: #f0f0f0; margin-top: 1px; }
 
-  /* Health bar under each unit. The dark track is a fixed width; the colored
-     fill inside is set to hp/maxHp % in render(). Redrawn every tick, so it
-     "steps" down as a unit takes damage. */
+  /* Health bar under each unit. The dark track spans 3/4 of a square — off --cell
+     so the bars grow with the board instead of being a second size to keep in sync —
+     and the colored fill inside is set to hp/maxHp % in render(). Redrawn every
+     tick, so it "steps" down as a unit takes damage. */
   .hpbar {
-    width: 42px; height: 5px; margin: 2px 0 0;
+    width: calc(var(--cell, 80px) * 0.75); height: 6px; margin: 2px 0 0;
     background: #111; border: 1px solid #000; border-radius: 3px;
     overflow: hidden;                 /* keep the fill inside the rounded corners */
   }
@@ -417,7 +424,7 @@
      caster units. Fill = mana/manaMax %, redrawn every tick so it climbs as the mage
      regens and snaps back to empty on a cast. */
   .manabar {
-    width: 42px; height: 3px; margin: 1px 0 0;
+    width: calc(var(--cell, 80px) * 0.75); height: 4px; margin: 1px 0 0;
     background: #111; border: 1px solid #000; border-radius: 3px;
     overflow: hidden;
   }
@@ -431,7 +438,7 @@
      shield/maxHp clamped at 100%. */
   .shieldbar {
     position: relative;                 /* the number is absolutely centered over the fill */
-    width: 42px; height: 12px; margin: 1px 0 0;
+    width: calc(var(--cell, 80px) * 0.75); height: 12px; margin: 1px 0 0;
     background: #111; border: 1px solid #000; border-radius: 3px;
     overflow: hidden;
   }
@@ -502,8 +509,14 @@
 
   #roundInfo { font-size: 17px; color: #9ecbff; margin: 6px 0 2px; font-weight: bold; }
 
-  /* Board flanked by side chip badges. */
-  .arena { display: inline-flex; align-items: stretch; gap: 18px; margin-top: 12px; }
+  /* Board flanked by side chip badges. Tighter gap than the 56px-board days — the
+     board itself takes the space now. flex-wrap is the safety valve: the arena is
+     ~1250px wide with an 80px board, so on a narrower window the side panels drop
+     below the board instead of the whole page scrolling sideways. */
+  .arena {
+    display: inline-flex; align-items: stretch; flex-wrap: wrap;
+    justify-content: center; gap: 10px; margin-top: 12px;
+  }
   .side-chips {
     display: flex; flex-direction: column; justify-content: space-between;
     text-align: left;
@@ -515,12 +528,12 @@
   .chip-badge.p1 { border-color: #2b4a7a; background: #1c2636; }  /* blue = Player 1 */
   .chip-badge.p2 { border-color: #7a2b2b; background: #351f1f; }  /* red = Player 2 */
 
-  /* Live damage tracker — the balance instrument (right of the chips/buttons). */
+  /* Live damage tracker — this round's dealt/taken (right of the chips/buttons). */
   #dmgPanel {
-    min-width: 190px; text-align: left; font-size: 13px;
-    border: 1px solid #444; border-radius: 8px; padding: 10px 12px;
+    /* Wide enough for a per-card row: label 28 + bar + dealt 38 + taken 32 + gaps. */
+    min-width: 166px; text-align: left; font-size: 13px;
+    border: 1px solid #444; border-radius: 8px; padding: 10px;
     background: #161a22; align-self: stretch;
-    max-height: 640px; overflow-y: auto;   /* scroll if the sections get tall */
   }
   .dmg-title {
     font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
@@ -533,15 +546,50 @@
   .dmg-name { font-weight: bold; margin-bottom: 2px; }
   .dmg-line { display: flex; justify-content: space-between; color: #c7ccd6; }
   .dmg-line b { color: #fff; font-variant-numeric: tabular-nums; }
-  /* Session suit bars */
-  .dmg-bar-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-  .dmg-bar-suit { width: 14px; text-align: center; font-size: 15px; }
-  .dmg-bar-track { flex: 1; height: 8px; background: #2a2f3a; border-radius: 4px; overflow: hidden; }
+
+  /* VIEW TABS — which metric the bars graph. A segmented pair, not two loose
+     buttons: they share an outline and the active one is filled, so it reads as one
+     control with a current position rather than two things you could both press. */
+  .dmg-tabs {
+    display: flex; gap: 0; margin: 2px 0 6px;
+    border: 1px solid #3a4152; border-radius: 6px; overflow: hidden;
+  }
+  .dmg-tab {
+    flex: 1; margin: 0; padding: 3px 0;
+    border: none; border-radius: 0; cursor: pointer;
+    background: #1b202b; color: #8b93a3;
+    font-family: inherit; font-size: 10px; font-weight: bold;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  .dmg-tab + .dmg-tab { border-left: 1px solid #3a4152; }
+  .dmg-tab:hover { background: #232936; color: #c7ccd6; }
+  .dmg-tab.on { background: #2f3a52; color: #fff; }
+
+  /* PER-CARD ROWS. Three aligned columns — card label, graphed bar + number, and the
+     other metric's number — so the eye can run straight down any one of them. The bar
+     is scaled to the busiest card across BOTH teams (renderDmgPanel), which is what
+     makes a row in the Player 2 block comparable to one in the Player 1 block. */
+  .dmg-cards-head {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
+    color: #6b7280; margin: 5px 0 2px;
+  }
+  .dmg-cards-head span:first-child { min-width: 28px; }
+  .dmg-cards-head span:nth-child(2) { flex: 1; text-align: right; }
+  .dmg-cards-head span:last-child   { min-width: 32px; text-align: right; }
+
+  .dmg-bar-row { display: flex; align-items: center; gap: 5px; margin: 2px 0; }
+  /* Wide enough for the longest label ("10♦"). */
+  .dmg-card-lbl { min-width: 28px; text-align: center; font-size: 12px; font-weight: bold; }
+  .dmg-bar-track { flex: 1; height: 7px; background: #2a2f3a; border-radius: 4px; overflow: hidden; }
   .dmg-bar-fill { display: block; height: 100%; border-radius: 4px; transition: width .2s; }
-  .dmg-bar-num { min-width: 46px; text-align: right; color: #c7ccd6; font-variant-numeric: tabular-nums; }
-  /* Card rows need a wider label than a single suit symbol ("10♣", "Q♠"). */
-  .dmg-card-lbl { min-width: 30px; text-align: center; font-size: 13px; font-weight: bold; }
-  .dmg-empty { color: #6b7280; font-size: 12px; padding: 2px 0; }
+  .dmg-bar-num { min-width: 38px; text-align: right; color: #e6e9ef; font-variant-numeric: tabular-nums; }
+  /* The metric NOT being graphed — muted so the active view stays what you read first. */
+  .dmg-bar-alt {
+    min-width: 32px; text-align: right; font-size: 11px;
+    color: #8b93a3; font-variant-numeric: tabular-nums;
+  }
+  .dmg-empty { color: #6b7280; font-size: 11px; padding: 2px 0; }
 
   /* Round Start / Next / Reset stacked in the middle of the right column. */
   .side-buttons { display: flex; flex-direction: column; gap: 8px; }
@@ -559,12 +607,6 @@
   .flop-card { border-color: #caa14a; }   /* gold edge marks a community card */
   .flop-back { background: #2b3a4a; border-color: #4a6a8a; }
   .flop-back .cfig { color: #7fa8cf; }
-
-  .legend { margin-top: 16px; font-size: 14px; color: #aaa; }
-  .swatch {
-    display: inline-block; width: 12px; height: 12px;
-    vertical-align: middle; margin: 0 4px 0 12px; border-radius: 2px;
-  }
 
   /* Card hands, drawn fresh each round (one card type for now). */
   .hands { margin-top: 22px; }
@@ -730,9 +772,7 @@
   .tip-tier b { color: #ffd76b; margin-right: 3px; }
   .tip-note { font-size: 10px; color: #c05a5a; margin-top: 5px; }
 
-  #synergies { margin-top: 16px; font-size: 13px; }
-  .synergy-row { margin: 4px 0; }
-  .synergy-label { color: #888; margin-right: 6px; }
+  /* Still used by the trait sidebar's poker section (renderPokerTraits). */
   .synergy-chip {
     display: inline-block; border: 1px solid #555; border-radius: 4px;
     padding: 2px 8px; margin: 2px 4px; background: #262626; color: #ddd;

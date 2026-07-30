@@ -67,7 +67,7 @@ rule bending.
 | **state** | All persistent game state (`units`, `hands/draw/discard/played`, `flop/communityDeck/flopRevealed`, `roundNumber/roundWins`, `chips`, combat flags, `dragData/placementOpen`) + DOM refs + trivial reads (`label`, `countUnits`) | — (leaf) |
 | **cards** | What a card is + the shoe (`rankLabel`, `makeCardOf`, `makeCard`, `buildShoe`, `shuffle`, `initShoes`, `reshuffle`, `drawCard`) | config, state |
 | **flop** | Community flop deck + reveal + display (`initCommunityDeck`, `hideFlop`, `dealFlop`, `flopCount`, `renderFlop`) | config, state, cards |
-| **synergies** | Suit counts → tier buffs (`suitCount`, `effectiveSuitCount`, `synergyTier`, `renderSynergies`, `renderOneSynergy`, `teamSynergyEffects`, `applySynergies`) | config, state, flop |
+| **synergies** | Suit counts → tier buffs (`suitCount`, `effectiveSuitCount`, `synergyTier`, `renderSynergies`, `renderTraitBar`, `teamSynergyEffects`, `applySynergies`) | config, state, flop |
 | **board** | Grid build + `render()` (`buildBoard`, `cellAt`, `findUnitAt`, `render`) | config, state, cards |
 | **hands** | Hand & pile display (`drawHands`, `renderHands`, `updateShoeDisplay`, `renderOneHand`) | config, state, cards |
 | **placement** | Drag-and-drop input (`initInput`, `zoneOfRow`, `handleDropOnCell`, `playCard`, `moveUnit`, `handleDropOnHand`, `returnUnitToHand`, `updatePlacementMessage`) | config, state, board, hands, hud |

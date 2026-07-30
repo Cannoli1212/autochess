@@ -5,6 +5,14 @@
 const COLS = 8;
 const ROWS = 8;
 
+// How big one square is, in pixels. THE one place this number lives: buildBoard
+// writes it onto the page as the --cell custom property, and every CSS rule that
+// needs a square's size reads that variable rather than repeating the number.
+// (Same trick unitart.js uses for --art-px.) The drag ghost and the motion
+// fallback stride read this constant directly.
+const CELL_PX = 80;
+const COORD_GUTTER_PX = 32;   // width of the row-number column down the board's left edge
+
 // Phase B: the four card suits and their stats. Clubs and spades are ranged
 // (attack from 3 away); hearts and diamonds are melee (range 1).
 // Abilities: hearts tanky (10 HP), diamonds lifesteal (heal on hit), clubs
@@ -714,6 +722,23 @@ const MOVE_COOLDOWN_TICKS = 0;
 // DURATION (how long slowUntil lasts) is set per-trap in the rank-8 ability, not here;
 // this is only "how hard does a slow bite while it's active."
 const SLOW_MOVE_COOLDOWN = 2;
+
+// BASE MANA REGEN (Riley 2026-07-29): EVERY caster now trickles mana on EVERY tick, from
+// the opening tick of the fight — before it has walked a single step or thrown a punch.
+// Casters used to charge only from `manaRegen` (rank 2/5/8) or, for most of them, only
+// from SWINGING (`manaPerAttack` — rank 4/6/7/9, the aces, the royals, Q♣), so a caster
+// spent the whole approach at zero mana and the fight was usually over before it cast.
+//
+// The knob is "how many TICKS a bar takes to fill from the trickle ALONE", not a flat
+// mana-per-tick number, so it scales with each card's manaMax: a 40-mana Haste bar and a
+// 100-mana Sniper bar both gain 1/20th of themselves per tick, and no card is favoured
+// just for having a small bar. A typical walk-up is ~4-8 ticks, so a caster arrives with
+// roughly a quarter to a third of its bar already filled — swings and `manaRegen` still
+// do most of the work. This ADDS to those two sources, it does not replace them.
+// LOWER = casters fire sooner (8 ≈ very aggressive, 30 ≈ a gentle nudge). Started at 20;
+// dropped to 12 on 2026-07-29 because casts still landed too late to matter — at 12 a
+// caster that never swings still fires roughly twice in an average-length fight.
+const BASE_MANA_FILL_TICKS = 12;
 
 // REAL-TIME SPEED of a live fight: how long the gameflow timer waits between combat
 // ticks. Purely a playback speed — a "tick" is one round of the engine no matter how

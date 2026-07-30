@@ -6,6 +6,15 @@ startButton.addEventListener("click", startRound);
 nextButton.addEventListener("click", nextRound);
 resetButton.addEventListener("click", resetGame);
 
+// Damage-panel view tabs (Dealt / Taken). DELEGATED off the panel rather than bound
+// to the buttons: renderDmgPanel rewrites the whole panel's innerHTML on every combat
+// tick, so any listener attached to a tab itself would be thrown away moments later.
+// The panel element is permanent, so one listener here outlives every repaint.
+dmgPanel.addEventListener("click", function (e) {
+  const tab = e.target.closest(".dmg-tab");
+  if (tab) setDmgView(tab.dataset.view);
+});
+
 // Redraw: reroll your whole hand (up to REDRAWS_PER_ROUND per round). Only your own
 // hand; the AI opponent rerolls itself at Round Start. updateStatus() repaints the
 // button's count + enabled state.

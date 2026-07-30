@@ -24,11 +24,11 @@ function synergyTier(count) {
   return 0;
 }
 
-// Redraw both players' synergy panels (suit auras AND poker hands).
+// Redraw the live synergy display. There used to be a second set of per-player
+// chip lists under the hands (renderOneSynergy / renderOnePoker); they said the
+// same thing as the sidebar and were removed with the elements they wrote into,
+// so the trait bar is now the one place suits and poker hands are shown.
 function renderSynergies() {
-  renderOneSynergy("player1");
-  renderOneSynergy("player2");
-  renderPokerHands();
   renderTraitBar();
 }
 
@@ -321,116 +321,14 @@ function rankCounts(ranks) {
   return counts;
 }
 
-// Redraw both players' poker panels.
-function renderPokerHands() {
-  renderOnePoker("player1");
-  renderOnePoker("player2");
-}
-
-// Show one player's active poker hands as chips (detection + display only —
-// no combat buffs yet; that's the next chunk).
-function renderOnePoker(team) {
-  const el = document.getElementById("poker-" + team);
-  el.innerHTML = "";
-  let anyActive = false;
-
-  const counts = rankCounts(pokerPool(team));
-
-  // Of-a-kind: any rank appearing 2+ times → pair / trips / quads. Show the
-  // biggest hands first (highest rank breaks ties).
-  const ranks = Object.keys(counts).map(Number).sort(function (a, b) {
-    return counts[b] - counts[a] || b - a;
-  });
-  ranks.forEach(function (rank) {
-    let n = counts[rank];
-    if (n < 2) return;
-    if (n > 4) n = 4;                          // cap at quads
-    const info = POKER_HANDS.ofAKind[n];
-    anyActive = true;
-    const chip = document.createElement("span");
-    chip.className = "synergy-chip";
-    chip.innerHTML =
-      "<b>" + info.label + " of " + rankLabel(rank) + "</b> " + ofAKindText(rank, n);
-    el.appendChild(chip);
-  });
-
-  // Named hands: active when ALL their required ranks are present in the pool.
-  Object.keys(POKER_HANDS.named).forEach(function (key) {
-    const hand = POKER_HANDS.named[key];
-    const has = hand.ranks.every(function (r) { return (counts[r] || 0) >= 1; });
-    if (!has) return;
-    anyActive = true;
-    const chip = document.createElement("span");
-    chip.className = "synergy-chip";
-    chip.innerHTML = "<b>" + hand.label + "</b> " + hand.text;
-    el.appendChild(chip);
-  });
-
-  // Shaped hands (straight / full house) — per-card on the forming cards. Detected the
-  // SAME way pokerBuffs applies them, so the panel and the buffs always agree. (Flush is
-  // NOT here — it's the suit synergy panel; a straight flush shows a Straight chip here
-  // AND a suit FLUSH chip there.)
-  const straightRun = bestStraight(counts);
-  if (straightRun) {
-    anyActive = true;
-    const cfg = POKER_HANDS.shaped.straight;
-    const full = straightRun.length >= 5;
-    const tier = full ? cfg.full : cfg.small;
-    const buffed = full ? straightRun.slice(0, 5) : straightRun;   // a full straight is the top 5
-    const seq = buffed.slice().reverse().map(function (r) { return rankLabel(r); }).join("-");
-    const chip = document.createElement("span");
-    chip.className = "synergy-chip";
-    chip.innerHTML = "<b>" + (full ? cfg.label : "Small " + cfg.label) + " (" + seq + ")</b> " + tier.text;
-    el.appendChild(chip);
-  }
-
-  const fh = fullHouseRanks(counts);
-  if (fh) {
-    anyActive = true;
-    const info = POKER_HANDS.shaped.fullHouse;
-    const chip = document.createElement("span");
-    chip.className = "synergy-chip";
-    chip.innerHTML = "<b>" + info.label + " (" + rankLabel(fh[0]) + " over " + rankLabel(fh[1]) + ")</b> " + info.text;
-    el.appendChild(chip);
-  }
-
-  if (!anyActive) el.textContent = "—";        // nothing active yet
-}
-
-// Show one player's active suit synergies as chips.
-function renderOneSynergy(team) {
-  const el = document.getElementById("synergy-" + team);
-  el.innerHTML = "";
-  let anyActive = false;
-
-  for (let i = 0; i < SUIT_NAMES.length; i++) {
-    const suit = SUIT_NAMES[i];
-    const count = effectiveSuitCount(team, suit);
-    const tier = synergyTier(count);
-    if (tier === 0) continue;            // need at least 2 of a suit
-
-    anyActive = true;
-    const info = SYNERGIES[suit];
-    const chip = document.createElement("span");
-    chip.className = "synergy-chip";
-    // If an enemy Queen extinguished this suit, show it struck through so the panel
-    // matches what actually happens in combat (teamSynergyEffects skips it).
-    if (isSuitExtinguished(team, suit)) {
-      chip.style.opacity = "0.5";
-      chip.style.textDecoration = "line-through";
-      chip.innerHTML =
-        '<b style="color:' + info.color + '">' + info.label + "×" + count + "</b> " +
-        info.tiers[tier].text + " — extinguished";
-    } else {
-      chip.innerHTML =
-        '<b style="color:' + info.color + '">' + info.label + "×" + count + "</b> " +
-        info.tiers[tier].text;
-    }
-    el.appendChild(chip);
-  }
-
-  if (!anyActive) el.textContent = "—";   // nothing active yet
-}
+// NOTE: renderOnePoker / renderPokerHands / renderOneSynergy used to live here.
+// They wrote per-player chip lists into #poker-<team> and #synergy-<team> under
+// the hands. Those elements are gone, and the trait sidebar (renderTraitBar /
+// renderPokerTraits above) already shows the same information beside the board.
+// The DETECTION helpers they used — pokerPool, rankCounts, bestStraight,
+// fullHouseRanks, ofAKindText, effectiveSuitCount, isSuitExtinguished — all stay:
+// the sidebar and pokerBuffs read them, which is what keeps the display and the
+// combat buffs agreeing.
 
 // Work out a team's combined synergy effects from its suit counts.
 function teamSynergyEffects(team) {

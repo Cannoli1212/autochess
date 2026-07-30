@@ -59,7 +59,7 @@
 const ART_SHEET = "assets/kenney-roguelike-characters/Spritesheet/roguelikeChar_transparent.png";
 const ART_TILE  = 16;   // one sprite is 16×16 source pixels
 const ART_GAP   = 1;    // 1px of spacing between tiles on the sheet
-const ART_SCALE = 2;    // drawn at 2× → 32px on screen. Integer scale = crisp pixels.
+const ART_SCALE = 3;    // drawn at 3× → 48px on screen. Integer scale = crisp pixels.
 
 // One tile's stride on the sheet, and its size on screen. Derived, never typed twice.
 const ART_STEP    = ART_TILE + ART_GAP;

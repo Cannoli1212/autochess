@@ -23,10 +23,10 @@ function initInput() {
       // Drag the UNIT's picture, not the square's. The browser makes the drag preview by
       // photographing the element you grabbed — which used to contain the glyph, and since
       // the motion pass contains nothing, so you'd be dragging a blank tile. Point it at
-      // the unit's own shape instead; 28,28 puts the cursor at its middle.
+      // the unit's own shape instead; half a square puts the cursor at its middle.
       const node = unitNodeFor(u);
       if (node && e.dataTransfer && e.dataTransfer.setDragImage) {
-        e.dataTransfer.setDragImage(node, 28, 28);
+        e.dataTransfer.setDragImage(node, CELL_PX / 2, CELL_PX / 2);
       }
     });
     // Plain click = mark/unmark an enemy square for the King of Clubs' airstrike.
@@ -139,6 +139,10 @@ function buildUnit(card, x, y, team) {
     manaRegen: castAbility ? (castAbility.manaRegen || 0) : 0,
     // Attack-mana model (Slice 2): mana gained per auto-attack. 0 = pure regen caster.
     manaPerAttack: castAbility ? (castAbility.manaPerAttack || 0) : 0,
+    // BASE mana regen (2026-07-29): the trickle EVERY caster gets every tick, walking or
+    // not — a fixed slice of its own bar (see BASE_MANA_FILL_TICKS). Baked here off the
+    // card's manaMax so the cast pass just adds it; non-casters get 0 like the rest.
+    baseManaRegen: castAbility ? (castAbility.manaMax || 0) / BASE_MANA_FILL_TICKS : 0,
     manaStart: castAbility ? (castAbility.manaStart || 0) : 0,
     castRange: castAbility ? (castAbility.castRange || range) : 0,
     // WHO the cast needs in range: "enemy" (Fireball, default), "self" (Trapline — fires

@@ -536,7 +536,11 @@ function combatStep() {
     const u = units[i];
     if (u.hp <= 0 || !u.caster) continue;
     if (tickCount < (u.stunUntil || 0)) continue;         // stunned → can't channel (and the bar freezes: this skips regen too)
-    u.mana = Math.min(u.manaMax, u.mana + u.manaRegen);   // regen every tick, capped
+    // THREE mana sources feed this bar: the BASE trickle (baseManaRegen — every caster,
+    // every tick, even while still walking), the card's own `manaRegen` (rank 2/5/8), and
+    // `manaPerAttack` banked per swing up in attackTarget. They stack; a card can carry
+    // any mix. Capped at manaMax so a held bar can't overfill.
+    u.mana = Math.min(u.manaMax, u.mana + u.manaRegen + (u.baseManaRegen || 0));
     if (u.mana < u.manaMax) continue;                     // not charged yet
     // SHIELD-HELD cast (rank 5 pair/trips Ward): a caster flagged holdCastWhileShielded sits on its
     // full bar until its current shield is FULLY spent — one shield at a time, never refreshing a

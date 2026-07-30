@@ -241,12 +241,16 @@ function armySize() {
 // damage in the game is BOOKED here through recordDamage(), so the numbers are
 // one source of truth (no per-module tallies to drift apart).
 //
-// Two scopes are kept side by side:
-//   • round   — zeroed at every Round Start; drives the LIVE side panel so you
-//               can watch dealt/taken tick up during a fight.
-//   • session — accumulates across EVERY fight since the page loaded (or the
-//               last Reset), broken down by suit. THIS is the balance signal:
-//               over many games, is one suit doing a lopsided share of the work?
+// ONE scope: the current round. It's zeroed at Round Start — not at Next Round —
+// so the fight's numbers stay on screen afterwards for you to read, and only
+// wipe when the next fight actually begins. It drives the LIVE side panel, so
+// you can watch dealt/taken tick up while the fight runs.
+//
+// There used to be a second `session` scope accumulating across every fight
+// since page load. It was balance instrumentation, but it made the panel
+// unreadable during play (round 5 was a blur of every fight so far, including
+// the headless table matchups, which book into the same totals). Balance work
+// runs through simTableScan now, which reads the round scope. So: round only.
 function blankTeamStat() {
   return {
     dealt: 0,   // damage this team's units DID to the enemy
@@ -258,8 +262,7 @@ function blankTeamStat() {
   };
 }
 let dmgStats = {
-  round:   { player1: blankTeamStat(), player2: blankTeamStat() },
-  session: { player1: blankTeamStat(), player2: blankTeamStat() },
+  round: { player1: blankTeamStat(), player2: blankTeamStat() },
 };
 
 // Book `amount` damage from `dealer` onto `victim` (both are UNIT objects, or
@@ -272,34 +275,33 @@ function recordDamage(dealer, victim, amount, dealerTeamFallback) {
   if (!(amount > 0)) return;            // ignore 0 / negatives (e.g. a fully-soaked hit)
   const dealerTeam = dealer ? dealer.team : dealerTeamFallback;
   const victimTeam = victim ? victim.team : null;
-  ["round", "session"].forEach(function (scope) {
-    const s = dmgStats[scope];
-    if (dealerTeam) {
-      s[dealerTeam].dealt += amount;
-      if (dealer) {                                  // card-level only when we know the source
-        s[dealerTeam].bySuit[dealer.suit] += amount;
-        const k = dealer.suit + "-" + dealer.rank;   // "suit-rank" convention (cf. UNIQUE_CARDS)
-        s[dealerTeam].byCard[k] = (s[dealerTeam].byCard[k] || 0) + amount;
-      }
+  const s = dmgStats.round;
+  if (dealerTeam) {
+    s[dealerTeam].dealt += amount;
+    if (dealer) {                                  // card-level only when we know the source
+      s[dealerTeam].bySuit[dealer.suit] += amount;
+      const k = dealer.suit + "-" + dealer.rank;   // "suit-rank" convention (cf. UNIQUE_CARDS)
+      s[dealerTeam].byCard[k] = (s[dealerTeam].byCard[k] || 0) + amount;
     }
-    if (victimTeam) {
-      s[victimTeam].taken += amount;
-      if (victim) {
-        s[victimTeam].takenBySuit[victim.suit] += amount;
-        const vk = victim.suit + "-" + victim.rank;
-        s[victimTeam].takenByCard[vk] = (s[victimTeam].takenByCard[vk] || 0) + amount;
-      }
+  }
+  if (victimTeam) {
+    s[victimTeam].taken += amount;
+    if (victim) {
+      s[victimTeam].takenBySuit[victim.suit] += amount;
+      const vk = victim.suit + "-" + victim.rank;
+      s[victimTeam].takenByCard[vk] = (s[victimTeam].takenByCard[vk] || 0) + amount;
     }
-  });
+  }
 }
 
-// Zero the per-ROUND stats (call at Round Start). Session totals are untouched.
+// Zero the per-ROUND stats (call at Round Start).
 function resetRoundStats() {
   dmgStats.round = { player1: blankTeamStat(), player2: blankTeamStat() };
 }
 
-// Zero EVERYTHING, round and session (call on a new game / Reset).
+// Zero every damage stat (call on a new game / Reset). Same thing as
+// resetRoundStats now that round is the only scope, but kept separate because
+// the CALL SITES mean different things — one is "new fight", one is "new game".
 function resetAllStats() {
-  dmgStats.round   = { player1: blankTeamStat(), player2: blankTeamStat() };
-  dmgStats.session = { player1: blankTeamStat(), player2: blankTeamStat() };
+  dmgStats.round = { player1: blankTeamStat(), player2: blankTeamStat() };
 }
