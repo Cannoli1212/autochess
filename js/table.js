@@ -90,6 +90,8 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   // physical zone that is doesn't bias anything — the AI mirrors its placement.)
   units = [];
   tickCount = 0;
+  traps = [];                                      // simInstall wraps BOTH headless fights, so
+                                                   // clear per-match or fight 1's bombs arm fight 2
   resetRoundStats();
   roundNumber = armySizeThisRound;                 // sizes this match's community deck (communityTarget)
   armyOverride = armySizeThisRound;                // force aiPlaceUnits to place exactly this many units

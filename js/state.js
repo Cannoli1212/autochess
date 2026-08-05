@@ -102,8 +102,9 @@ let strikeMarks = { player1: [], player2: [] };
 
 // Rank 8 Trapline: live board traps during a fight. Each entry is
 // { x, y, team, damage, slow } where `team` is the OWNER — only that team's ENEMIES
-// spring it. Single-use: a trap is spliced out the moment it triggers. Rebuilt each
-// fight (cleared at battle start, like strikeMarks), so nothing carries between rounds.
+// spring it. Single-use: a trap is spliced out the moment it triggers. Traps belong to
+// ONE fight: finishRound empties this the instant combat ends, so un-sprung bombs never
+// survive onto the results screen or the next round's placement board.
 let traps = [];
 
 // Phase D: each player has their own shoe. `hands` = cards in hand; `draw` =

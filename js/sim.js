@@ -80,7 +80,7 @@ function simInstall() {
     units: units, tickCount: tickCount, inCombat: inCombat,
     placementOpen: placementOpen, dmgStats: dmgStats, chips: chips,
     weakCardsPlayed: weakCardsPlayed, hands: hands, played: played,
-    flop: flop, strikeMarks: strikeMarks, roundNumber: roundNumber,
+    flop: flop, strikeMarks: strikeMarks, traps: traps, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
     armyOverride: armyOverride,
   };
@@ -95,6 +95,8 @@ function simInstall() {
   flopRevealed = false;
   communityDeck = buildShoe();               // fresh flop deck for AI-vs-AI rounds
   strikeMarks = { player1: [], player2: [] };
+  traps = [];                                // sandboxed too: a headless fight's rank-8 bombs
+                                             // must never land on (or damage) the live board
   dmgStats = {
     round: { player1: blankTeamStat(), player2: blankTeamStat() },
   };
@@ -105,7 +107,7 @@ function simRestore(s) {
   units = s.units; tickCount = s.tickCount; inCombat = s.inCombat;
   placementOpen = s.placementOpen; dmgStats = s.dmgStats; chips = s.chips;
   weakCardsPlayed = s.weakCardsPlayed; hands = s.hands; played = s.played;
-  flop = s.flop; strikeMarks = s.strikeMarks; roundNumber = s.roundNumber;
+  flop = s.flop; strikeMarks = s.strikeMarks; traps = s.traps; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
   armyOverride = s.armyOverride;
 }

@@ -7,6 +7,8 @@
 function finishRound(winner) {
   clearInterval(combatTimer);
   inCombat = false;
+  traps = [];                   // the fight is over — un-sprung bombs come off the board with it
+  render();                     // nothing else repaints here, and the glyphs are drawn from `traps`
   startButton.disabled = true;
 
   if (winner === "draw") {
@@ -207,7 +209,7 @@ function startRound() {
   inCombat = true;
   placementOpen = false;         // lock the board once the fight begins
   tickCount = 0;
-  traps = [];                    // clear any traplines from a prior fight
+  traps = [];                    // belt-and-braces: finishRound already emptied these
   clearFx();                     // and any effects still floating from the last one
   resetRoundStats();             // zero the live damage panel for this fight
   startButton.disabled = true;

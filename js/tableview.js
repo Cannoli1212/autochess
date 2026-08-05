@@ -114,7 +114,12 @@ function watchMatch(idx) {
   // top of them. Fast enough to skim, slow enough that the effects read.
   replayTimer = setInterval(function () {
     if (i >= rec.frames.length) {
-      clearInterval(replayTimer); replayTimer = null; replaying = false; return;
+      clearInterval(replayTimer); replayTimer = null; replaying = false;
+      // The watched fight is over, so its bombs come off the board — same rule finishRound
+      // applies to your live fight. showFrame left `traps` pointing at the last frame's
+      // array, and without this they'd sit on the freeze-frame until Next Round.
+      traps = []; render();
+      return;
     }
     showFrame(rec.frames[i]); i++;
   }, REPLAY_TICK_MS);
@@ -125,6 +130,8 @@ function clearMatchTabs() {
   clearInterval(replayTimer); replayTimer = null;
   replaying = false;
   motionReset();                        // no half-finished walks left running (motion.js)
+  traps = [];                           // showFrame points `traps` at the watched frame's array,
+                                        // so drop it here or a replay re-litters the live board
   matchRecordings = []; viewingTab = 0;
   const bar = document.getElementById("matchTabs");
   if (bar) { bar.style.display = "none"; bar.innerHTML = ""; }
