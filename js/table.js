@@ -27,7 +27,7 @@
 // `chips` is its stack, `alive` flips false the moment it's busted. That's all a
 // headless seat needs; a live seat will later also carry its own deck/hand.
 function makeSeat(id) {
-  return { id: id, chips: SEAT_START_CHIPS, alive: true };
+  return { id: id, chips: SEAT_START_CHIPS, comps: 0, alive: true };
 }
 
 // A fresh table of n seats (defaults to NUM_SEATS).

@@ -46,10 +46,21 @@ function updateRoundInfo() {
   updateChipInfo();
 }
 
-// Phase C: refresh each player's chip stack in their side badge.
+// Phase C: refresh each player's chip stack in their side badge — and, under it, their
+// COMPS. Two currencies, two lines, deliberately not merged into one: chips are the
+// score you're fighting over, comps are what you spend, and blurring them would undo
+// the whole reason there are two (see COMPS_INCOME in config.js).
+//
+// The comps element is written from here rather than sitting in the markup because
+// game.html is double-encoded on disk — its literal emoji are mojibake. Setting
+// textContent from JS sidesteps that entirely.
 function updateChipInfo() {
   document.querySelector("#chip-player1 .chip-amount").textContent = "💰 " + chips.player1;
   document.querySelector("#chip-player2 .chip-amount").textContent = "💰 " + chips.player2;
+  const c1 = document.getElementById("comp-player1");
+  const c2 = document.getElementById("comp-player2");
+  if (c1) c1.textContent = COMPS_ICON + " " + comps.player1;
+  if (c2) c2.textContent = COMPS_ICON + " " + comps.player2;
 }
 
 // Distinct bar colors for the per-card rows (hearts/diamonds share a unitColor,

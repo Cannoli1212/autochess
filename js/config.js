@@ -845,6 +845,23 @@ const CHIPS_PER_SURVIVOR = 10;
 // B6.1: extra chips stolen when the round winner's pool held both a 7 and a 2.
 const SEVEN_TWO_BONUS = 20;
 
+// ── The SECOND currency: Comps ───────────────────────────────────────────────
+// Chips are ZERO-SUM — you never make them, you only steal them, and whoever holds
+// the most at MAX_ROUNDS wins. That makes chips a health/score bar, not money: any
+// price tag on them is dominated by "just don't buy it". So the shop runs on its own
+// axis. COMPS are MINTED (created from nothing, never stolen) and never scored, so
+// spending them costs you power LATER instead of score NOW — which is the only way a
+// price can mean something.
+//
+// Their job is to fund the fishing: rerolls to hunt for jokers in the shoe, and packs.
+// That's why income is FLAT and reliable rather than a jackpot — a player who can't
+// afford a reroll can't fish, and a dead round would compound into a dead game.
+// Budget over a 7-round game: 21 comps guaranteed, up to 35 if you win out.
+const COMPS_INCOME = 3;        // paid to BOTH players every round, win or lose
+const COMPS_WIN_BONUS = 2;     // extra, to the round winner only (0 on a draw)
+const COMPS_ICON = "🎟️";       // casino comp points — the house comps you for playing
+const COMPS_LABEL = "Comps";
+
 // Phase D: how many 52-card decks make up each player's shoe.
 const DECKS = 2;
 

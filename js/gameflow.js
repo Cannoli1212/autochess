@@ -65,6 +65,22 @@ function finishRound(winner) {
   });
   turnStatus.textContent = turnStatus.textContent + taxNote;
 
+  // ── Comps: the shop currency ────────────────────────────────────────────────
+  // MINTED, not stolen — nothing is deducted from anyone, so this can't push a stack
+  // negative and needs none of the clamping the chip math above does. Both players
+  // always earn COMPS_INCOME (so a losing streak still funds a reroll to dig out of
+  // it); the round winner earns COMPS_WIN_BONUS on top. A draw pays income only.
+  //
+  // Position matters: this sits AFTER the house-tax loop because that's the only
+  // block above that touches both players regardless of who won, and BEFORE the seat
+  // write-back below — which is what actually persists these values onto the seats.
+  ["player1", "player2"].forEach(function (team) {
+    comps[team] = comps[team] + COMPS_INCOME + (team === winner ? COMPS_WIN_BONUS : 0);
+  });
+  turnStatus.textContent = turnStatus.textContent +
+    "  " + COMPS_ICON + " +" + COMPS_INCOME + " " + COMPS_LABEL.toLowerCase() + " each" +
+    (winner === "draw" ? "." : " (+" + COMPS_WIN_BONUS + " more to " + label(winner) + ").");
+
   updateRoundInfo();
 
   // Phase D: fold the live result back into the SEATS, then run the two other
@@ -75,6 +91,8 @@ function finishRound(winner) {
     const youBefore = seats[0].chips;
     seats[0].chips = chips.player1;              // your post-round stack
     seats[opponentSeat].chips = chips.player2;   // this round's opponent's stack
+    seats[0].comps = comps.player1;              // ...and the shop money each just earned
+    seats[opponentSeat].comps = comps.player2;
     const youDelta = seats[0].chips - youBefore; // net change to your stack this round
     let liveLine, liveTab;
     if (winner === "draw") { liveLine = "You drew " + oppName + " — no chips moved"; liveTab = "You vs " + oppName + " (draw)"; }
@@ -183,6 +201,8 @@ function startRound() {
     pairRound();
     chips.player1 = seats[0].chips;
     chips.player2 = seats[opponentSeat].chips;
+    comps.player1 = seats[0].comps;            // shop money follows the seat, not the side
+    comps.player2 = seats[opponentSeat].comps;
     weakCardsPlayed.player2 = 0;               // fresh opponent each round (your own tally persists)
   }
 
@@ -337,6 +357,7 @@ function resetGame() {
   roundNumber = 1;
   roundWins = { player1: 0, player2: 0 };
   chips = { player1: 100, player2: 100 };
+  comps = { player1: 0, player2: 0 };              // shop money doesn't carry between games
   house = 0;                                       // the casino's pot empties
   weakCardsPlayed = { player1: 0, player2: 0 };   // King of Spades' scaling resets
   resetAllStats();                                 // clear round + session damage totals

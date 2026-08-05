@@ -78,7 +78,7 @@ function simBattle(cardA, cardB, aIsP1) {
 function simInstall() {
   const saved = {
     units: units, tickCount: tickCount, inCombat: inCombat,
-    placementOpen: placementOpen, dmgStats: dmgStats, chips: chips,
+    placementOpen: placementOpen, dmgStats: dmgStats, chips: chips, comps: comps,
     weakCardsPlayed: weakCardsPlayed, hands: hands, played: played,
     flop: flop, strikeMarks: strikeMarks, traps: traps, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
@@ -88,6 +88,8 @@ function simInstall() {
   clearInterval(combatTimer);                // stop any live fight
   inCombat = false; placementOpen = false;
   chips = { player1: 100, player2: 100 };    // neutral: Midas King sits at baseline
+  comps = { player1: 0, player2: 0 };        // neutral: a headless fight earns/spends no shop money,
+                                             // and the live player's comps can't reach it
   weakCardsPlayed = { player1: 0, player2: 0 };  // neutral: Warlord's Levy adds nothing
   hands = { player1: [], player2: [] };      // empty bench: Necromancer can't summon
   played = { player1: [], player2: [] };
@@ -105,7 +107,7 @@ function simInstall() {
 
 function simRestore(s) {
   units = s.units; tickCount = s.tickCount; inCombat = s.inCombat;
-  placementOpen = s.placementOpen; dmgStats = s.dmgStats; chips = s.chips;
+  placementOpen = s.placementOpen; dmgStats = s.dmgStats; chips = s.chips; comps = s.comps;
   weakCardsPlayed = s.weakCardsPlayed; hands = s.hands; played = s.played;
   flop = s.flop; strikeMarks = s.strikeMarks; traps = s.traps; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;

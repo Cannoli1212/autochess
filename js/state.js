@@ -83,6 +83,13 @@ let roundWins = { player1: 0, player2: 0 };
 // the winner is whoever has more (the net difference is the payout).
 let chips = { player1: 100, player2: 100 };
 
+// The SECOND currency (see COMPS_INCOME in config.js). Comps are MINTED each round,
+// never stolen and never scored — they exist only to be spent in the shop (rerolls,
+// packs, jokers). Start at 0: you earn your first comps by finishing round 1, so the
+// shop opens on round 2. Survives nextRound (it's a bank, like chips); zeroed only by
+// resetGame. Per-SEAT stacks live on the seat objects, same as chips.
+let comps = { player1: 0, player2: 0 };
+
 // Cumulative count of LOW cards (ranks 2-5) each team has PLAYED this game. Bumped
 // in playCard, never decremented, reset only on a new game (resetGame). Drives the
 // King of Spades' uncapped attack scaling — the more cheap bodies you've fielded
@@ -190,7 +197,7 @@ function makeLiveSeats() {
   seats = [];
   for (let i = 0; i < NUM_SEATS; i++) {
     seats.push({
-      id: i, chips: SEAT_START_CHIPS, isHuman: i === 0,
+      id: i, chips: SEAT_START_CHIPS, comps: 0, isHuman: i === 0,
       name: SEAT_NAMES[i], color: SEAT_COLORS[i],
     });
   }
