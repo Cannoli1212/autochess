@@ -115,6 +115,58 @@ function applyJokerRoundStart(team) {
   return mult;
 }
 
+// ── Cards that persist ────────────────────────────────────────────────────────
+
+// THE BAGMAN. Which of `team`'s played cards come back to hand at round end, instead of
+// going to the discard pile — the cards whose UNITS were still standing when the fight
+// ended. Returns [] for a team without the joker, so nextRound's normal path is untouched.
+//
+// Reads `units` and it must be called BEFORE nextRound clears the board. Every unit keeps
+// a reference to the card it was built from (buildUnit's `card: card`), and the dead are
+// already filtered out of `units` when a fight ends — so "survived" needs no bookkeeping
+// of its own, it's just who's left.
+//
+// Self-balancing, which is why it needs no cap: win the fight and you keep your army, lose
+// it and your units died, so you keep almost nothing. The reward scales with how well you
+// were already doing.
+function jokerRetainedCards(team) {
+  if (jokerSum(team, "retainSurvivors") <= 0) return [];
+  const kept = [];
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    // Only cards this team actually PLAYED this round: a unit summoned mid-fight (the
+    // Necromancer's token) has no card in `played` and must not mint one into the hand.
+    if (u.team !== team || !u.card) continue;
+    if (played[team].indexOf(u.card) === -1) continue;
+    kept.push(u.card);
+  }
+  return kept;
+}
+
+// THE CARD SHARP. Grow every card still sitting in `team`'s hand by cardAging. Called once
+// per round change, BEFORE drawHands tops the hand up, so a card drawn this round starts
+// clean and only earns growth by surviving a round unplayed.
+//
+// Mutates the card objects in place (they already persist across rounds via auto-carry) and
+// stamps `aged` so the growth is inspectable and so a suit recut can restore it. renderOneHand
+// already prints attack/hp per card, so the climb is visible with no display work.
+//
+// The tension is the point: this rewards NOT rerolling, so it plays against the Redraw button
+// and against The Valet. A card lost to a reroll takes its growth with it.
+function applyJokerCardAging(team) {
+  const rate = jokerSum(team, "cardAging");
+  if (rate <= 0) return 0;
+  let grown = 0;
+  hands[team].forEach(function (c) {
+    if (cardIsJoker(c)) return;              // no stats to grow
+    c.aged = (c.aged || 0) + rate;
+    c.attack = Math.round(c.attack * (1 + rate));
+    c.hp = Math.round(c.hp * (1 + rate));
+    grown++;
+  });
+  return grown;
+}
+
 // ── Rules ─────────────────────────────────────────────────────────────────────
 
 // How many free slots a player has left.

@@ -931,6 +931,21 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sleight of hand. +1 free redraw each round." },
 
+  // ── Cards that persist ─────────────────────────────────────────────────────
+  // Both of these keep cards ALIVE across rounds instead of handing you new ones,
+  // which is a different kind of power from drawing wider: your good card compounds.
+  //
+  // Both are aiUseless, and for one shared reason: tableMatch drafts a FRESH hand
+  // (simDraftHand) and resets `played` every match, so a headless seat has no hand
+  // continuity for either joker to act on. Teaching the table to carry seat hands
+  // between rounds would fix both at once — a real job, not a tag. See JOKERS.md.
+  theBagman:   { name: "The Bagman",      icon: "💼", weight: 1, retainSurvivors: 1,
+                 aiUseless: true,
+                 blurb: "Keeps what he brings home. Cards you played that SURVIVED return to your hand." },
+  cardSharp:   { name: "The Card Sharp",  icon: "🔪", weight: 1, cardAging: 0.10,
+                 aiUseless: true,
+                 blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
+
   // ── Combat / abilities ─────────────────────────────────────────────────────
   highRoller:  { name: "The High Roller", icon: "💎", weight: 1, atkPerChip: 0.002,
                  blurb: "Bets big. Your whole army hits harder the fatter your chip stack." },

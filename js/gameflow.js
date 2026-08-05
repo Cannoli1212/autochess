@@ -344,11 +344,26 @@ function nextRound() {
     player2: REDRAWS_PER_ROUND + jokerSum("player2", "redrawBonus"),
   };
 
-  // Phase D: cards played this round (the whole board) go to the discard piles.
-  discard.player1 = discard.player1.concat(played.player1);
-  discard.player2 = discard.player2.concat(played.player2);
-  played.player1 = [];
-  played.player2 = [];
+  // Phase D: cards played this round (the whole board) go to the discard piles — except
+  // any THE BAGMAN keeps, which go back to the hand instead. Retained cards must be picked
+  // while `units` still holds the survivors, so this runs before the board is cleared below.
+  // A retained card counts toward this round's hand target like a carried leftover does
+  // (drawHands only tops up), so it replaces a draw rather than adding to it.
+  ["player1", "player2"].forEach(function (team) {
+    // THE CARD SHARP goes FIRST, while the hand is still only the cards that sat out the
+    // round. Aging after the Bagman's returns would pay a survivor for a round it spent
+    // fighting on the board, which is the opposite of what "unplayed" means.
+    applyJokerCardAging(team);
+
+    const kept = jokerRetainedCards(team);
+    played[team].forEach(function (c) {
+      // HAND_CAP is the bench ceiling: a full board coming home could otherwise push the
+      // hand past it. Anything over the cap discards as normal rather than being lost.
+      if (kept.indexOf(c) !== -1 && hands[team].length < HAND_CAP) hands[team].push(c);
+      else discard[team].push(c);
+    });
+    played[team] = [];
+  });
 
   roundNumber = roundNumber + 1;
   units = [];
