@@ -21,13 +21,43 @@
 // Safe before state exists (jokers[team] may be undefined during early boot) and safe
 // for a team holding nothing, so callers never need to guard.
 function jokerSum(team, field) {
-  const list = (typeof jokers !== "undefined" && jokers[team]) || [];
+  return jokerSumOf((typeof jokers !== "undefined" && jokers[team]) || [], field);
+}
+
+// The same sum over an explicit LIST, so a SEAT's collection can be scored without
+// first loading it onto a side. The headless table settle needs exactly this.
+function jokerSumOf(list, field) {
   let total = 0;
-  for (let i = 0; i < list.length; i++) {
+  for (let i = 0; i < (list || []).length; i++) {
     const entry = JOKERS[list[i].jokerKey];
     if (entry && typeof entry[field] === "number") total += entry[field];
   }
   return total;
+}
+
+// ── AI seats ──────────────────────────────────────────────────────────────────
+
+// A seat's automatic shop turn. Deliberately dumb: buy a pack whenever it can afford
+// one and has a slot free, otherwise bank. It doesn't buy rerolls, because tableMatch
+// doesn't emulate rerolling at all (a pre-existing gap, see table.js) — so paying for
+// one would be spending comps on nothing.
+//
+// AI packs mint straight into the row rather than offering a choice; there's no one
+// to choose. Duplicates are allowed, matching what a player can end up holding.
+function aiSeatShop(seat) {
+  if (!seat || seat.isHuman) return false;
+  if (seat.comps < COMPS_PACK_COST) return false;
+  if ((seat.jokers || []).length >= JOKER_SLOTS) return false;
+  seat.comps -= COMPS_PACK_COST;
+  seat.jokers.push(makeJokerCard(JOKER_KEYS[Math.floor(Math.random() * JOKER_KEYS.length)]));
+  return true;
+}
+
+// Pay one seat its round comps. Mirrors the live payout in finishRound exactly —
+// income for everyone, a bonus for the winner, plus whatever its jokers add.
+function paySeatComps(seat, won) {
+  seat.comps = (seat.comps || 0) + COMPS_INCOME + (won ? COMPS_WIN_BONUS : 0) +
+    jokerSumOf(seat.jokers, "compsPerRound");
 }
 
 // The COMBAT integration point, called once per team from startRound's onRoundStart

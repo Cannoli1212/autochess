@@ -22,7 +22,8 @@ function renderTable() {
       '<div class="' + cls + '" style="border-color:' + s.color + '">' +
         '<div class="seat-name" style="color:' + s.color + '">' + crown + s.name + '</div>' +
         '<div class="seat-chips">💰 ' + s.chips + '</div>' +
-        '<div class="seat-comps">' + COMPS_ICON + ' ' + s.comps + '</div>' +
+        '<div class="seat-comps">' + COMPS_ICON + ' ' + s.comps +
+          ((s.jokers && s.jokers.length) ? '  🃏' + s.jokers.length : '') + '</div>' +
         (tag ? '<div class="seat-tag">' + tag + '</div>' : '') +
       '</div>';
   });

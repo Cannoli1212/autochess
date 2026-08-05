@@ -106,6 +106,12 @@ function finishRound(winner) {
     // runHeadlessMatchups appends the other two. Then show the tab bar on tab 0 (yours).
     matchRecordings = [{ label: liveTab, frames: liveFrames }];
     runHeadlessMatchups(liveLine);               // fills tableRecap + appends 2 recordings
+    // Every AI seat takes its shop turn once the round is fully settled — after BOTH the
+    // live payout above and the headless payouts inside runHeadlessMatchups, so a seat
+    // spends the comps it actually finished the round with.
+    for (let i = 1; i < seats.length; i++) aiSeatShop(seats[i]);
+    comps.player2 = seats[opponentSeat].comps;   // your opponent may have just spent; keep the badge honest
+    jokers.player2 = seats[opponentSeat].jokers;
     viewingTab = 0;
     renderTable();
     renderMatchTabs();
@@ -447,6 +453,12 @@ function runHeadlessMatchups(liveLine) {
     const a = seats[pair[0]], b = seats[pair[1]];
     const frames = [];                       // Phase D2: capture this fight for replay
     const out = tableMatch(a, b, size, frames);   // settles the chip steal on the seat objects
+    // Comps for the two seats that just fought headless. The live pair were already paid
+    // in finishRound, so between the two paths all six seats earn every round — without
+    // this, the four background seats would never be able to buy anything and the whole
+    // table economy would be yours alone.
+    paySeatComps(a, out.winnerId === a.id);
+    paySeatComps(b, out.winnerId === b.id);
     tableRecap.push(buildRecapLine(out, a, b));
     const tab = out.draw ? (a.name + " vs " + b.name + " (draw)")
       : (out.winnerId === a.id ? (a.name + " ✓ vs " + b.name) : (a.name + " vs " + b.name + " ✓"));

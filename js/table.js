@@ -98,11 +98,18 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   weakCardsPlayed = { player1: 0, player2: 0 };
   played = { player1: [], player2: [] };
   chips = { player1: seatA.chips, player2: seatB.chips };   // seat stacks drive gold abilities
+  // Load each seat's JOKERS onto its side, the same way its chips are loaded above, so a
+  // headless fight runs the REAL joker effects rather than an abstraction of them. Costs
+  // almost nothing (the effects are numeric-field sums) and keeps a background AI's
+  // collection worth exactly what yours is worth. simInstall neutralized these to empty
+  // and simRestore puts the live ones back, so this can't touch the player's row.
+  jokers = { player1: seatA.jokers || [], player2: seatB.jokers || [] };
   hands = {
-    // Hand = army + 1, matching the live HAND_SCHEDULE (place all but one). Reroll
-    // isn't emulated here, so background AIs are a touch weaker than a rerolling human.
-    player1: simDraftHand(armySizeThisRound + 1),
-    player2: simDraftHand(armySizeThisRound + 1),
+    // Hand = army + 1, matching the live HAND_SCHEDULE (place all but one), widened by
+    // any hand-size joker the seat holds. Reroll still isn't emulated here, so background
+    // AIs stay a touch weaker than a rerolling human — a pre-existing gap, not a new one.
+    player1: simDraftHand(armySizeThisRound + 1 + jokerSum("player1", "handBonus")),
+    player2: simDraftHand(armySizeThisRound + 1 + jokerSum("player2", "handBonus")),
   };
 
   aiPlaceUnits("player1");
@@ -112,6 +119,8 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   growCommunity();                                 // this round's community (renderFlop is gated by SIM_MODE)
   applySynergies();                                // bake suit + poker buffs on the placed teams
   for (let i = 0; i < units.length; i++) runAbilityHook(units[i], "onRoundStart", {});
+  applyJokerRoundStart("player1");                 // jokers bake last, as in the live startRound
+  applyJokerRoundStart("player2");
 
   // Hand the round-start effects (the Bowers, Midas, Rally...) to the OPENING frame. They
   // were emitted just above, outside the combat loop; without this they'd sit in the queue
