@@ -346,19 +346,49 @@ const RANK_ABILITIES = {
           3: { radius: 2, stackMult: 1.5 },                        // trips — radius-2 cloud (24 cells)
           4: { radius: 2, stackMult: 1.5, deathCloud: true },      // quads — one last breath on death
         } }],
-  // Rank 10 — RALLY (Batch C rework, was a team-wide +30% attack): an ADJACENCY
-  // aura — at fight start it buffs allies within `radius` cells, and each SUIT'S
-  // 10 rallies a different stat (the connector card, now with four faces):
-  //   10♥ neighbors +`hpMult` HP · 10♠ +`critBonus` crit · 10♣ +`speedMult`
-  //   attack speed · 10♦ GRANTS neighbors lifesteal for the fight.
-  // Pack-scaling: magnitudes × (1 + `perExtra` per extra 10 in the pool) — the ♦
-  // grant is on/off, so more 10♦s pay in coverage instead. Baked ONCE at round
-  // start from PLACEMENT positions — where you drop your 10 matters now.
-  10: [{ kind: "rally",       name: "Rally",        radius: 1, perExtra: 0.5,
-         suits: { hearts:   { hpMult: 0.4 },
-                  spades:   { critBonus: 0.25 },
-                  clubs:    { speedMult: 0.3 },
-                  diamonds: { grantLifesteal: true } } }],
+  // Rank 10 — RALLY, OF-A-KIND GATED (redesigned 2026-08-05, Riley — the LAST combat rank off the
+  // old linear per-extra idiom). Rank 10 is the CONNECTOR card: an ADJACENCY aura that buffs the
+  // allies standing within `radius` of it, never itself and never enemies. Baked ONCE at round start
+  // from PLACEMENT positions (units wander mid-fight, but the rally is the pre-battle speech), off
+  // packCount — fielded 10s + the shared flop, the same count the poker synergies use — so a copy
+  // dying mid-fight can't weaken the speech it already gave.
+  // What makes rank 10 different from every other gated rank:
+  //   • NO CAST. Rank 10 is a pure passive, the only redesigned rank besides 3 with no mana bar
+  //     (Riley 2026-08-05). Nothing to aim, nothing to charge — the whole card is the placement.
+  //   • NOT GATED OFF. A LONE 10 still rallies, just weakly (`tiers[1]` is the ungated base, like
+  //     rank 8's Bulwark and rank 9's Poison). The 10 never stops being a connector.
+  //   • The rungs pay in MAGNITUDE ONLY (Riley 2026-08-05) — quads is a HUGE buff to neighbors, not
+  //     a new shape. `radius` stays 1 (the 8 adjacent cells) at EVERY rung on purpose, so "where you
+  //     drop your 10" is still the decision the card is about. Contrast rank 8/9, whose top rungs buy
+  //     reach (`fullRow`/`fullLine`).
+  //   • FOUR FACES, FOUR LADDERS. Rank 10 has no melee/ranged `role:` split — instead each SUIT
+  //     rallies a different stat, and each now carries its OWN `tiers` table, so trips-on-hearts and
+  //     trips-on-clubs are genuinely different cards:
+  //       10♥ "Hold the Line" — neighbors gain `hpMult` of their max HP (the line holds)
+  //       10♠ "Killing Word"  — neighbors gain `critBonus` flat crit chance (clamped to 100%)
+  //       10♣ "Quick March"   — neighbors gain `speedMult` attack speed (the ranks quicken)
+  //       10♦ "Blood Banner"  — neighbors DRAIN `lifestealPct` of the damage they deal (a granted
+  //         `rallyLifesteal` ability, a separate kind from the ♦ suit's own lifesteal so it stacks
+  //         with it instead of being skipped — see the kit in abilities.js)
+  // Each ladder roughly DOUBLES per rung. The lone rung is weaker than the old flat value and quads
+  // is about twice the old top — that trade is exactly what the gate buys. Two rallies overlapping
+  // the same ally stack (both hooks fire); two ♦ banners do NOT (highest pct wins).
+  // `tiers` keyed by of-a-kind count: 1=lone, 2=pair, 3=trips, 4=quads (caps at 4).
+  10: [{ kind: "rally", name: "Rally", radius: 1,
+         suits: {
+           hearts:   { name: "Hold the Line",
+                       tiers: { 1: { hpMult: 0.25 },       2: { hpMult: 0.55 },
+                                3: { hpMult: 1.00 },       4: { hpMult: 1.90 } } },
+           spades:   { name: "Killing Word",
+                       tiers: { 1: { critBonus: 0.12 },    2: { critBonus: 0.28 },
+                                3: { critBonus: 0.50 },    4: { critBonus: 0.85 } } },
+           clubs:    { name: "Quick March",
+                       tiers: { 1: { speedMult: 0.18 },    2: { speedMult: 0.40 },
+                                3: { speedMult: 0.75 },    4: { speedMult: 1.40 } } },
+           diamonds: { name: "Blood Banner",
+                       tiers: { 1: { lifestealPct: 0.30 }, 2: { lifestealPct: 0.60 },
+                                3: { lifestealPct: 0.90 }, 4: { lifestealPct: 1.40 } } },
+         } }],
 };
 
 // Phase 1 — UNIQUE cards: abilities tied to ONE specific suit+rank combo (not all
@@ -721,13 +751,17 @@ const FUSABLE_HANDS = {
   tenTwo: {
     ranks: [10, 2], label: "10-2", atkMult: 0.85, hpMult: 0.9, bonusChips: 30,
     abilities: [
-      // Rank-10 Rally aura — pack-scaling OFF (perExtra 0) so a fusion's ambiguous
-      // rank (whichever card was dragged onto) can't skew the aura's magnitude.
-      { kind: "rally", name: "Rally", radius: 1, perExtra: 0,
-        suits: { hearts:   { hpMult: 0.4 },
-                 spades:   { critBonus: 0.25 },
-                 clubs:    { speedMult: 0.3 },
-                 diamonds: { grantLifesteal: true } } },
+      // Rank-10 Rally aura — of-a-kind scaling OFF, because a FUSED card is excluded from
+      // pokerPool (synergies.js) so its packCount can never climb past 1 anyway. Rather than
+      // let the fusion silently inherit the real 10's weak LONE rung, each face here carries a
+      // single `1:` row at the values Rally had before the 2026-08-05 gate redesign — the
+      // Brunson's aura is pinned to exactly what it has always been, and retuning the real
+      // rank-10 ladder can't move it by accident.
+      { kind: "rally", name: "Rally", radius: 1,
+        suits: { hearts:   { name: "Hold the Line", tiers: { 1: { hpMult: 0.4 } } },
+                 spades:   { name: "Killing Word",  tiers: { 1: { critBonus: 0.25 } } },
+                 clubs:    { name: "Quick March",   tiers: { 1: { speedMult: 0.3 } } },
+                 diamonds: { name: "Blood Banner",  tiers: { 1: { lifestealPct: 1.0 } } } } },
       { kind: "warpath", name: "Warpath", radius: 1, gain: 0.2, allyGain: 0.1 },
     ],
   },

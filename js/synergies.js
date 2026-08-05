@@ -179,11 +179,28 @@ function poisonRungText(rung) {
     : "";
   return "+" + hp + "% HP · " + t.stackDamage + " poison/tick · " + cast + plague;
 }
+// Rank 10 of-a-kind text (redesigned 2026-08-05): a pair/trips/quads of 10s still gets the flat
+// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND a stronger Rally aura.
+// The awkward bit is that the chip is per-RANK while Rally's magnitude is per-SUIT — the four 10s
+// have four separate ladders — so print all four, in the suit order the ability entry lists them.
+// Note the two buffs land on DIFFERENT units: the flat +HP on the 10s themselves, the rally on
+// their NEIGHBORS. Every number is read LIVE off RANK_ABILITIES[10] so the tooltip can't drift.
+function rallyRungText(rung) {
+  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
+  const rally = RANK_ABILITIES[10].find(function (a) { return a.kind === "rally"; });
+  const pct = function (suit, key) {
+    return Math.round(rally.suits[suit].tiers[rung][key] * 100);
+  };
+  return "+" + hp + "% HP · rally: +" + pct("hearts", "hpMult") + "% HP / +"
+    + pct("spades", "critBonus") + "% crit / +" + pct("clubs", "speedMult") + "% spd / "
+    + pct("diamonds", "lifestealPct") + "% drain";
+}
 function ofAKindText(rank, rung) {
   if (Number(rank) === 2) return BERSERKER_RUNG_TEXT[rung];
   if (Number(rank) === 3) return thornsRungText(rung);
   if (Number(rank) === 8) return bulwarkRungText(rung);
   if (Number(rank) === 9) return poisonRungText(rung);
+  if (Number(rank) === 10) return rallyRungText(rung);
   return POKER_HANDS.ofAKind[rung].text;
 }
 

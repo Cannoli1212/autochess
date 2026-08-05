@@ -108,6 +108,27 @@ const ABILITIES = {
     },
   },
 
+  // 10♦ "Blood Banner"'s GRANTED drain — a fraction `pct` of the damage this unit deals, healed
+  // back. A SEPARATE kind from the diamonds' native `lifesteal` above, for two reasons. First,
+  // safety: the ♦ suit's entry is a shared object literal (config.js SUITS.diamonds.abilities,
+  // handed unchanged to every diamond by unitAbilities), so the grant can NEVER be a mutation of
+  // it — it's a fresh object pushed onto the ally, carrying its own pct. Second, design: a diamond
+  // standing under a blood banner used to get NOTHING (the old grant skipped anyone who already had
+  // lifesteal). Now the two stack — a vampire under the banner drinks twice. Overlapping banners do
+  // not stack; the rally bake keeps only the highest pct. Same "emit what was actually drank"
+  // honesty as lifesteal: at full HP the cap is the thing worth seeing.
+  rallyLifesteal: {
+    onDealDamage: function (unit, ctx, ability) {
+      // Round the SIP, not the running total, so hp stays a whole number like every other path.
+      const sip = Math.round(ctx.damage * (ability.pct || 0));
+      if (sip <= 0) return;
+      const before = unit.hp;
+      unit.hp = Math.min(unit.maxHp, unit.hp + sip);
+      const drank = unit.hp - before;
+      if (drank > 0) emitFx("heal", { x: unit.x, y: unit.y, amount: drank });
+    },
+  },
+
   // Rank 3 — Thorns: when hit, reflect a PERCENTAGE of the damage taken back at the
   // attacker, so a big hit stings more — the Target Dummy's whole point. RAW hp
   // subtraction (not an attack), so it does NOT re-fire onDamaged and two thorns units
@@ -1175,46 +1196,56 @@ const ABILITIES = {
     },
   },
 
-  // Rank 10 — Rally (Batch C rework, was team-wide attack): an ADJACENCY aura.
-  // At fight start, buff every ally within `radius` cells (Chebyshev, same as
-  // range/movement) — NOT itself, NOT enemies. Which stat depends on this 10's
-  // SUIT (the `suits` map on the ability entry): ♥ HP, ♠ crit, ♣ attack speed,
-  // ♦ grants the lifesteal ability outright. Runs after synergies bake, so the
-  // buffs multiply already-buffed numbers; baked ONCE from placement positions
-  // (units wander mid-fight but the rally is the pre-battle speech). PHALANX
-  // pack-scaling: magnitudes × (1 + `perExtra` per extra 10 in the pool); the ♦
-  // grant is binary, so extra 10♦s pay in board coverage, not strength. Two
-  // rally auras overlapping the same ally stack (both fire their own hook).
+  // Rank 10 — Rally, OF-A-KIND GATED (redesigned 2026-08-05): an ADJACENCY aura. At fight start,
+  // buff every ally within `radius` cells (Chebyshev, same as range/movement) — NOT itself, NOT
+  // enemies. Runs after synergies bake, so the buffs multiply already-buffed numbers; baked ONCE
+  // from PLACEMENT positions (units wander mid-fight but the rally is the pre-battle speech).
+  // Which stat, and HOW MUCH, comes from the `suits` map on the ability entry — each of the four
+  // faces (♥ HP · ♠ crit · ♣ attack speed · ♦ granted drain) carries its OWN `tiers` table keyed
+  // by of-a-kind count, so the four 10s ramp differently as you collect them. NOT gated off: a
+  // lone 10 reads `tiers[1]` and still rallies, weakly. No cast, and `radius` is flat at every
+  // rung — the rungs pay in magnitude only (see the config entry for the full ladder).
+  // Two rally auras overlapping the same ally stack (both fire their own hook); the ♦ grant is
+  // the one exception, since two drain entries would double-dip every swing.
   rally: {
     onRoundStart: function (unit, ctx, ability) {
-      const eff = (ability.suits || {})[unit.suit];
-      if (!eff) return;
-      const scale = 1 + (ability.perExtra || 0) * (packCount(unit) - 1);
+      const face = (ability.suits || {})[unit.suit];
+      if (!face || !face.tiers) return;
+      // 1=lone, 2=pair, 3=trips, 4=quads. The tiers[1] fallback is the standard safety for the
+      // headless/1v1 paths that can skip round-start prep (same shape as bulwark's).
+      const t = face.tiers[Math.min(packCount(unit), 4)] || face.tiers[1];
+      if (!t) return;
       for (let i = 0; i < units.length; i++) {
         const ally = units[i];
         if (ally.team !== unit.team || ally === unit) continue;
         const dist = Math.max(Math.abs(ally.x - unit.x), Math.abs(ally.y - unit.y));
         if (dist > ability.radius) continue;
-        if (eff.hpMult) {
-          const mult = 1 + eff.hpMult * scale;
+        let gainedHp = 0;
+        if (t.hpMult) {
+          const mult = 1 + t.hpMult;
+          const beforeHp = ally.hp;
           ally.hp = Math.round(ally.hp * mult);
           ally.maxHp = Math.round(ally.maxHp * mult);
+          gainedHp = ally.hp - beforeHp;
         }
-        if (eff.critBonus) {
-          // critChance is a baked STAT (attackTarget falls back to the suit's
-          // base crit when it's unset) — resolve that base, then add.
+        if (t.critBonus) {
+          // critChance is a baked STAT (attackTarget falls back to the suit's base crit when it's
+          // unset) — resolve that base, then add. Clamped at 1: a ♠ ally starts at 0.5 base, and
+          // the quads rung would otherwise push it past certainty (synergies.js clamps too).
           const base = (ally.critChance !== undefined) ? ally.critChance : (SUITS[ally.suit].crit || 0);
-          ally.critChance = base + eff.critBonus * scale;
+          ally.critChance = Math.min(1, base + t.critBonus);
         }
-        if (eff.speedMult) ally.attackSpeed = ally.attackSpeed * (1 + eff.speedMult * scale);
-        if (eff.grantLifesteal) {
-          // Grant at most one copy — a diamond ally already has lifesteal, and
-          // two entries would heal twice per hit.
-          let has = false;
+        if (t.speedMult) ally.attackSpeed = ally.attackSpeed * (1 + t.speedMult);
+        if (t.lifestealPct) {
+          // Push a FRESH entry (never touch the ♦ suit's shared literal). One rally-granted drain
+          // per ally: overlapping banners keep the strongest instead of stacking two hooks. The
+          // ally's own native lifesteal is a different kind, so it survives alongside this.
+          let granted = null;
           for (let j = 0; j < ally.abilities.length; j++) {
-            if (ally.abilities[j].kind === "lifesteal") { has = true; break; }
+            if (ally.abilities[j].kind === "rallyLifesteal") { granted = ally.abilities[j]; break; }
           }
-          if (!has) ally.abilities.push({ kind: "lifesteal" });
+          if (!granted) ally.abilities.push({ kind: "rallyLifesteal", name: "Blood Banner", pct: t.lifestealPct });
+          else granted.pct = Math.max(granted.pct, t.lifestealPct);
         }
         // Remember that this ally is standing inside a rally aura, purely so the board can
         // show a ⚑ badge on it. The aura is baked from PLACEMENT positions and never
@@ -1222,7 +1253,10 @@ const ABILITIES = {
         // speech — which is exactly the decision the player made during placement.
         // A counter, not a flag: two overlapping rallies both really do stack.
         ally.ralliedBy = (ally.ralliedBy || 0) + 1;
-        emitFx("buff", { x: ally.x, y: ally.y });
+        // Show the HP grant as a number when there is one (the ♥ banner's whole payload is a
+        // stat line nobody watches); the other three faces have no number to show, so they get
+        // the bare ▲ they always had.
+        emitFx("buff", gainedHp > 0 ? { x: ally.x, y: ally.y, amount: gainedHp } : { x: ally.x, y: ally.y });
       }
     },
   },
@@ -1359,8 +1393,14 @@ function cardCannotDiscard(card) {
 // The display name(s) of a card's rank abilities, for card/unit tooltips ("" if none). Takes
 // the whole card/unit (needs suit+rank) and role-filters via rankAbilitiesFor, so a ♥6 lists
 // "Hellfire Aura" while a ♣6 lists "Hellfire" — each card describes only the kit it can run.
+// Rank 10 splits by SUIT rather than by role (four faces, four ladders — see RANK_ABILITIES[10]),
+// so resolve the suit's own name when the entry carries a `suits` map: a 10♥ reads "Hold the Line"
+// and a 10♦ "Blood Banner" instead of all four saying the same generic "Rally".
 function rankAbilityText(card) {
-  return rankAbilitiesFor(card).map(function (a) { return a.name; }).join(", ");
+  return rankAbilitiesFor(card).map(function (a) {
+    const face = a.suits && a.suits[card.suit];
+    return (face && face.name) ? face.name : a.name;
+  }).join(", ");
 }
 
 // Build the hover tooltip for a card OR a unit (both have suit/rank/range). One
