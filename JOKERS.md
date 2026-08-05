@@ -4,11 +4,36 @@ The design doc for the joker layer. **Read this before adding a joker entry to
 `js/config.js`.** Written 2026-08-05 (Riley's design pass).
 
 A joker is **not a unit**. It has no suit, no rank, no attack and no HP, it can never be placed on the
-board, and it is the game's only *player-level* upgrade. Two ways in: draw one out of the shoe (luck)
-or buy a pack with comps (agency). You may hold `JOKER_SLOTS` (3) at a time — the cap is the point,
-because with unlimited slots claiming a joker is never a decision.
+board, and it is the game's only *player-level* upgrade. You may hold `JOKER_SLOTS` (3) at a time — the
+cap is the point, because with unlimited slots claiming a joker is never a decision.
+
+**Jokers are not sold** (Riley, 2026-08-05). The only way to one is to **draw it out of the shoe** —
+`JOKERS_PER_DECK × DECKS` = 4 in a 108-card shoe, ~3.7% a draw. That's what makes a redraw a *hunt*
+rather than a mulligan, and it's why a joker reads as luck rather than as a purchase.
 
 The machinery is `js/jokers.js`. The catalog is `JOKERS` in `js/config.js`.
+
+## The shop
+
+Comps buy two things, both aimed at "the hand I was dealt isn't the hand I want":
+
+- **Redraw** (`COMPS_REROLL_COSTS = [2,4,6]`) — throw the whole hand away, take another. Cheap,
+  repeatable, random. The price escalates *within* a round so digging is self-limiting.
+- **Card pack** (`COMPS_CARD_PACK_COST = 5`) — `CARD_PACK_SIZE` cards revealed, you keep one, and it
+  goes straight into your hand so it's playable this round. The value is **targeting**: the exact suit
+  for a flush, the exact rank for a pair. A redraw is a new random hand; a pack is a choice.
+
+Pack cards are dealt with **no repeated rank and no repeated suit**, so the offer is always a choice
+between different *shapes* rather than three near-identical cards. They're **minted** (`makeCardOf`),
+not dealt off the draw pile, so the two you turn down never existed and a pack can't thin the shoe
+you're about to draw from. The one you keep joins the shoe permanently once played, so each pack grows
+your deck by exactly one card — a rounding error against 108, and worth it for "the card I bought
+stays mine".
+
+**AI seats are the one asymmetry.** A seat buys jokers *outright* (`COMPS_SEAT_JOKER_COST = 8`) because
+it has no shoe to find them in — `simDraftHand` invents cards rather than dealing from a deck. It buys
+nothing else: `tableMatch` doesn't emulate rerolling, and a bought card would evaporate when the next
+match drafts a fresh hand.
 
 ---
 
@@ -99,7 +124,7 @@ instead of the hand — which is why this is a mechanism and not a special case.
 | 🍸 | The Cocktail Waitress | common | `compsOnLoss: 3` | +3 comps on a round you **lose** |
 | 🕴️ | The Pit Boss | uncommon | `stealMult: 0.5` | +50% chips stolen on a win |
 | 🅿️ | The Valet | common | `rerollDiscount: 1` | bought redraws cost 1 less |
-| 🦈 | The Loan Shark | common | `packDiscount: 3`, `handBonus: -1` | cheap packs, one card fewer |
+| 🦈 | The Loan Shark | common | `packDiscount: 2`, `handBonus: -1` | cheap card packs, one card fewer |
 | 🧮 | The Counter | uncommon | `handBonus: 1` | +1 card in hand |
 | 🎩 | The Mechanic | common | `redrawBonus: 1` | +1 free redraw |
 | 💎 | The High Roller | rare | `atkPerChip: 0.002` | army scales with your chip stack |
@@ -119,11 +144,16 @@ instead of the hand — which is why this is a mechanism and not a special case.
   The Valet. A card lost to a reroll takes its growth with it. Its growth is re-applied after a Tailor
   recut, because `makeCardOf` returns a fresh card — without that, the two jokers would undo each other.
 
-**Five of the twelve are `aiUseless`** (Valet, Mechanic, Tailor, Bagman, Card Sharp) and four of those
-for the *same* reason: `tableMatch` drafts a fresh hand and resets `played` every match, so a headless
-seat has no reroll and no hand continuity. **Teaching the table to carry seat hands between rounds would
-fix four jokers at once** — the most valuable single piece of table work left, and worth doing before
-the catalog grows much further.
+**Half the catalog is `aiUseless`** — Valet, Mechanic, Tailor, Bagman, Card Sharp, Loan Shark — so a
+seat picks from only 6 of 12. Four share the *same* cause: `tableMatch` drafts a fresh hand and resets
+`played` every match, so a headless seat has no reroll and no hand continuity. **Teaching the table to
+carry seat hands between rounds would fix four jokers at once** — the most valuable single piece of table
+work left, and it's getting more valuable as the catalog grows.
+
+The Loan Shark's tag is **load-bearing, not a nicety**: `packDiscount` only applies to card packs, which
+seats can't buy, while `handBonus: -1` *is* honored by `tableMatch`. Untagged, a seat would pay 8 comps
+to get strictly worse. **Any joker whose upside is human-only but whose downside is engine-wide must be
+tagged** — that's the general rule the Loan Shark is an instance of.
 
 ---
 

@@ -718,8 +718,21 @@
   .jslot.filled.swappable:hover { background: #2a2418; }
   /* An open pack's options are always clickable — picking one is the only way out. */
   .pack-title { font-size: 12px; color: #ffd76b; margin: 8px 0 4px; }
-  .jslot.pack { cursor: pointer; border-color: #ffd76b; color: #ffd76b; }
-  .jslot.pack:hover { background: #2a2418; box-shadow: 0 0 10px rgba(255, 215, 107, 0.9); }
+
+  /* ── The CARD pack offer (#packRow) ────────────────────────────────────────
+     Its own row under the joker row. The cards are real card faces, not abstract
+     slots, because judging actual cards IS the purchase — you need the suit, the
+     rank and the stat line to choose. Amber ring marks them as "not yours yet". */
+  #packRow { margin: 8px auto; max-width: 640px; }
+  .packcard-row { display: flex; gap: 8px; justify-content: center; }
+  .card.packcard {
+    cursor: pointer; border-color: #ffd76b;
+    box-shadow: 0 0 8px rgba(255, 215, 107, 0.6);
+  }
+  .card.packcard:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0 12px rgba(255, 215, 107, 0.95);
+  }
 
   /* ── ACTIVATED jokers (The Tailor) ─────────────────────────────────────────
      A passive joker is a fact you read once; an activated one is a BUTTON, and it has to

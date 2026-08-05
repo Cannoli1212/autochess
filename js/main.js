@@ -32,7 +32,7 @@ document.getElementById("buyRerollButton").addEventListener("click", function ()
   buyReroll("player1");
 });
 document.getElementById("buyPackButton").addEventListener("click", function () {
-  buyPack("player1");
+  buyCardPack("player1");
 });
 
 // Part B step 1 (now 3-way): cycle Player 2 between the computer, a second human, and
@@ -118,4 +118,5 @@ updateRoundInfo();
 drawHands();
 renderTable();
 renderJokers();
+renderPackOffer();
 updateShopPanel();

@@ -389,6 +389,7 @@ function nextRound() {
   drawHands();                  // top the carried hand up to this round's HAND_SCHEDULE
   renderTable();                // Phase D: keep the seat stacks on screen (no-op off-table)
   renderJokers();
+  renderPackOffer();            // packOffer was cleared above — hide the row with it
 }
 
 // Playtest mode: drop a hand-picked card (any suit+rank) into a team's hand so you can
@@ -442,6 +443,7 @@ function resetGame() {
   drawHands();                  // deal fresh round-1 hands
   renderTable();                // Phase D: paint the reset seat stacks (no-op off-table)
   renderJokers();
+  renderPackOffer();
 }
 
 // ── Phase D helpers (6-seat table) ────────────────────────────────────────────

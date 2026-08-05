@@ -920,9 +920,12 @@ const JOKERS = {
   theValet:    { name: "The Valet",       icon: "🅿️", weight: 4, rerollDiscount: 1,
                  aiUseless: true,
                  blurb: "Fetches you another hand. Bought redraws cost 1 comp less." },
-  loanShark:   { name: "The Loan Shark",  icon: "🦈", weight: 4, packDiscount: 3,
-                 handBonus: -1,
-                 blurb: "Cheap money, expensive terms. Packs cost 3 less — you hold one card fewer." },
+  // aiUseless is LOAD-BEARING here, not a nicety: packDiscount only applies to card packs,
+  // which seats can't buy, while handBonus -1 IS honored by tableMatch. Untagged, this
+  // joker would be pure downside for a seat — it would pay 8 comps to get worse.
+  loanShark:   { name: "The Loan Shark",  icon: "🦈", weight: 4, packDiscount: 2,
+                 handBonus: -1, aiUseless: true,
+                 blurb: "Cheap money, expensive terms. Card packs cost 2 less — you hold one card fewer." },
 
   // ── Draw ───────────────────────────────────────────────────────────────────
   theCounter:  { name: "The Counter",     icon: "🧮", weight: 2, handBonus: 1,
@@ -991,18 +994,41 @@ const JOKER_PACK_GATE_FLOOR = 2;    // the count a lone card is lifted to, never
 const JOKER_SLOTS = 3;
 
 // ── The shop ─────────────────────────────────────────────────────────────────
-// What comps are FOR. Two things to buy, and they're deliberately the two ends of
-// the same loop: rerolls are the cheap, repeatable way to FISH the shoe for a joker,
-// and a pack is the expensive way to just BUY one. Fishing is luck you can afford
-// every round; a pack is the guarantee you save up for.
+// What comps are FOR. Two things to buy, both aimed at the same problem — the hand you
+// were dealt isn't the hand you want:
 //
-// Reroll prices ESCALATE within a round so that fishing is self-limiting — without
-// that, a fat comp stack would let you reroll until you found what you wanted and
-// the shoe's rarity would stop meaning anything. Past the end of the list the last
-// price repeats. Prices reset every round along with the free redraws.
+//   REDRAW    — throw the whole hand away and take another. Cheap, repeatable, random.
+//   CARD PACK — CARD_PACK_SIZE cards revealed, you keep one, straight into your hand.
+//               Expensive, and the value is TARGETING: the exact suit for a flush, the
+//               exact rank for a pair. A redraw is a new random hand; a pack is a choice.
+//
+// Reroll prices ESCALATE within a round so redrawing is self-limiting — without that, a
+// fat comp stack would let you reroll until you found what you wanted. Past the end of
+// the list the last price repeats. Prices reset every round with the free redraws.
 const COMPS_REROLL_COSTS = [2, 4, 6];
-const COMPS_PACK_COST = 8;    // ~2 winning rounds' income, or 3 losing ones
-const PACK_SIZE = 3;          // jokers revealed per pack; you keep ONE
+
+// JOKERS ARE NOT SOLD (Riley, 2026-08-05). They ride in the shoe and you find them by
+// drawing — that's what makes a redraw a HUNT rather than a mulligan, and it's why a
+// joker feels like luck rather than a purchase. The shop used to sell joker packs; it
+// sells cards now, so the only way to a joker is the deck.
+const COMPS_CARD_PACK_COST = 5;   // ~1 winning round's income; less than a joker was worth
+const CARD_PACK_SIZE = 3;         // cards revealed per pack; you keep ONE
+
+// A pack's cards are MINTED, not dealt off your draw pile — so the two you turn down
+// simply never existed and a pack can't thin the shoe you're about to draw from. The card
+// you keep does join the shoe permanently once it's played and discarded, so each pack
+// bought grows your deck by exactly one card. At a few packs a game that's a rounding
+// error against 108, and "the card I bought stays mine" is worth more than a tidy count.
+//
+// The three are dealt with NO repeated rank and NO repeated suit, so a pack is always a
+// choice between different shapes rather than three near-identical cards.
+
+// What a headless AI SEAT pays for a joker. Seats can't shop for cards (tableMatch drafts
+// a fresh hand every match, so a bought card would evaporate) and they can't fish a shoe
+// either — simDraftHand invents cards rather than dealing from a deck with jokers in it.
+// So a seat buys its jokers outright at this price. Deliberately asymmetric: you find
+// jokers, a seat buys them, because a seat has no deck to find them in.
+const COMPS_SEAT_JOKER_COST = 8;
 
 // Phase D: how many 52-card decks make up each player's shoe.
 const DECKS = 2;

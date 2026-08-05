@@ -1,7 +1,7 @@
 <meta charset="utf-8" />
 <title>Autochess — 7-Round Mode</title>
 
-<link rel="stylesheet" href="css/styles.css?v=leg125" />
+<link rel="stylesheet" href="css/styles.css?v=leg126" />
 
 <p id="roundInfo">Round 1 of 7 — Rounds won: Player 1: 0 · Player 2: 0</p>
 
@@ -27,6 +27,10 @@
 
 <div id="jokerRow" style="display:none"></div>
 
+<!-- An open CARD pack awaiting a pick. Its own row, not part of #jokerRow: the joker row is
+     what you KEEP all game, a card pack is a one-off purchase going into this round's hand. -->
+<div id="packRow" style="display:none"></div>
+
 <div class="arena">
   <div id="traitBar"></div>
   <div id="board"></div>
@@ -43,7 +47,7 @@
       <button id="aiToggleButton">🤖 P2: Computer</button>
       <div id="shopPanel">
         <button id="buyRerollButton" title="Spend comps on one more whole-hand redraw this round. The price goes up each time you buy one."></button>
-        <button id="buyPackButton" title="Spend comps to open a pack of jokers and keep one."></button>
+        <button id="buyPackButton" title="Spend comps to open a pack of cards and keep one — it goes straight into your hand. Jokers aren't sold; you find those in the deck."></button>
       </div>
       <div id="playtestPanel" style="display:none; background:#2b303a; border:1px solid #4a5568; border-radius:6px; padding:6px; margin-top:4px;">
         <div style="font-size:12px; margin-bottom:4px;">🧪 Add any card:</div>
@@ -94,26 +98,26 @@
      restated the #traitBar sidebar beside the board, and the two legend blocks
      were static tutorial text — both pushed the board up out of view. -->
 
-<script src="js/config.js?v=leg125"></script>
-<script src="js/abilities.js?v=leg125"></script>
-<script src="js/state.js?v=leg125"></script>
-<script src="js/cards.js?v=leg125"></script>
-<script src="js/jokers.js?v=leg125"></script>
-<script src="js/flop.js?v=leg125"></script>
-<script src="js/synergies.js?v=leg125"></script>
-<script src="js/unitart.js?v=leg125"></script>
-<script src="js/board.js?v=leg125"></script>
-<script src="js/motion.js?v=leg125"></script>
-<script src="js/fx.js?v=leg125"></script>
-<script src="js/fxkits.js?v=leg125"></script>
-<script src="js/hands.js?v=leg125"></script>
-<script src="js/placement.js?v=leg125"></script>
-<script src="js/ai.js?v=leg125"></script>
-<script src="js/pathing.js?v=leg125"></script>
-<script src="js/combat.js?v=leg125"></script>
-<script src="js/hud.js?v=leg125"></script>
-<script src="js/tableview.js?v=leg125"></script>
-<script src="js/gameflow.js?v=leg125"></script>
-<script src="js/sim.js?v=leg125"></script>
-<script src="js/table.js?v=leg125"></script>
-<script src="js/main.js?v=leg125"></script>
+<script src="js/config.js?v=leg126"></script>
+<script src="js/abilities.js?v=leg126"></script>
+<script src="js/state.js?v=leg126"></script>
+<script src="js/cards.js?v=leg126"></script>
+<script src="js/jokers.js?v=leg126"></script>
+<script src="js/flop.js?v=leg126"></script>
+<script src="js/synergies.js?v=leg126"></script>
+<script src="js/unitart.js?v=leg126"></script>
+<script src="js/board.js?v=leg126"></script>
+<script src="js/motion.js?v=leg126"></script>
+<script src="js/fx.js?v=leg126"></script>
+<script src="js/fxkits.js?v=leg126"></script>
+<script src="js/hands.js?v=leg126"></script>
+<script src="js/placement.js?v=leg126"></script>
+<script src="js/ai.js?v=leg126"></script>
+<script src="js/pathing.js?v=leg126"></script>
+<script src="js/combat.js?v=leg126"></script>
+<script src="js/hud.js?v=leg126"></script>
+<script src="js/tableview.js?v=leg126"></script>
+<script src="js/gameflow.js?v=leg126"></script>
+<script src="js/sim.js?v=leg126"></script>
+<script src="js/table.js?v=leg126"></script>
+<script src="js/main.js?v=leg126"></script>

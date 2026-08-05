@@ -64,21 +64,25 @@ function pickJokerKey(pool, forSeat) {
 
 // ── AI seats ──────────────────────────────────────────────────────────────────
 
-// A seat's automatic shop turn. Deliberately dumb: buy a pack whenever it can afford
-// one and has a slot free, otherwise bank. It doesn't buy rerolls, because tableMatch
-// doesn't emulate rerolling at all (a pre-existing gap, see table.js) — so paying for
-// one would be spending comps on nothing.
+// A seat's automatic shop turn. Deliberately dumb: buy a JOKER whenever it can afford one
+// and has a slot free, otherwise bank.
 //
-// AI packs mint straight into the row rather than offering a choice; there's no one
-// to choose. Duplicates are allowed, matching what a player can end up holding.
+// A seat buys jokers OUTRIGHT, which is the one place the AI's economy differs from yours.
+// You find jokers by drawing (they ride in the shoe); a seat has no shoe to find them in —
+// simDraftHand invents cards rather than dealing from a deck — so without a purchase path
+// a seat could never hold a joker at all. It buys nothing else: tableMatch doesn't emulate
+// rerolling, and a bought CARD would evaporate when the next match drafts a fresh hand.
+//
+// It mints straight into the row rather than offering a choice; there's no one to choose.
+// Duplicates are allowed, matching what a player can end up holding. pickJokerKey's
+// forSeat flag skips jokers a headless seat can't benefit from.
 function aiSeatShop(seat) {
   if (!seat || seat.isHuman) return false;
-  const price = Math.max(1, COMPS_PACK_COST - jokerSumOf(seat.jokers, "packDiscount"));
-  if (seat.comps < price) return false;
+  if (seat.comps < COMPS_SEAT_JOKER_COST) return false;
   if ((seat.jokers || []).length >= JOKER_SLOTS) return false;
   const key = pickJokerKey(null, true);      // forSeat: skip what a seat can't use
   if (!key) return false;
-  seat.comps -= price;
+  seat.comps -= COMPS_SEAT_JOKER_COST;
   seat.jokers.push(makeJokerCard(key));
   return true;
 }
@@ -357,10 +361,10 @@ function rerollPrice(team) {
   return Math.max(1, base - jokerSum(team, "rerollDiscount"));
 }
 
-// What a pack costs. Same floor-at-1 rule as rerollPrice, for the same reason — The
+// What a CARD pack costs. Same floor-at-1 rule as rerollPrice, for the same reason — The
 // Loan Shark makes packs cheap, not free.
 function packPrice(team) {
-  return Math.max(1, COMPS_PACK_COST - jokerSum(team, "packDiscount"));
+  return Math.max(1, COMPS_CARD_PACK_COST - jokerSum(team, "packDiscount"));
 }
 
 // The shop is open exactly when the Redraw button is usable: during your own planning,
@@ -385,47 +389,64 @@ function buyReroll(team) {
   return true;
 }
 
-// Buy a pack: PACK_SIZE jokers revealed, you keep one. The jokers are minted here
-// rather than drawn from the shoe, so the two you turn down simply never existed —
-// there's nothing to hand back, and a pack can't deplete your draw pile.
-function buyPack(team) {
+// Deal a card pack's contents: CARD_PACK_SIZE cards with NO repeated rank and NO repeated
+// suit, so the offer is always a choice between different shapes rather than three
+// near-identical cards. Pulled out of buyCardPack so it can be tested on its own.
+//
+// Cards are MINTED (makeCardOf) rather than dealt off the draw pile, so the two you turn
+// down never existed and a pack can't thin the shoe you're about to draw from.
+function dealCardPack() {
+  const ranksLeft = [];
+  for (let r = 2; r <= 14; r++) ranksLeft.push(r);
+  const suitsLeft = SUIT_NAMES.slice();
+  const picks = [];
+  // Cap the loop at whichever pool runs out first — with 4 suits, a pack bigger than 4
+  // couldn't keep suits unique, so the guarantee sets the ceiling rather than a magic number.
+  const n = Math.min(CARD_PACK_SIZE, ranksLeft.length, suitsLeft.length);
+  for (let i = 0; i < n; i++) {
+    const rank = ranksLeft.splice(Math.floor(Math.random() * ranksLeft.length), 1)[0];
+    const suit = suitsLeft.splice(Math.floor(Math.random() * suitsLeft.length), 1)[0];
+    picks.push(makeCardOf(suit, rank));
+  }
+  return picks;
+}
+
+// Buy a CARD pack: CARD_PACK_SIZE cards revealed, you keep one, and it goes straight into
+// your hand so it's playable this round. Jokers are NOT sold — they ride in the shoe and
+// you find them by drawing (Riley, 2026-08-05), which is what keeps a redraw a hunt.
+function buyCardPack(team) {
   if (!canShop() || packOffer) return false;
   const price = packPrice(team);
   if (comps[team] < price) return false;
-  comps[team] -= price;
-  const picks = [];
-  let pool = JOKER_KEYS.slice();
-  for (let i = 0; i < PACK_SIZE && pool.length; i++) {
-    // Draw WITHOUT replacement so a pack never shows you the same joker twice —
-    // three identical options wouldn't be a choice. Weighted, so a pack is mostly
-    // commons with a rare turning up occasionally.
-    const key = pickJokerKey(pool);
-    picks.push(makeJokerCard(key));
-    pool = pool.filter(function (k) { return k !== key; });
+  // Refuse rather than sell a card with nowhere to go — the bench has a ceiling, and
+  // taking the comps for a card that gets discarded on arrival would be a swindle.
+  if (hands[team].length >= HAND_CAP) {
+    message.textContent = "🃏 Your hand is full (" + HAND_CAP + ") — no room for a new card.";
+    return false;
   }
-  packOffer = { team: team, cards: picks };
-  message.textContent = "🎁 Opened a pack — pick one joker to keep.";
+  comps[team] -= price;
+  packOffer = { team: team, cards: dealCardPack() };
+  message.textContent = "🃏 Opened a card pack — pick one card to keep.";
   afterShopChange();
   return true;
 }
 
-// Take one joker out of the open pack. If the row is full this hands off to the same
-// two-step swap a drawn joker uses, so there's one swap flow, not two.
+// Take one card out of the open pack. It goes to the HAND (not the shoe), so it's usable
+// immediately; the two you didn't pick simply never existed, so there's nothing to discard.
 function takeFromPack(idx) {
   if (!packOffer) return;
   const team = packOffer.team;
   const card = packOffer.cards[idx];
   if (!card) return;
   packOffer = null;
-  if (jokerSlotsFree(team) > 0) {
-    jokers[team].push(card);
-    message.textContent = "🃏 Claimed " + JOKERS[card.jokerKey].name + " from the pack.";
+  if (hands[team].length >= HAND_CAP) {
+    // Only reachable if the hand filled up between opening and picking. Say so rather
+    // than silently dropping the card the player just paid for.
+    message.textContent = "🃏 Hand is full (" + HAND_CAP + ") — the pack was lost.";
   } else {
-    // Park it in hand so the existing full-row swap can resolve it, then arm that swap.
     hands[team].push(card);
-    jokerSwapPending = card;
-    message.textContent = "🃏 Joker row is full (" + JOKER_SLOTS + ") — click one above to " +
-      "replace it with " + JOKERS[card.jokerKey].name + ".";
+    message.textContent = "🃏 Kept " + rankLabel(card.rank) + SUITS[card.suit].symbol +
+      " (" + card.attack + "/" + card.hp + ") — it's in your hand.";
   }
   afterShopChange();
 }
@@ -435,6 +456,7 @@ function afterShopChange() {
   updateChipInfo();
   updateShopPanel();
   renderJokers();
+  renderPackOffer();
   renderHands();
   updateRedrawButton();
 }
@@ -449,9 +471,11 @@ function updateShopPanel() {
   const rPrice = rerollPrice("player1");
   const pPrice = packPrice("player1");
   rBtn.textContent = "🔄 +1 Redraw (" + COMPS_ICON + rPrice + ")";
-  pBtn.textContent = "🎁 Joker pack (" + COMPS_ICON + pPrice + ")";
+  pBtn.textContent = "🃏 Card pack (" + COMPS_ICON + pPrice + ")";
   rBtn.disabled = !open || comps.player1 < rPrice;
-  pBtn.disabled = !open || comps.player1 < pPrice;
+  // A full bench can't take the card, so the button says so by being off rather than
+  // taking the comps and then refusing.
+  pBtn.disabled = !open || comps.player1 < pPrice || hands.player1.length >= HAND_CAP;
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────
@@ -463,7 +487,7 @@ function renderJokers() {
   const row = document.getElementById("jokerRow");
   if (!row) return;
   const held = jokers.player1;
-  if (held.length === 0 && !jokerSwapPending && !packOffer) { row.style.display = "none"; return; }
+  if (held.length === 0 && !jokerSwapPending) { row.style.display = "none"; return; }
   row.style.display = "block";
 
   let slots = "";
@@ -503,17 +527,6 @@ function renderJokers() {
           'style="color:' + SUITS[s].cardColor + '">' + SUITS[s].symbol + '</div>';
       }).join("") + '</div>';
   }
-  // An open pack sits directly under the row, so the choice and the slots it's
-  // competing for are read in one glance.
-  let pack = "";
-  if (packOffer && packOffer.team === "player1") {
-    pack = '<div class="pack-title">🎁 Pick one to keep</div><div class="jslot-row">' +
-      packOffer.cards.map(function (c, i) {
-        const m = JOKERS[c.jokerKey];
-        return '<div class="jslot filled pack" data-pick="' + i + '" title="' + m.name + ' — ' + m.blurb + '">' +
-          '<div class="jfig">' + m.icon + '</div><div class="jname">' + m.name + '</div></div>';
-      }).join("") + '</div>';
-  }
 
   // The title carries whatever the row is waiting for, so the prompt is where you're looking.
   let hint = "";
@@ -524,7 +537,7 @@ function renderJokers() {
   row.innerHTML =
     '<div class="joker-title">🃏 Your jokers (' + held.length + '/' + JOKER_SLOTS + ')' +
       hint + '</div>' +
-    '<div class="jslot-row">' + slots + '</div>' + chooser + pack;
+    '<div class="jslot-row">' + slots + '</div>' + chooser;
 
   // Listeners are attached fresh each paint (the row is small and rebuilt wholesale),
   // matching how renderOneHand and the damage panel already work.
@@ -555,7 +568,39 @@ function renderJokers() {
   row.querySelectorAll(".suitpick").forEach(function (el) {
     el.addEventListener("click", function () { finishJokerAction("player1", el.dataset.suit); });
   });
-  row.querySelectorAll(".jslot.pack").forEach(function (el) {
+}
+
+// Paint an open CARD pack in its own row. Deliberately NOT part of renderJokers: the joker
+// row is what you KEEP for the rest of the game, and a card pack is a one-off purchase
+// going into this round's hand — merging them would blur exactly that distinction.
+//
+// The cards are drawn as real card faces (same .card markup and sprite as the hand) rather
+// than as abstract slots, because the whole value of a pack is judging actual cards — you
+// need to see the suit, the rank and the stat line to choose.
+function renderPackOffer() {
+  if (SIM_MODE) return;                             // headless: no DOM (see sim.js)
+  const row = document.getElementById("packRow");
+  if (!row) return;
+  if (!packOffer || packOffer.team !== "player1") { row.style.display = "none"; return; }
+  row.style.display = "block";
+
+  const faces = packOffer.cards.map(function (c, i) {
+    const cs = SUITS[c.suit];
+    return '<div class="card packcard" data-pick="' + i + '" title="' + figureTitle(c) + '">' +
+      '<div class="cart"></div>' +
+      '<div class="cfig" style="color:' + cs.cardColor + '">' + rankLabel(c.rank) + cs.symbol + '</div>' +
+      '<div class="cstat">' + c.attack + "/" + c.hp + '</div></div>';
+  }).join("");
+
+  row.innerHTML = '<div class="pack-title">🃏 Card pack — pick one to keep</div>' +
+    '<div class="packcard-row">' + faces + '</div>';
+
+  // Sprites are applied after the markup exists, the same way renderOneHand does it, so
+  // the pack and the hand can't disagree about what a 9♠ looks like.
+  row.querySelectorAll(".packcard").forEach(function (el) {
+    const c = packOffer.cards[Number(el.dataset.pick)];
+    const art = (typeof unitArtFor === "function") ? unitArtFor(c) : null;
+    if (art) { el.classList.add("has-art"); applyUnitArt(el.querySelector(".cart"), art); }
     el.addEventListener("click", function () { takeFromPack(Number(el.dataset.pick)); });
   });
 }
