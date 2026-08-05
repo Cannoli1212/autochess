@@ -692,6 +692,30 @@
   }
   .card.joker .jfig  { font-size: 20px; line-height: 1.1; }
   .card.joker .jname { font-size: 7px; line-height: 1.1; text-align: center; padding: 0 2px; margin-top: 2px; }
+  /* Mid-swap, the incoming joker pulses so it's obvious which card you're placing. */
+  .card.joker.pending { border-color: #ffd76b; box-shadow: 0 0 10px rgba(255, 215, 107, 0.95); }
+
+  /* The joker ROW — what you KEEP, as opposed to the hand you play. Sits above the
+     board with the flop, since both are persistent context rather than this turn's
+     choices. Hidden entirely until you hold one, so a player who never draws a joker
+     never stares at an empty rail. */
+  #jokerRow { margin: 8px auto; max-width: 640px; }
+  .joker-title { font-size: 12px; color: #9aa4b5; margin-bottom: 4px; }
+  .jslot-row { display: flex; gap: 8px; justify-content: center; }
+  .jslot {
+    width: 62px; height: 58px; border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .jslot.empty  { border: 2px dashed #3c4657; color: #3c4657; font-size: 20px; }
+  .jslot.filled {
+    background: #17212e; color: #6bd5e0; border: 2px solid #6bd5e0;
+    box-shadow: 0 0 8px rgba(107, 213, 224, 0.6);
+  }
+  .jslot.filled .jfig  { font-size: 20px; line-height: 1.1; }
+  .jslot.filled .jname { font-size: 7px; line-height: 1.1; text-align: center; padding: 0 2px; }
+  /* Only clickable when a swap is actually in progress — no phantom affordance otherwise. */
+  .jslot.filled.swappable { cursor: pointer; border-color: #ffd76b; color: #ffd76b; }
+  .jslot.filled.swappable:hover { background: #2a2418; }
   .unit.fused { box-shadow: inset 0 0 0 2px #2ecc71, 0 0 7px rgba(46, 204, 113, 0.9); }
   /* While dragging a card over a valid fuse partner, dash its border as a hint. */
   .card.fuse-target { outline: 2px dashed #2ecc71; outline-offset: 1px; }

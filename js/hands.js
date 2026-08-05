@@ -137,12 +137,28 @@ function renderOneHand(team) {
     // claim click added in Slice 3.
     if (cardIsJoker(c)) {
       const j = JOKERS[c.jokerKey];
-      card.className = "card joker";
+      const pending = (jokerSwapPending === c);
+      card.className = "card joker" + (pending ? " pending" : "");
       card.draggable = false;
       card.title = figureTitle(c);
       card.innerHTML =
         '<div class="jfig">' + j.icon + '</div>' +
         '<div class="jname">' + j.name + '</div>';
+      // The one interaction a joker has: click to CLAIM it into the joker row. Clicking
+      // the card that's already mid-swap cancels instead, so you're never trapped in
+      // swap mode with no way out.
+      if (team === "player1") {
+        card.addEventListener("click", function () {
+          if (jokerSwapPending === c) {
+            jokerSwapPending = null;
+            message.textContent = "Swap cancelled.";
+            renderJokers();
+            renderHands();
+            return;
+          }
+          tryClaimFromHand("player1", c);
+        });
+      }
       cardsEl.appendChild(card);
       continue;
     }

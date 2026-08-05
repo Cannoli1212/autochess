@@ -70,6 +70,7 @@ rule bending.
 | **synergies** | Suit counts → tier buffs (`suitCount`, `effectiveSuitCount`, `synergyTier`, `renderSynergies`, `renderTraitBar`, `teamSynergyEffects`, `applySynergies`) | config, state, flop |
 | **board** | Grid build + `render()` (`buildBoard`, `cellAt`, `findUnitAt`, `render`) | config, state, cards |
 | **hands** | Hand & pile display (`drawHands`, `renderHands`, `updateShoeDisplay`, `renderOneHand`) | config, state, cards |
+| **jokers** | Claiming & holding jokers — the player-level upgrade layer (`jokerSlotsFree`, `claimJoker`, `swapJoker`, `tryClaimFromHand`, `trySwapInto`, `renderJokers`) | config, state, cards |
 | **placement** | Drag-and-drop input (`initInput`, `zoneOfRow`, `handleDropOnCell`, `playCard`, `moveUnit`, `handleDropOnHand`, `returnUnitToHand`, `updatePlacementMessage`) | config, state, board, hands, hud |
 | **combat** | Auto-battle sim (`nearestEnemy`, `attackTarget`, `combatStep` → returns result) | config, state, board |
 | **hud** | Read-only display (`updateStatus`, `updateRoundInfo`, `updateChipInfo`) | state, synergies |
@@ -115,8 +116,15 @@ To keep the graph acyclic, two responsibilities move. Both are behavior-identica
 
 ## Script load order (required for classic scripts)
 
-`config → state → cards → flop → synergies → board → hands → placement →
+`config → state → cards → jokers → flop → synergies → board → hands → placement →
 combat → hud → gameflow → main`
+
+> **The `<script>` list in `game.html` is the authority, not this line.** Several
+> modules added since this document was written (`abilities`, `unitart`, `motion`,
+> `fx`, `fxkits`, `ai`, `pathing`, `tableview`, `sim`, `table`) sit in that list and
+> not here. Because these are classic scripts and every cross-module call resolves at
+> call time, load order only actually matters for top-level code — so the omissions
+> are a documentation gap, not a bug. Read `game.html` when adding a module.
 
 Only top-level code (state's DOM refs, and `main`'s startup) runs at load; all
 scripts sit at the end of `<body>` so the DOM exists. Cross-module calls resolve

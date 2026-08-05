@@ -107,3 +107,4 @@ updateStatus();
 updateRoundInfo();
 drawHands();
 renderTable();
+renderJokers();

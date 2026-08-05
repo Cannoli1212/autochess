@@ -90,6 +90,17 @@ let chips = { player1: 100, player2: 100 };
 // resetGame. Per-SEAT stacks live on the seat objects, same as chips.
 let comps = { player1: 0, player2: 0 };
 
+// The jokers each player has CLAIMED — kept for the rest of the game, capped at
+// JOKER_SLOTS. A claimed joker leaves the shoe permanently (that's what "pick it up
+// and keep it" means); one swapped out goes to the discard pile and can be redrawn.
+// Survives nextRound, cleared by resetGame. Per-SEAT copies live on the seats.
+let jokers = { player1: [], player2: [] };
+
+// Two-step swap when the joker row is full: holds the HAND joker waiting for you to
+// pick which claimed joker it replaces (null = no swap in progress). Purely an input
+// mode, like tapSel — it never survives a round change.
+let jokerSwapPending = null;
+
 // Cumulative count of LOW cards (ranks 2-5) each team has PLAYED this game. Bumped
 // in playCard, never decremented, reset only on a new game (resetGame). Drives the
 // King of Spades' uncapped attack scaling — the more cheap bodies you've fielded
@@ -197,7 +208,7 @@ function makeLiveSeats() {
   seats = [];
   for (let i = 0; i < NUM_SEATS; i++) {
     seats.push({
-      id: i, chips: SEAT_START_CHIPS, comps: 0, isHuman: i === 0,
+      id: i, chips: SEAT_START_CHIPS, comps: 0, jokers: [], isHuman: i === 0,
       name: SEAT_NAMES[i], color: SEAT_COLORS[i],
     });
   }

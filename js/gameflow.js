@@ -93,6 +93,8 @@ function finishRound(winner) {
     seats[opponentSeat].chips = chips.player2;   // this round's opponent's stack
     seats[0].comps = comps.player1;              // ...and the shop money each just earned
     seats[opponentSeat].comps = comps.player2;
+    seats[0].jokers = jokers.player1;
+    seats[opponentSeat].jokers = jokers.player2;
     const youDelta = seats[0].chips - youBefore; // net change to your stack this round
     let liveLine, liveTab;
     if (winner === "draw") { liveLine = "You drew " + oppName + " — no chips moved"; liveTab = "You vs " + oppName + " (draw)"; }
@@ -201,8 +203,19 @@ function startRound() {
     pairRound();
     chips.player1 = seats[0].chips;
     chips.player2 = seats[opponentSeat].chips;
-    comps.player1 = seats[0].comps;            // shop money follows the seat, not the side
+    // Chips are PULLED from both seats: nothing changes them between rounds, so the
+    // seat is the source of truth for both sides.
+    //
+    // Comps and jokers are different, and the direction matters. You SPEND comps and
+    // CLAIM jokers during PLACEMENT — before this runs — so pulling seat 0's copies
+    // here would overwrite everything you just did and silently refund it. Your side
+    // is therefore PUSHED to the seat; only the opponent (a different seat each round,
+    // which nothing local has touched) is pulled.
+    seats[0].comps = comps.player1;
+    seats[0].jokers = jokers.player1;
     comps.player2 = seats[opponentSeat].comps;
+    jokers.player2 = seats[opponentSeat].jokers;
+    renderJokers();
     weakCardsPlayed.player2 = 0;               // fresh opponent each round (your own tally persists)
   }
 
@@ -304,6 +317,7 @@ function nextRound() {
     hands[team].forEach(function (c) { c.held = false; });
   });
   holdMode = false;
+  jokerSwapPending = null;      // an unfinished joker swap doesn't survive the round
   redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };  // fresh redraws
 
   // Phase D: cards played this round (the whole board) go to the discard piles.
@@ -333,6 +347,7 @@ function nextRound() {
   updateRoundInfo();
   drawHands();                  // top the carried hand up to this round's HAND_SCHEDULE
   renderTable();                // Phase D: keep the seat stacks on screen (no-op off-table)
+  renderJokers();
 }
 
 // Playtest mode: drop a hand-picked card (any suit+rank) into a team's hand so you can
@@ -358,6 +373,8 @@ function resetGame() {
   roundWins = { player1: 0, player2: 0 };
   chips = { player1: 100, player2: 100 };
   comps = { player1: 0, player2: 0 };              // shop money doesn't carry between games
+  jokers = { player1: [], player2: [] };           // ...nor does the joker collection
+  jokerSwapPending = null;
   house = 0;                                       // the casino's pot empties
   weakCardsPlayed = { player1: 0, player2: 0 };   // King of Spades' scaling resets
   resetAllStats();                                 // clear round + session damage totals
@@ -379,6 +396,7 @@ function resetGame() {
   updateRoundInfo();
   drawHands();                  // deal fresh round-1 hands
   renderTable();                // Phase D: paint the reset seat stacks (no-op off-table)
+  renderJokers();
 }
 
 // ── Phase D helpers (6-seat table) ────────────────────────────────────────────

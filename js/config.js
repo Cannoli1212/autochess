@@ -888,6 +888,12 @@ const JOKERS = {
 };
 const JOKER_KEYS = Object.keys(JOKERS);
 
+// How many jokers you may keep at once. The LIMIT is the whole point: with unlimited
+// slots, claiming a joker is never a decision — you'd always take it and the choice
+// would be fake. At 3, a fourth joker means giving one up, which is what makes the
+// hunt matter and what stops a long game snowballing into an unreadable pile of rules.
+const JOKER_SLOTS = 3;
+
 // Phase D: how many 52-card decks make up each player's shoe.
 const DECKS = 2;
 
