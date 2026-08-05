@@ -656,6 +656,15 @@ function combatStep() {
     }
   }
 
+  // Tally the dead per side before they're removed — the last moment they exist. Feeds the
+  // trigger jokers (The Enforcer reads the ENEMY's count as its kills, Dead Man's Hand reads
+  // its own), paid out at round end. Counted here rather than on a kill hook so every cause
+  // of death lands in one place: a hit, a redirect, thorns or poison all reduce HP to 0 and
+  // all pass through this filter. Runs in SIM_MODE too, so headless seats tally identically.
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].hp <= 0) roundDeaths[units[i].team] = (roundDeaths[units[i].team] || 0) + 1;
+  }
+
   // Remove everyone who dropped to 0 hp this tick.
   units = units.filter(function (u) { return u.hp > 0; });
   render();

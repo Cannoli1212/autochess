@@ -84,7 +84,7 @@ function simInstall() {
     flop: flop, strikeMarks: strikeMarks, traps: traps, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
     armyOverride: armyOverride, jokerUsedThisRound: jokerUsedThisRound,
-    jokerSuitPick: jokerSuitPick,
+    jokerSuitPick: jokerSuitPick, roundDeaths: roundDeaths,
   };
   armyOverride = null;                        // each sim battle sets its own forced size
   clearInterval(combatTimer);                // stop any live fight
@@ -99,6 +99,8 @@ function simInstall() {
                                              // activated joker's once-per-round budget can't leak
   jokerSuitPick = { player1: null, player2: null };     // ...nor a Dealer call, which growCommunity
                                              // would otherwise honor inside a headless fight
+  roundDeaths = { player1: 0, player2: 0 };  // the trigger jokers' tally: a sim battle must not
+                                             // add its casualties to the live round's count
   weakCardsPlayed = { player1: 0, player2: 0 };  // neutral: Warlord's Levy adds nothing
   hands = { player1: [], player2: [] };      // empty bench: Necromancer can't summon
   played = { player1: [], player2: [] };
@@ -122,7 +124,7 @@ function simRestore(s) {
   flop = s.flop; strikeMarks = s.strikeMarks; traps = s.traps; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
   armyOverride = s.armyOverride; jokerUsedThisRound = s.jokerUsedThisRound;
-  jokerSuitPick = s.jokerSuitPick;
+  jokerSuitPick = s.jokerSuitPick; roundDeaths = s.roundDeaths;
 }
 
 // THE CARD SCAN. Play every unordered card pair `games` times and tally, for each

@@ -78,9 +78,13 @@ function finishRound(winner) {
   // on a round you actually lost, so a draw pays plain income like it always has.
   ["player1", "player2"].forEach(function (team) {
     const lost = winner !== "draw" && team !== winner;
+    const enemy = (team === "player1") ? "player2" : "player1";
     comps[team] = comps[team] + COMPS_INCOME + (team === winner ? COMPS_WIN_BONUS : 0) +
       jokerSum(team, "compsPerRound") +                          // The Regular and friends
-      (lost ? jokerSum(team, "compsOnLoss") : 0);                // The Cocktail Waitress
+      (lost ? jokerSum(team, "compsOnLoss") : 0) +               // The Cocktail Waitress
+      // The Enforcer / Dead Man's Hand. Your KILLS are the enemy's death count, and your
+      // losses are your own — one tally, read from both ends.
+      jokerTriggerComps(jokers[team], roundDeaths[enemy], roundDeaths[team]);
   });
   turnStatus.textContent = turnStatus.textContent +
     "  " + COMPS_ICON + " +" + COMPS_INCOME + " " + COMPS_LABEL.toLowerCase() + " each" +
@@ -484,8 +488,13 @@ function runHeadlessMatchups(liveLine) {
     // in finishRound, so between the two paths all six seats earn every round — without
     // this, the four background seats would never be able to buy anything and the whole
     // table economy would be yours alone.
-    paySeatComps(a, out.winnerId === a.id, !out.draw && out.winnerId !== a.id);
-    paySeatComps(b, out.winnerId === b.id, !out.draw && out.winnerId !== b.id);
+    // seatA fought as player1 and seatB as player2 (see tableMatch), so each seat's KILLS
+    // are the other side's death count.
+    const d = out.deaths || { player1: 0, player2: 0 };
+    paySeatComps(a, { won: out.winnerId === a.id, lost: !out.draw && out.winnerId !== a.id,
+                      kills: d.player2, deaths: d.player1 });
+    paySeatComps(b, { won: out.winnerId === b.id, lost: !out.draw && out.winnerId !== b.id,
+                      kills: d.player1, deaths: d.player2 });
     tableRecap.push(buildRecapLine(out, a, b));
     const tab = out.draw ? (a.name + " vs " + b.name + " (draw)")
       : (out.winnerId === a.id ? (a.name + " ✓ vs " + b.name) : (a.name + " vs " + b.name + " ✓"));

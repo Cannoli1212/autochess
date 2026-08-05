@@ -135,9 +135,14 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
     if (frames) frames.push(snapshotFrame());      // one snapshot per tick, for replay
   }
 
+  // Deaths this fight, per SIDE, carried out so the caller can pay the trigger jokers. The
+  // tally is a global that the next matchup's resetRoundStats will zero, so it has to be
+  // snapshotted here rather than read later.
+  const deaths = { player1: roundDeaths.player1, player2: roundDeaths.player2 };
+
   // Settle chips at the SEAT level. A draw moves nothing.
   if (result === "draw" || result === null) {
-    return { winnerId: null, loserId: null, steal: 0, survivors: 0, draw: true };
+    return { winnerId: null, loserId: null, steal: 0, survivors: 0, draw: true, deaths: deaths };
   }
   const winnerSeat = (result === "player1") ? seatA : seatB;
   const loserSeat  = (result === "player1") ? seatB : seatA;
@@ -153,7 +158,7 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   loserSeat.chips  -= steal;
   return {
     winnerId: winnerSeat.id, loserId: loserSeat.id,
-    steal: steal, survivors: survivors, draw: false,
+    steal: steal, survivors: survivors, draw: false, deaths: deaths,
   };
 }
 

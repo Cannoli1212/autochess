@@ -992,7 +992,32 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
 
+  // ── Kill / death triggers ──────────────────────────────────────────────────
+  // Both read the SAME per-fight tally (roundDeaths) from opposite ends, and both mint
+  // COMPS rather than chips — chips are zero-sum score, so a payout joker either mints shop
+  // money or moves chips out of the opponent, never conjures score. A busy round is 2-5
+  // bodies a side, so either of these roughly doubles the 3-comp round income.
+  theEnforcer: { name: "The Enforcer",    icon: "🔫", weight: 2, compsPerKill: 1,
+                 blurb: "Paid by the body. +1 comp for every enemy unit killed this round." },
+  deadMansHand: { name: "Dead Man's Hand", icon: "☠️", weight: 2, compsPerDeath: 1,
+                 blurb: "Aces and eights. +1 comp for every unit of YOURS that dies — a wipe still pays." },
+
   // ── Combat / abilities ─────────────────────────────────────────────────────
+  // A BUILD-AROUND, not a stat stick: low cards are normally filler you're forced to play
+  // early and dump later, because stats are suitBase × rank. This inverts that — ranks 2-5
+  // become your carries and the game turns into razz (lowball poker), where the worst hand
+  // wins. Deliberately a big number, because it has to beat the alternative of just playing
+  // face cards; a small bonus would make it a trap.
+  //
+  // It pairs with the rest of the catalog rather than sitting alone: The Card Sharp grows
+  // whatever you sit on, and rank 2's Berserker / rank 3's Thorns are the abilities it makes
+  // viable. Read per-unit in applySynergies, where the rank is in scope.
+  // NOTE the blurb says "+100%", not "double". lowRankMult is added into the same bracket as
+  // the suit and poker buffs — base × (1 + suit + poker + low) — so it doubles a card with no
+  // other bonuses, and is worth proportionally less on one already riding a flush and a pair.
+  // That's the anti-compounding choice; claiming "double" would be a lie in the common case.
+  theSucker:   { name: "The Sucker",      icon: "🐣", weight: 1, lowRankMult: 1.0,
+                 blurb: "Plays the worst hand. Your cards of rank 2-5 fight with +100% attack and HP, on top of your other bonuses." },
   highRoller:  { name: "The High Roller", icon: "💎", weight: 1, atkPerChip: 0.002,
                  blurb: "Bets big. Your whole army hits harder the fatter your chip stack." },
   superstitious: { name: "The Superstitious", icon: "👓", weight: 1, packGate: 1,
@@ -1017,6 +1042,11 @@ const JOKER_ATK_CAP = 0.5;          // +50% attack, maximum, from chip scaling
 // run off packCount (abilities.js), so lifting the count outright would silently escalate
 // every rung on every unit. It opens the gate; it never promotes a rung.
 const JOKER_PACK_GATE_FLOOR = 2;    // the count a lone card is lifted to, never past
+
+// Which ranks The Sucker counts as "low". 2-5 is the bottom third of 2-14 and matches the
+// weak-card band the King of Spades' Warlord's Levy already uses, so the game has ONE idea
+// of what a cheap body is rather than two.
+const JOKER_LOW_RANK_MAX = 5;
 
 // Waves 2 and 3 of the catalog — the flop shapers, the kill/death triggers, the
 // persistent stat growth and the wildcard joker — are specced in JOKERS.md, including

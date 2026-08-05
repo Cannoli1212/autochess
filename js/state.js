@@ -321,6 +321,15 @@ let dmgStats = {
   round: { player1: blankTeamStat(), player2: blankTeamStat() },
 };
 
+// How many units each team LOST this fight, counted in combatStep as bodies are removed.
+// One tally serves both trigger jokers, from opposite ends: your own count is what Dead
+// Man's Hand pays on, the enemy's count is your kills and what The Enforcer pays on. Zeroed
+// by resetRoundStats, so it covers exactly one fight — live or headless.
+//
+// Deaths rather than kills because death is the unambiguous event: a unit dies once, whereas
+// "who killed it" is murky when poison, a redirected hit and thorns all contributed.
+let roundDeaths = { player1: 0, player2: 0 };
+
 // Book `amount` damage from `dealer` onto `victim` (both are UNIT objects, or
 // null). It's credited as DEALT to the dealer's team — at team, suit, AND card
 // level — and symmetrically as TAKEN by the victim's team at the same three
@@ -353,6 +362,7 @@ function recordDamage(dealer, victim, amount, dealerTeamFallback) {
 // Zero the per-ROUND stats (call at Round Start).
 function resetRoundStats() {
   dmgStats.round = { player1: blankTeamStat(), player2: blankTeamStat() };
+  roundDeaths = { player1: 0, player2: 0 };
 }
 
 // Zero every damage stat (call on a new game / Reset). Same thing as

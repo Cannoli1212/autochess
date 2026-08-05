@@ -87,17 +87,28 @@ function aiSeatShop(seat) {
   return true;
 }
 
+// What the KILL/DEATH trigger jokers pay a collection this round: The Enforcer per enemy
+// killed, Dead Man's Hand per unit of its own lost. Shared by the live payout and the seat
+// payout so the two can never drift — the tally's two ends are easy to swap by accident.
+function jokerTriggerComps(list, kills, deaths) {
+  return jokerSumOf(list, "compsPerKill") * (kills || 0) +
+         jokerSumOf(list, "compsPerDeath") * (deaths || 0);
+}
+
 // Pay one seat its round comps. Mirrors the live payout in finishRound exactly — income
-// for everyone, a bonus for the winner, the loser's consolation, plus whatever its jokers
-// add.
+// for everyone, a bonus for the winner, the loser's consolation, and the trigger jokers.
 //
 // `won` and `lost` are BOTH passed rather than inferring one from the other, because a
 // DRAW is neither: it pays plain income, exactly as the live round does. Deriving lost
-// as !won would quietly pay the consolation to both seats of every draw.
-function paySeatComps(seat, won, lost) {
-  seat.comps = (seat.comps || 0) + COMPS_INCOME + (won ? COMPS_WIN_BONUS : 0) +
+// as !won would quietly pay the consolation to both seats of every draw. Grouped into an
+// options object once the trigger counts joined, rather than growing to five positionals
+// where `kills` and `deaths` could silently swap.
+function paySeatComps(seat, opts) {
+  const o = opts || {};
+  seat.comps = (seat.comps || 0) + COMPS_INCOME + (o.won ? COMPS_WIN_BONUS : 0) +
     jokerSumOf(seat.jokers, "compsPerRound") +
-    (lost ? jokerSumOf(seat.jokers, "compsOnLoss") : 0);
+    (o.lost ? jokerSumOf(seat.jokers, "compsOnLoss") : 0) +
+    jokerTriggerComps(seat.jokers, o.kills, o.deaths);
 }
 
 // The COMBAT integration point, called once per team from startRound's onRoundStart
