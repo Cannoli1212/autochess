@@ -93,10 +93,10 @@ family. That's the build order.
 |---|---|---|
 | **Economy / shop** | `finishRound`'s payout, `teamLootMult`, `rerollPrice`, `packPrice` | **built** |
 | **B — Hand (activated)** | The activation flow in `jokers.js` + `makeCardOf` to re-derive stats | **built** |
+| **A — Flop** | `applyJokerFlopShaping` inside `growCommunity` | **built** |
+| **D — Triggers** | The `roundDeaths` tally, paid at `finishRound` | **built** |
+| **E — Stats** | The `low` term in `applySynergies` | **built** (one entry) |
 | **C — Persistence** | Things surviving `nextRound` — cards (built), then stats (new state) | **cards built** / wave 3 |
-| **A — Flop** | `growCommunity` picking a *matching* card from the deck, not the top one | wave 2 |
-| **D — Triggers** | A per-team kill/death tally, paid at `finishRound` | wave 2 |
-| **E — Stats** | `teamSynergyEffects` already returns `{hpMult, atkMult, critBonus, speedBonus}` | wave 2 |
 
 ### Activated jokers
 
@@ -157,40 +157,81 @@ tagged** — that's the general rule the Loan Shark is an instance of.
 
 ---
 
-## Wave 2 — designed, not built
+## Wave 2 — shipped
 
-**Family A — the flop.** `growCommunity` searches `communityDeck` for a card matching a predicate
-instead of taking the top one. All three are asymmetric *despite the flop being shared*, because each
-keys off what **you** built.
+| | Joker | Rarity | Field | Effect |
+|---|---|---|---|---|
+| 🎴 | The Dealer | uncommon | *activated* | call a suit; one community card turns it at Round Start |
+| 🪜 | The Optimist | uncommon | `flopShift: 1` | community cards shift 1 rank **toward** the middle |
+| 🧊 | The Cooler | uncommon | `flopShift: -1` | community cards shift 1 rank **away** from the middle |
+| 🔫 | The Enforcer | uncommon | `compsPerKill: 1` | +1 comp per enemy unit killed |
+| ☠️ | Dead Man's Hand | uncommon | `compsPerDeath: 1` | +1 comp per unit of yours that dies |
+| 🐣 | The Sucker | rare | `lowRankMult: 1.0` | ranks 2–5 fight at +100% attack and HP |
 
-- 🎴 **The Dealer** — *activated.* Pick a suit; one random community card **not already that suit**
-  converts to it. (Excluding same-suit cards is deliberate: otherwise the activation can whiff and read
-  as a bug.) Reuses the Tailor's activation flow.
-- 🪜 **The Optimist** — every community card moves **1 rank toward the middle**. Clusters ranks →
-  promotes pairs and straights.
-- 🧊 **The Cooler** — every community card moves **1 rank away from the middle**. Scatters ranks →
-  denies everyone straights. The catalog's one pure counter-play joker.
+### Why the flop jokers work at all
 
-One shared helper does the last two. "Middle" = **median rank** (robust for 3/4/5 cards, unlike a
-positional middle). Clamp at 2 and 14; an edge card doesn't move.
+The community is dealt at Round Start, **after** placement locks, and is re-randomized every round —
+deliberately unplannable luck. These three don't let you see it coming; they make its **shape** reliable
+every round, which is what makes committing to a build safe. They convert variance into a plan.
 
-**Family D — kill/death triggers.** One per-team tally where deaths are already detected
-(`combat.js`), paid at `finishRound`. Both mint **comps**, so both are conservation-safe by construction.
+The Dealer goes further: *you* choose the suit, so the shared card is one you picked and built toward
+while your opponent gets a suit they never asked for. It's a **standing order** — recorded in
+`jokerSuitPick`, resolved by `applyJokerFlopShaping` — and the row shows the call so a player who clicks
+a suit and sees nothing change doesn't conclude it's broken. It only converts a card *not already* that
+suit, so it can never visibly whiff.
 
-- 🔫 **The Enforcer** — comps per enemy killed.
-- ☠️ **Dead Man's Hand** — comps per unit of yours that dies. Reads as insurance: a wipe still pays for
-  a pack.
+`flopShift` is **summed across both players**, so an Optimist facing a Cooler nets zero. That's what
+makes the Cooler a real counter rather than a mirror.
 
-**Family E — one entry only.**
-- 🐣 **The Sucker** — ranks 2–5 get a large stat multiplier, so the low half of the deck can carry and
-  the game can be played as **razz / lowball**.
+### Measure the flop jokers, don't reason about them
 
-> A generic stat trio (melee HP / ranged attack / team crit) was designed and **cut** — they were flat
-> percentages with no identity. Family E gets build-arounds or nothing.
+Both were wrong on the first pass, in ways no amount of thinking would have caught. Over 8000 boards:
+
+| | pair | trips | 3-straight | 4-straight |
+|---|---|---|---|---|
+| no joker | 58% | 5% | 22% | 3.9% |
+| The Optimist | 84% | **33%** | 17% | 2.8% |
+| The Cooler | **42%** | 6% | 18% | **0.9%** |
+
+1. **The Optimist makes FEWER straights.** A run needs *distinct* consecutive ranks; cards converging
+   onto one rank make pairs instead of extending a run. Its real headline is **trips, 5% → 33%** — and
+   since `packCount` reads the community, that tiers rank abilities to their trips rung. It's an
+   of-a-kind engine, not a straight engine.
+2. **The Cooler originally *raised* pairs**, 58% → 69% — the exact thing it exists to deny — because
+   pushing everything outward slammed several cards into the 2 and 14 clamps where they piled up.
+   Skipping blocked moves fixed pairs but left straights untouched (a blocked card never moved).
+   Spreading now **slides past** a collision to the next free rank, which does both.
+
+The blurbs state measured effects, not intended ones. Keep it that way.
+
+### The triggers share one tally
+
+`roundDeaths` counts bodies in `combatStep` just before the dead are filtered out — **deaths, not
+kills**, because death is unambiguous (a unit dies once) whereas "who killed it" is murky when poison, a
+redirect and thorns all contributed. Counting at the filter puts every cause in one place. Your *kills*
+are simply the enemy's death count: one tally, read from both ends. `jokerTriggerComps` is shared by the
+live and seat payouts precisely because those two ends are easy to swap by accident.
+
+**Balance note:** holding both triggers paid 60 comps over a 7-round game against the 21–35 baseline —
+roughly double income, or 12 card packs. Individually each is ~+3 a round, in line with `COMPS_INCOME`.
+Both are single numbers if that wants turning down.
+
+### The Sucker adds, it doesn't multiply
+
+`lowRankMult` goes into the *same bracket* as the suit and poker buffs — `base × (1 + suit + poker +
+low)` — so a low card gets one combined multiplier instead of compounding while also holding a flush and
+a pair. It therefore **doubles a card with no other bonuses** and is worth proportionally less on an
+already-buffed one, which is why the blurb says "+100%" and not "double". The first draft said double; a
+3 with the hearts flush up went ×1.5, so the blurb was simply false.
+
+> A generic stat trio (melee HP / ranged attack / team crit) was designed and **cut** — flat percentages
+> with no identity. Family E gets build-arounds or nothing.
 
 ---
 
 ## Wave 3 — needs real primitives
+
+Wave 3 takes the catalog from **18 to ~24** and is the first wave where nothing is a one-liner.
 
 | | Joker | Primitive needed |
 |---|---|---|
