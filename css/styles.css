@@ -721,6 +721,38 @@
   .jslot.pack { cursor: pointer; border-color: #ffd76b; color: #ffd76b; }
   .jslot.pack:hover { background: #2a2418; box-shadow: 0 0 10px rgba(255, 215, 107, 0.9); }
 
+  /* ── ACTIVATED jokers (The Tailor) ─────────────────────────────────────────
+     A passive joker is a fact you read once; an activated one is a BUTTON, and it has to
+     look like one. Three states, and the little "use" tag under the name is what makes
+     the difference visible without hovering for a tooltip:
+       .ready  — usable now (green, clickable)
+       .armed  — you clicked it; it's waiting for a target (amber, pulsing)
+       .spent  — already fired this round (dimmed, no cursor) */
+  .jslot.filled .juse { font-size: 7px; line-height: 1.1; margin-top: 1px; opacity: .85; }
+  .jslot.filled.ready { cursor: pointer; border-color: #2ecc71; color: #2ecc71; }
+  .jslot.filled.ready:hover { background: #16281d; box-shadow: 0 0 10px rgba(46, 204, 113, 0.9); }
+  .jslot.filled.armed {
+    cursor: pointer; border-color: #ffd76b; color: #ffd76b; background: #2a2418;
+    box-shadow: 0 0 12px rgba(255, 215, 107, 0.95);
+  }
+  .jslot.filled.spent { opacity: .45; cursor: default; }
+
+  /* The suit chooser — step 3 of an activation. Big glyphs because the suit IS the choice;
+     the one the card already is gets dimmed rather than hidden, so the row never reflows
+     under the cursor mid-decision. */
+  .suitpick {
+    width: 42px; height: 42px; border-radius: 6px; border: 2px solid #6bd5e0;
+    background: #17212e; font-size: 22px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .suitpick:hover { background: #24384a; box-shadow: 0 0 10px rgba(107, 213, 224, 0.9); }
+  .suitpick.same { opacity: .3; }
+
+  /* While an activated joker waits for a target, your own hand cards become pick targets.
+     The dashed outline matches the fuse-target hint below — same idea, same language. */
+  .card.jpick { outline: 2px dashed #ffd76b; outline-offset: 1px; cursor: pointer; }
+  .card.jtarget { outline: 3px solid #ffd76b; outline-offset: 1px; }
+
   /* Shop buttons, stacked under the P2 toggle beside the board. They carry their own
      price in the label so a purchase is never a surprise click. */
   #shopPanel { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }

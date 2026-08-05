@@ -101,6 +101,18 @@ let jokers = { player1: [], player2: [] };
 // mode, like tapSel — it never survives a round change.
 let jokerSwapPending = null;
 
+// An ACTIVATED joker mid-use (The Tailor): { key, team, card }. Most jokers are passive
+// numeric fields, but a few need you to CHOOSE — which card, which suit — and that's a
+// multi-click input mode, not a number. `card` is null until you've picked the card to act
+// on; picking it reveals the suit chooser. Null = nothing being activated. Like
+// jokerSwapPending this is pure input state and never survives a round change.
+let jokerActionPending = null;
+
+// Which activated jokers each team has already fired THIS round, by joker key. An
+// activated joker is once per round — otherwise The Tailor would just recut your whole
+// hand and the choice would be fake. Reset by nextRound, cleared by resetGame.
+let jokerUsedThisRound = { player1: [], player2: [] };
+
 // How many EXTRA rerolls each player has bought THIS round. Only used to price the
 // next one (COMPS_REROLL_COSTS escalates), so it resets every round with the free
 // redraws. The bought reroll itself is just +1 to redrawsLeft — rerollHand is unchanged.

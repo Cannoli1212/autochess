@@ -336,6 +336,8 @@ function nextRound() {
   });
   holdMode = false;
   jokerSwapPending = null;      // an unfinished joker swap doesn't survive the round
+  jokerActionPending = null;    // nor a half-finished activation (The Tailor)
+  jokerUsedThisRound = { player1: [], player2: [] };   // activated jokers recharge each round
   packOffer = null;             // nor an unopened pick — the comps are spent either way
   rerollsBought = { player1: 0, player2: 0 };   // reroll prices reset with the free redraws
   // Fresh redraws, widened by any joker that grants extras (The Mechanic).
@@ -414,6 +416,8 @@ function resetGame() {
   comps = { player1: 0, player2: 0 };              // shop money doesn't carry between games
   jokers = { player1: [], player2: [] };           // ...nor does the joker collection
   jokerSwapPending = null;
+  jokerActionPending = null;
+  jokerUsedThisRound = { player1: [], player2: [] };
   packOffer = null;
   rerollsBought = { player1: 0, player2: 0 };
   house = 0;                                       // the casino's pot empties

@@ -931,6 +931,14 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sleight of hand. +1 free redraw each round." },
 
+  // ── The hand (activated) ───────────────────────────────────────────────────
+  // `activated: true` means this joker isn't a passive number — you CLICK it and make a
+  // choice. See the activation flow in jokers.js. aiUseless because a headless seat has
+  // no one to make the choice.
+  theTailor:   { name: "The Tailor",      icon: "🧵", weight: 2, activated: true,
+                 aiUseless: true,
+                 blurb: "Recuts it to match. Once a round, change one card in your hand to any suit." },
+
   // ── Cards that persist ─────────────────────────────────────────────────────
   // Both of these keep cards ALIVE across rounds instead of handing you new ones,
   // which is a different kind of power from drawing wider: your good card compounds.

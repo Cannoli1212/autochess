@@ -83,7 +83,7 @@ function simInstall() {
     weakCardsPlayed: weakCardsPlayed, hands: hands, played: played,
     flop: flop, strikeMarks: strikeMarks, traps: traps, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
-    armyOverride: armyOverride,
+    armyOverride: armyOverride, jokerUsedThisRound: jokerUsedThisRound,
   };
   armyOverride = null;                        // each sim battle sets its own forced size
   clearInterval(combatTimer);                // stop any live fight
@@ -92,8 +92,10 @@ function simInstall() {
   comps = { player1: 0, player2: 0 };        // neutral: a headless fight earns/spends no shop money,
                                              // and the live player's comps can't reach it
   jokers = { player1: [], player2: [] };     // neutral: YOUR jokers must never buff an AI-vs-AI
-                                             // fight. Once Slice 5 gives jokers effects this line
+                                             // fight. Now that jokers have real effects, this line
                                              // is the only thing standing between the two.
+  jokerUsedThisRound = { player1: [], player2: [] };   // sandboxed with the collection above, so an
+                                             // activated joker's once-per-round budget can't leak
   weakCardsPlayed = { player1: 0, player2: 0 };  // neutral: Warlord's Levy adds nothing
   hands = { player1: [], player2: [] };      // empty bench: Necromancer can't summon
   played = { player1: [], player2: [] };
@@ -116,7 +118,7 @@ function simRestore(s) {
   weakCardsPlayed = s.weakCardsPlayed; hands = s.hands; played = s.played;
   flop = s.flop; strikeMarks = s.strikeMarks; traps = s.traps; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
-  armyOverride = s.armyOverride;
+  armyOverride = s.armyOverride; jokerUsedThisRound = s.jokerUsedThisRound;
 }
 
 // THE CARD SCAN. Play every unordered card pair `games` times and tally, for each

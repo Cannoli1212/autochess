@@ -168,9 +168,15 @@ function renderOneHand(team) {
     }
     const art = (typeof unitArtFor === "function") ? unitArtFor(c) : null;
     const isTapSel = tapSel && tapSel.kind === "card" && tapSel.card === c;
+    // An ACTIVATED joker awaiting a target (The Tailor) turns your own cards into pick
+    // targets. Only while it's waiting, and only your hand — otherwise a card is a card.
+    const awaitingPick = !!(jokerActionPending && jokerActionPending.team === team &&
+                            !jokerActionPending.card && team === "player1");
+    const isJokerTarget = !!(jokerActionPending && jokerActionPending.card === c);
     card.className = "card" + (art ? " has-art" : "") + (c.held ? " held" : "") +
       (uniqueOf(c) ? " unique" : "") + (c.fused ? " fused" : "") +
-      (isTapSel ? " tap-sel" : "");
+      (isTapSel ? " tap-sel" : "") +
+      (awaitingPick && !c.fused ? " jpick" : "") + (isJokerTarget ? " jtarget" : "");
     // Phase E: in hold mode cards are clicked (not dragged) to hold/release.
     card.draggable = !holdMode;
     const cs = SUITS[c.suit];
@@ -235,6 +241,13 @@ function renderOneHand(team) {
       // — the tapped card is the "onto" whose suit wins, exactly as with a drop.
       card.addEventListener("click", function () {
         if (!placementOpen) return;
+        // An armed activated joker (The Tailor) is waiting for a card: this tap picks its
+        // target rather than selecting the card to play. Checked FIRST — the activation was
+        // started deliberately from the joker row, so it owns the next click.
+        if (jokerActionPending && jokerActionPending.team === team && !jokerActionPending.card) {
+          chooseJokerTarget(team, c);
+          return;
+        }
         // A unit is selected: this tap means "put it back on the bench". Do nothing here
         // and let it bubble to the hand-row handler, which owns that action.
         if (tapSel && tapSel.kind === "unit") return;
