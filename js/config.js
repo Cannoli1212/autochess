@@ -880,26 +880,69 @@ const JOKERS_PER_DECK = 2;
 // Effects are plain NUMERIC FIELDS summed across the jokers you hold (jokerSum in
 // jokers.js), the same shape as the existing player-level modifiers teamLootMult and
 // handTax. A joker is data, not code: to add one, name a field an integration point
-// already reads. The four fields today, and where each is read:
+// already reads. Every field and where it's read:
 //
-//   compsPerRound  → finishRound's comps payout          (economy)
-//   handBonus      → handTarget, i.e. cards dealt        (draw)
-//   redrawBonus    → nextRound's free-redraw refill      (draw)
+//   compsPerRound  → finishRound's comps payout             (economy)
+//   compsOnLoss    → finishRound, on a round you LOST       (economy)
+//   stealMult      → teamLootMult, the winner's chip steal   (economy)
+//   rerollDiscount → rerollPrice, the shop's reroll cost    (shop)
+//   packDiscount   → packPrice, the shop's pack cost        (shop)
+//   handBonus      → handTarget, i.e. cards dealt           (draw)
+//   redrawBonus    → nextRound's free-redraw refill         (draw)
 //   atkPerChip     → applyJokerRoundStart, vs ATK_BASELINE_CHIPS (combat)
+//   packGate       → packCount, lifts a LONE card to pair    (abilities)
 //
-// Deliberately kept to four so the four DIFFERENT kinds of integration point are each
-// proven once. The real catalog is its own design pass — see JOKER_BACKLOG below.
+// TWO CONVENTIONS every entry carries:
+//
+//   weight    — how often it turns up (rarity). 4 = common, 2 = uncommon, 1 = rare.
+//               Without this, a 12-joker pool would offer the game-warping ones as
+//               often as the small ones. pickJokerKey (jokers.js) is the ONE picker.
+//   aiUseless — true if a headless AI seat can't actually benefit. tableMatch doesn't
+//               emulate rerolling (see table.js) and a seat can't work an activation
+//               UI, so a seat buying one of those spends comps on nothing. pickJokerKey
+//               skips them for seats. Cheaper and more honest than faking the feature.
+//
+// A NEGATIVE number is a fully working drawback (jokerSum just adds), which is what
+// lets a joker be powerful rather than merely nice — see The Loan Shark.
+//
+// The catalog's design, the families it's grouped into, and the waves still to build
+// are documented in JOKERS.md. Read that before adding entries.
 const JOKERS = {
-  theRegular:  { name: "The Regular",     icon: "☕", compsPerRound: 2,
+  // ── Economy ────────────────────────────────────────────────────────────────
+  theRegular:  { name: "The Regular",     icon: "☕", weight: 4, compsPerRound: 2,
                  blurb: "The house knows your name. +2 comps every round." },
-  theCounter:  { name: "The Counter",     icon: "🧮", handBonus: 1,
+  theWaitress: { name: "The Cocktail Waitress", icon: "🍸", weight: 4, compsOnLoss: 3,
+                 blurb: "Kinder on a bad night. +3 comps on a round you lose." },
+  thePitBoss:  { name: "The Pit Boss",    icon: "🕴️", weight: 2, stealMult: 0.5,
+                 blurb: "Watches the table. You take 50% more chips when you win a round." },
+
+  // ── The shop ───────────────────────────────────────────────────────────────
+  theValet:    { name: "The Valet",       icon: "🅿️", weight: 4, rerollDiscount: 1,
+                 aiUseless: true,
+                 blurb: "Fetches you another hand. Bought redraws cost 1 comp less." },
+  loanShark:   { name: "The Loan Shark",  icon: "🦈", weight: 4, packDiscount: 3,
+                 handBonus: -1,
+                 blurb: "Cheap money, expensive terms. Packs cost 3 less — you hold one card fewer." },
+
+  // ── Draw ───────────────────────────────────────────────────────────────────
+  theCounter:  { name: "The Counter",     icon: "🧮", weight: 2, handBonus: 1,
                  blurb: "Counts what's left in the shoe. +1 card in hand each round." },
-  theMechanic: { name: "The Mechanic",    icon: "🎩", redrawBonus: 1,
+  theMechanic: { name: "The Mechanic",    icon: "🎩", weight: 4, redrawBonus: 1,
+                 aiUseless: true,
                  blurb: "Sleight of hand. +1 free redraw each round." },
-  highRoller:  { name: "The High Roller", icon: "💎", atkPerChip: 0.002,
+
+  // ── Combat / abilities ─────────────────────────────────────────────────────
+  highRoller:  { name: "The High Roller", icon: "💎", weight: 1, atkPerChip: 0.002,
                  blurb: "Bets big. Your whole army hits harder the fatter your chip stack." },
+  superstitious: { name: "The Superstitious", icon: "👓", weight: 1, packGate: 1,
+                 blurb: "Won't sit down without a pair. Your abilities need one fewer copy to switch on." },
 };
 const JOKER_KEYS = Object.keys(JOKERS);
+
+// Rarity weights, named so the catalog reads at a glance. Higher = more common.
+const JOKER_WEIGHT_COMMON = 4;
+const JOKER_WEIGHT_UNCOMMON = 2;
+const JOKER_WEIGHT_RARE = 1;
 
 // The High Roller measures your stack against the opening one, so at 100 chips it does
 // nothing and only a stack you've actually GROWN pays out. Capped so a runaway leader
@@ -908,11 +951,15 @@ const JOKER_KEYS = Object.keys(JOKERS);
 const ATK_BASELINE_CHIPS = 100;
 const JOKER_ATK_CAP = 0.5;          // +50% attack, maximum, from chip scaling
 
-// Named but NOT built — the next catalog pass. Each needs an integration point that
-// doesn't exist yet (a death hook, a lethal-damage intercept), which is exactly why
-// they're parked here instead of shipped half-working.
-//   deadMansHand — "Aces and eights. Pays out when your units die."   (needs an onDeath hook)
-//   luckyStiff   — "Shouldn't have survived that. Sometimes doesn't die." (needs a lethal intercept)
+// The Superstitious lifts a LONE card to a pair — enough to switch a rank ability ON —
+// and stops there: a pair still tiers as a pair, trips as trips. Gating and tiering both
+// run off packCount (abilities.js), so lifting the count outright would silently escalate
+// every rung on every unit. It opens the gate; it never promotes a rung.
+const JOKER_PACK_GATE_FLOOR = 2;    // the count a lone card is lifted to, never past
+
+// Waves 2 and 3 of the catalog — the flop shapers, the kill/death triggers, the
+// persistent stat growth and the wildcard joker — are specced in JOKERS.md, including
+// which engine primitive each one still needs. Nothing is parked in this file.
 
 // How many jokers you may keep at once. The LIMIT is the whole point: with unlimited
 // slots, claiming a joker is never a decision — you'd always take it and the choice

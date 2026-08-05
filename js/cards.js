@@ -99,8 +99,9 @@ function seedJokers(shoe) {
   const n = JOKERS_PER_DECK * DECKS;
   for (let i = 0; i < n; i++) {
     // Duplicates are allowed: two of the same joker in a shoe is a real outcome, and
-    // a real deck's two jokers are identical anyway.
-    shoe.push(makeJokerCard(JOKER_KEYS[Math.floor(Math.random() * JOKER_KEYS.length)]));
+    // a real deck's two jokers are identical anyway. pickJokerKey applies the catalog's
+    // rarity weights, so the shoe fishes up commons far more often than rares.
+    shoe.push(makeJokerCard(pickJokerKey()));
   }
   shuffle(shoe);
   return shoe;

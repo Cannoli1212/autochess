@@ -74,9 +74,13 @@ function finishRound(winner) {
   // Position matters: this sits AFTER the house-tax loop because that's the only
   // block above that touches both players regardless of who won, and BEFORE the seat
   // write-back below — which is what actually persists these values onto the seats.
+  // A DRAW counts as a loss for nobody: compsOnLoss (The Cocktail Waitress) pays only
+  // on a round you actually lost, so a draw pays plain income like it always has.
   ["player1", "player2"].forEach(function (team) {
+    const lost = winner !== "draw" && team !== winner;
     comps[team] = comps[team] + COMPS_INCOME + (team === winner ? COMPS_WIN_BONUS : 0) +
-      jokerSum(team, "compsPerRound");     // The Regular and friends
+      jokerSum(team, "compsPerRound") +                          // The Regular and friends
+      (lost ? jokerSum(team, "compsOnLoss") : 0);                // The Cocktail Waitress
   });
   turnStatus.textContent = turnStatus.textContent +
     "  " + COMPS_ICON + " +" + COMPS_INCOME + " " + COMPS_LABEL.toLowerCase() + " each" +
@@ -457,8 +461,8 @@ function runHeadlessMatchups(liveLine) {
     // in finishRound, so between the two paths all six seats earn every round — without
     // this, the four background seats would never be able to buy anything and the whole
     // table economy would be yours alone.
-    paySeatComps(a, out.winnerId === a.id);
-    paySeatComps(b, out.winnerId === b.id);
+    paySeatComps(a, out.winnerId === a.id, !out.draw && out.winnerId !== a.id);
+    paySeatComps(b, out.winnerId === b.id, !out.draw && out.winnerId !== b.id);
     tableRecap.push(buildRecapLine(out, a, b));
     const tab = out.draw ? (a.name + " vs " + b.name + " (draw)")
       : (out.winnerId === a.id ? (a.name + " ✓ vs " + b.name) : (a.name + " vs " + b.name + " ✓"));

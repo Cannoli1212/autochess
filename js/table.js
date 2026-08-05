@@ -142,7 +142,13 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   const winnerSeat = (result === "player1") ? seatA : seatB;
   const loserSeat  = (result === "player1") ? seatB : seatA;
   const survivors = countUnits(result);
-  const steal = Math.min(survivors * CHIPS_PER_SURVIVOR, loserSeat.chips);
+  // Same steal formula the LIVE round uses (finishRound), via the same function — a
+  // headless seat's Pit Boss has to be worth what yours is worth, and two copies of this
+  // math would drift. teamLootMult reads the jokers loaded above AND the loot cards in
+  // `played`, so this also closes a pre-existing gap where a background seat's Jack of
+  // Diamonds did nothing. Still clamped by the loser's stack, so chips stay conserved.
+  const lootMult = teamLootMult(result);
+  const steal = Math.min(Math.round(survivors * CHIPS_PER_SURVIVOR * (1 + lootMult)), loserSeat.chips);
   winnerSeat.chips += steal;
   loserSeat.chips  -= steal;
   return {

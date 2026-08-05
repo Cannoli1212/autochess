@@ -35,6 +35,33 @@ function jokerSumOf(list, field) {
   return total;
 }
 
+// ── Picking one ───────────────────────────────────────────────────────────────
+
+// THE joker picker — the shoe, the AI's shop and the pack all come through here, so
+// rarity is defined once. Two knobs:
+//
+//   pool     — keys to choose from (defaults to the whole catalog). The pack passes a
+//              shrinking pool to draw without replacement.
+//   forSeat  — true when picking for a headless AI seat, which SKIPS aiUseless jokers
+//              (a seat can't reroll or work an activation UI, so those are dead comps).
+//
+// Weighted by `weight`: a rare (1) turns up a quarter as often as a common (4). Missing
+// weights default to common so a half-written entry still appears rather than vanishing.
+function pickJokerKey(pool, forSeat) {
+  const keys = (pool || JOKER_KEYS).filter(function (k) {
+    return !(forSeat && JOKERS[k].aiUseless);
+  });
+  if (keys.length === 0) return null;
+  let total = 0;
+  for (let i = 0; i < keys.length; i++) total += JOKERS[keys[i]].weight || JOKER_WEIGHT_COMMON;
+  let roll = Math.random() * total;
+  for (let i = 0; i < keys.length; i++) {
+    roll -= JOKERS[keys[i]].weight || JOKER_WEIGHT_COMMON;
+    if (roll < 0) return keys[i];
+  }
+  return keys[keys.length - 1];      // float dust
+}
+
 // ── AI seats ──────────────────────────────────────────────────────────────────
 
 // A seat's automatic shop turn. Deliberately dumb: buy a pack whenever it can afford
@@ -46,18 +73,27 @@ function jokerSumOf(list, field) {
 // to choose. Duplicates are allowed, matching what a player can end up holding.
 function aiSeatShop(seat) {
   if (!seat || seat.isHuman) return false;
-  if (seat.comps < COMPS_PACK_COST) return false;
+  const price = Math.max(1, COMPS_PACK_COST - jokerSumOf(seat.jokers, "packDiscount"));
+  if (seat.comps < price) return false;
   if ((seat.jokers || []).length >= JOKER_SLOTS) return false;
-  seat.comps -= COMPS_PACK_COST;
-  seat.jokers.push(makeJokerCard(JOKER_KEYS[Math.floor(Math.random() * JOKER_KEYS.length)]));
+  const key = pickJokerKey(null, true);      // forSeat: skip what a seat can't use
+  if (!key) return false;
+  seat.comps -= price;
+  seat.jokers.push(makeJokerCard(key));
   return true;
 }
 
-// Pay one seat its round comps. Mirrors the live payout in finishRound exactly —
-// income for everyone, a bonus for the winner, plus whatever its jokers add.
-function paySeatComps(seat, won) {
+// Pay one seat its round comps. Mirrors the live payout in finishRound exactly — income
+// for everyone, a bonus for the winner, the loser's consolation, plus whatever its jokers
+// add.
+//
+// `won` and `lost` are BOTH passed rather than inferring one from the other, because a
+// DRAW is neither: it pays plain income, exactly as the live round does. Deriving lost
+// as !won would quietly pay the consolation to both seats of every draw.
+function paySeatComps(seat, won, lost) {
   seat.comps = (seat.comps || 0) + COMPS_INCOME + (won ? COMPS_WIN_BONUS : 0) +
-    jokerSumOf(seat.jokers, "compsPerRound");
+    jokerSumOf(seat.jokers, "compsPerRound") +
+    (lost ? jokerSumOf(seat.jokers, "compsOnLoss") : 0);
 }
 
 // The COMBAT integration point, called once per team from startRound's onRoundStart
@@ -86,8 +122,10 @@ function jokerSlotsFree(team) {
   return JOKER_SLOTS - jokers[team].length;
 }
 
-// Does this player already hold a joker of this kind? Duplicates are allowed in the
-// shoe but pointless to hold twice, so the UI warns rather than forbids.
+// Does this player already hold a joker of this kind? Duplicates are allowed and they
+// STACK — every effect is a summed numeric field (see jokerSum) — so the UI just says
+// so rather than warning you off. A pack can't hand you one (it draws without
+// replacement); two copies only happen if the shoe deals you the same joker twice.
 function holdsJoker(team, key) {
   return jokers[team].some(function (j) { return j.jokerKey === key; });
 }
@@ -127,7 +165,7 @@ function tryClaimFromHand(team, card) {
     claimJoker(team, card);
     jokerSwapPending = null;
     message.textContent = "🃏 Claimed " + JOKERS[card.jokerKey].name + "." +
-      (dupe ? "  (You already hold one — a second copy does nothing yet.)" : "");
+      (dupe ? "  (A second copy — its effect stacks.)" : "");
   } else {
     jokerSwapPending = card;
     message.textContent = "🃏 Joker row is full (" + JOKER_SLOTS + ") — click one above to replace it, " +
@@ -157,9 +195,18 @@ function trySwapInto(team, heldCard) {
 // no extra state machine here, just buttons that turn on during placement.
 
 // What the next bought reroll costs this round. Escalates, then holds at the last price.
+// The Valet shaves a comp off, but never to free — a zero-cost reroll would make the
+// escalating price (and the shoe's rarity) stop meaning anything.
 function rerollPrice(team) {
   const n = rerollsBought[team];
-  return COMPS_REROLL_COSTS[Math.min(n, COMPS_REROLL_COSTS.length - 1)];
+  const base = COMPS_REROLL_COSTS[Math.min(n, COMPS_REROLL_COSTS.length - 1)];
+  return Math.max(1, base - jokerSum(team, "rerollDiscount"));
+}
+
+// What a pack costs. Same floor-at-1 rule as rerollPrice, for the same reason — The
+// Loan Shark makes packs cheap, not free.
+function packPrice(team) {
+  return Math.max(1, COMPS_PACK_COST - jokerSum(team, "packDiscount"));
 }
 
 // The shop is open exactly when the Redraw button is usable: during your own planning,
@@ -189,14 +236,18 @@ function buyReroll(team) {
 // there's nothing to hand back, and a pack can't deplete your draw pile.
 function buyPack(team) {
   if (!canShop() || packOffer) return false;
-  if (comps[team] < COMPS_PACK_COST) return false;
-  comps[team] -= COMPS_PACK_COST;
+  const price = packPrice(team);
+  if (comps[team] < price) return false;
+  comps[team] -= price;
   const picks = [];
-  const pool = JOKER_KEYS.slice();
+  let pool = JOKER_KEYS.slice();
   for (let i = 0; i < PACK_SIZE && pool.length; i++) {
     // Draw WITHOUT replacement so a pack never shows you the same joker twice —
-    // three identical options wouldn't be a choice.
-    picks.push(makeJokerCard(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]));
+    // three identical options wouldn't be a choice. Weighted, so a pack is mostly
+    // commons with a rare turning up occasionally.
+    const key = pickJokerKey(pool);
+    picks.push(makeJokerCard(key));
+    pool = pool.filter(function (k) { return k !== key; });
   }
   packOffer = { team: team, cards: picks };
   message.textContent = "🎁 Opened a pack — pick one joker to keep.";
@@ -242,10 +293,11 @@ function updateShopPanel() {
   if (!rBtn || !pBtn) return;
   const open = canShop() && !packOffer;
   const rPrice = rerollPrice("player1");
+  const pPrice = packPrice("player1");
   rBtn.textContent = "🔄 +1 Redraw (" + COMPS_ICON + rPrice + ")";
-  pBtn.textContent = "🎁 Joker pack (" + COMPS_ICON + COMPS_PACK_COST + ")";
+  pBtn.textContent = "🎁 Joker pack (" + COMPS_ICON + pPrice + ")";
   rBtn.disabled = !open || comps.player1 < rPrice;
-  pBtn.disabled = !open || comps.player1 < COMPS_PACK_COST;
+  pBtn.disabled = !open || comps.player1 < pPrice;
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────

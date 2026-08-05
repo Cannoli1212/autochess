@@ -17,7 +17,14 @@
 // bake a scaled number onto the unit (like applySynergies), so a copy dying
 // mid-fight never weakens the survivors.
 function packCount(unit) {
-  return rankCounts(pokerPool(unit.team))[unit.rank] || 1;
+  const n = rankCounts(pokerPool(unit.team))[unit.rank] || 1;
+  // The Superstitious (joker): a LONE card counts as a pair, which is enough to switch
+  // an ability ON — and that's all it does. Because gating AND tiering both read this
+  // one number, lifting it outright would silently promote every rung on every unit
+  // (a pair firing as trips, trips as quads). Clamping the lift to a count of 1 keeps
+  // it a gate-opener: a pair still tiers as a pair, trips as trips.
+  if (n === 1 && jokerSum(unit.team, "packGate") > 0) return JOKER_PACK_GATE_FLOOR;
+  return n;
 }
 
 // ROLE split (Riley 2026-07-15): is `suit` a RANGED suit? Decided by the SUIT's BASE range
@@ -1535,9 +1542,15 @@ function isSuitExtinguished(team, suit) {
 }
 
 // The winner's bonus steal multiplier from loot cards it PLAYED this round (Jack of
-// Diamonds). Summed and data-driven, so copies stack. Read by finishRound's steal math.
+// Diamonds) PLUS any joker that fattens the haul (The Pit Boss). Summed and data-driven,
+// so copies stack. Read by finishRound's steal math.
+//
+// Both sources land here rather than in finishRound because the steal is still clamped
+// by the loser's stack there — scaling the TRANSFER keeps chips conserved (nothing is
+// minted), which is the invariant the table scan checks. The joker uses the same field
+// name `stealMult` as the Jack deliberately: one name for one effect.
 function teamLootMult(team) {
-  let total = 0;
+  let total = jokerSum(team, "stealMult");
   const cards = played[team] || [];
   for (let i = 0; i < cards.length; i++) {
     const uniq = uniqueOf(cards[i]);
