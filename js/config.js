@@ -862,6 +862,32 @@ const COMPS_WIN_BONUS = 2;     // extra, to the round winner only (0 on a draw)
 const COMPS_ICON = "🎟️";       // casino comp points — the house comps you for playing
 const COMPS_LABEL = "Comps";
 
+// ── Jokers ───────────────────────────────────────────────────────────────────
+// Jokers live IN THE SHOE as drawable cards, which is what makes rerolling a hunt
+// rather than just a mulligan. A real 52-card deck ships with 2 jokers, so this
+// number times DECKS is how many ride in each player's shoe — at 2 decks that's 4
+// jokers in 108 cards, ~3.7% a draw. The rarity tunes itself; this is the one knob.
+//
+// A joker card is NOT a unit: no suit, no rank, no attack/hp. It can never be
+// placed on the board. It occupies a hand slot until you CLAIM it (Slice 3), and
+// until then a reroll throws it away like any other card — that tension is the
+// point. The shoe conserves it either way: a discarded joker comes back on reshuffle.
+const JOKERS_PER_DECK = 2;
+
+// The joker catalog. Slice 2 ships these as INERT collectibles — name and art only,
+// so the draw/claim/shop machinery can be proven before any of them changes the
+// rules. The effect fields land in Slice 5; the `blurb` is the intent each one is
+// reserved for, and it doubles as the tooltip today.
+const JOKERS = {
+  theRegular:   { name: "The Regular",     icon: "☕", blurb: "The house knows your name. Earns extra comps every round." },
+  theCounter:   { name: "The Counter",     icon: "🧮", blurb: "Counts what's left in the shoe. Draws you a wider hand." },
+  theMechanic:  { name: "The Mechanic",    icon: "🎩", blurb: "Sleight of hand. Deals you an extra redraw each round." },
+  highRoller:   { name: "The High Roller", icon: "💎", blurb: "Bets big. Your army hits harder the fatter your chip stack." },
+  deadMansHand: { name: "Dead Man's Hand", icon: "💀", blurb: "Aces and eights. Pays out when your units die." },
+  luckyStiff:   { name: "The Lucky Stiff", icon: "🍀", blurb: "Shouldn't have survived that. Sometimes just doesn't die." },
+};
+const JOKER_KEYS = Object.keys(JOKERS);
+
 // Phase D: how many 52-card decks make up each player's shoe.
 const DECKS = 2;
 

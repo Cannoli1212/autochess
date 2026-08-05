@@ -683,6 +683,15 @@
 
   /* FUSION: a "made hand" (7-2) — GREEN glow, distinct from gold held + purple unique. */
   .card.fused { border: 2px solid #2ecc71; box-shadow: 0 0 7px rgba(46, 204, 113, 0.9); }
+  /* A joker reads as NOT-a-unit at a glance: dark face against the white unit cards,
+     cyan to tie it to the comps it's bought with, and no stat line because it has no
+     stats. The cursor stays default — there is nothing to drag. */
+  .card.joker {
+    background: #17212e; color: #6bd5e0; border: 2px solid #6bd5e0;
+    box-shadow: 0 0 8px rgba(107, 213, 224, 0.75); cursor: pointer;
+  }
+  .card.joker .jfig  { font-size: 20px; line-height: 1.1; }
+  .card.joker .jname { font-size: 7px; line-height: 1.1; text-align: center; padding: 0 2px; margin-top: 2px; }
   .unit.fused { box-shadow: inset 0 0 0 2px #2ecc71, 0 0 7px rgba(46, 204, 113, 0.9); }
   /* While dragging a card over a valid fuse partner, dash its border as a hint. */
   .card.fuse-target { outline: 2px dashed #2ecc71; outline-offset: 1px; }

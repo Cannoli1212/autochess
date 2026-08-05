@@ -259,6 +259,13 @@ function buildUnit(card, x, y, team) {
 // Play a card from a hand onto an empty cell in that player's zone.
 function playCard(team, index, x, y) {
   const card = hands[team][index];
+  // A joker is not a body. Every path that spawns a unit funnels through here, so
+  // this is the one place that has to say no — buildUnit below would happily read
+  // its undefined suit and produce a broken unit on the board.
+  if (cardIsJoker(card)) {
+    message.textContent = "🃏 A joker can't be placed — claim it to keep it for the game.";
+    return;
+  }
   if (!canPlaceAt(card, y, team)) {
     message.textContent = label(team) + " can only place on their own colored rows.";
     return;

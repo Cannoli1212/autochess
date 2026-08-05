@@ -1302,6 +1302,12 @@ function uniqueOf(card) {
 // A card's FULL ability list = its suit's + its rank's + its unique's abilities.
 // Used when a card becomes a unit (placement.js).
 function unitAbilities(card) {
+  // A JOKER has no suit, so SUITS[card.suit].abilities below would throw. Guarding
+  // here rather than at each call site is deliberate: cardIsInert, castAbilityOf,
+  // cardCannotDiscard and figureTitle ALL read the game through this one function,
+  // so this single line makes every one of them joker-safe with the right answer
+  // (no abilities → not inert, not a caster, freely discardable).
+  if (cardIsJoker(card)) return [];
   const suitAbilities = SUITS[card.suit].abilities || [];
   // A FUSED card (a "made hand") inherits its ONE suit family PLUS BOTH parts'
   // rank abilities — that doubled ability load is why its stats are taxed (see
@@ -1407,6 +1413,12 @@ function rankAbilityText(card) {
 // shared place so the board and the hand always describe a card the same way, and
 // legendaries automatically get a ★ line without touching two files.
 function figureTitle(obj) {
+  // A joker isn't a figure — it has no suit, rank or stat line to describe. Its own
+  // catalog blurb is the tooltip.
+  if (cardIsJoker(obj)) {
+    const j = JOKERS[obj.jokerKey];
+    return "🃏 " + j.name + " — " + j.blurb + "  (a joker: never placed, claim it to keep it)";
+  }
   // A fused "made hand" (7-2): name the two parts it inherits and its abilities.
   // obj may be a card (carries `parts`/`fusedKey`) or a unit (carries them on `card`).
   if (obj.fused) {

@@ -47,9 +47,12 @@ function rerollHand(team) {
 // worse than a random one and worth gambling a reroll on.
 function aiMaybeReroll(team) {
   for (let n = 0; n < REDRAWS_PER_ROUND; n++) {
-    const sorted = hands[team].slice().sort(function (a, b) {
-      return (b.attack + b.hp) - (a.attack + a.hp);
-    });
+    // Judge the hand on its PLACEABLE cards only — a joker has no attack/hp, so
+    // leaving it in would make every comparison NaN and the average meaningless.
+    const sorted = hands[team].filter(function (c) { return !cardIsJoker(c); })
+      .sort(function (a, b) {
+        return (b.attack + b.hp) - (a.attack + a.hp);
+      });
     const top = sorted.slice(0, armySize());
     if (top.length === 0) break;
     const avgRank = top.reduce(function (s, c) { return s + c.rank; }, 0) / top.length;
@@ -127,6 +130,22 @@ function renderOneHand(team) {
     // Note the priority flips between the two views. On the BOARD the sprite is the figure
     // and the rank/suit is a corner tag; in the HAND the rank/suit stays the headline and
     // the sprite is the supporting cue — because a hand is read as a poker hand first.
+    // A JOKER renders as its own thing and stops here: it has no suit to colour by,
+    // no rank glyph and no attack/hp line, and unitArtFor would hand it a melee
+    // sprite it has no business wearing. It also gets none of the listeners below —
+    // it can't be dragged, played or fused, so the only interaction it has is the
+    // claim click added in Slice 3.
+    if (cardIsJoker(c)) {
+      const j = JOKERS[c.jokerKey];
+      card.className = "card joker";
+      card.draggable = false;
+      card.title = figureTitle(c);
+      card.innerHTML =
+        '<div class="jfig">' + j.icon + '</div>' +
+        '<div class="jname">' + j.name + '</div>';
+      cardsEl.appendChild(card);
+      continue;
+    }
     const art = (typeof unitArtFor === "function") ? unitArtFor(c) : null;
     const isTapSel = tapSel && tapSel.kind === "card" && tapSel.card === c;
     card.className = "card" + (art ? " has-art" : "") + (c.held ? " held" : "") +

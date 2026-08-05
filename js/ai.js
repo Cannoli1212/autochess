@@ -37,14 +37,20 @@ function aiPickCell(team, card) {
 // each pass because playCard() splices the placed card out of it.
 function aiPlaceUnits(team) {
   while (countUnits(team) < armySize() && hands[team].length > 0) {
-    // Find the strongest card still in hand.
-    let bestIdx = 0;
+    // Find the strongest card still in hand. JOKERS are skipped: they have no attack
+    // or hp (the score would be NaN) and they can't be placed at all. bestIdx starts
+    // at -1 rather than 0 so a hand of nothing but jokers breaks out of the loop
+    // instead of trying to field one — otherwise playCard would refuse forever and
+    // this would spin.
+    let bestIdx = -1;
     let bestScore = -1;
     for (let i = 0; i < hands[team].length; i++) {
       const c = hands[team][i];
+      if (cardIsJoker(c)) continue;
       const score = c.attack + c.hp;             // raw power; refine later if we like
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
+    if (bestIdx === -1) break;                   // nothing placeable left in hand
     const cell = aiPickCell(team, hands[team][bestIdx]);
     if (cell === null) break;                    // no room left (shouldn't happen)
     playCard(team, bestIdx, cell.x, cell.y);     // same entry point a human uses

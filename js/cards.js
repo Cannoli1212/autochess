@@ -74,9 +74,41 @@ function shuffle(arr) {
   }
 }
 
+// ── Jokers ────────────────────────────────────────────────────────────────────
+
+// Is this card a joker? The ONE predicate everything else guards on. A joker has no
+// suit and no rank, so any code path that reads either must check this first.
+function cardIsJoker(card) {
+  return !!card && card.kind === "joker";
+}
+
+// Build one joker card. Deliberately NOT shaped like a unit card — no suit, rank,
+// range, attack or hp — so that anything which tries to treat it as a unit fails
+// loudly at the guard rather than quietly spawning a broken body on the board.
+function makeJokerCard(key) {
+  return { kind: "joker", jokerKey: key, name: JOKERS[key].name };
+}
+
+// Shuffle JOKERS_PER_DECK × DECKS jokers into a shoe, in place.
+//
+// This is deliberately NOT part of buildShoe(). buildShoe also builds the COMMUNITY
+// FLOP deck (flop.js) and the balance sim's deck (sim.js) — seeding jokers there
+// would deal jokers onto the community board and poison every seeded balance number.
+// initShoes() is the only caller, so jokers reach players' hands and nowhere else.
+function seedJokers(shoe) {
+  const n = JOKERS_PER_DECK * DECKS;
+  for (let i = 0; i < n; i++) {
+    // Duplicates are allowed: two of the same joker in a shoe is a real outcome, and
+    // a real deck's two jokers are identical anyway.
+    shoe.push(makeJokerCard(JOKER_KEYS[Math.floor(Math.random() * JOKER_KEYS.length)]));
+  }
+  shuffle(shoe);
+  return shoe;
+}
+
 // Give both players a fresh shoe; empty their discard and played piles.
 function initShoes() {
-  draw = { player1: buildShoe(), player2: buildShoe() };
+  draw = { player1: seedJokers(buildShoe()), player2: seedJokers(buildShoe()) };
   discard = { player1: [], player2: [] };
   played = { player1: [], player2: [] };
 }
