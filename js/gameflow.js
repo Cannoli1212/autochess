@@ -173,6 +173,7 @@ function resolveStrikes() {
 // Pressing the button starts the fight — but only when both armies are placed.
 function startRound() {
   if (inCombat) return;                        // already fighting
+  tapSel = null;                               // drop any tap-to-place selection before the fight
 
   // Phase D: in table mode, pick this round's live opponent and load the two dueling
   // seats' stacks onto the player1/player2 sides BEFORE the AI places, so gold-scaling
@@ -275,6 +276,7 @@ function startRound() {
 function nextRound() {
   clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
   clearFx();                    // wipe any effects still floating from the fight just ended
+  tapSel = null;                // and any tap-to-place selection from last round
   // Every unplayed leftover card carries into the next round automatically (holding
   // is no longer optional). We just clear any stale `held` flag; nothing is discarded
   // here — drawHands only tops the carried hand up to the new round's HAND_SCHEDULE.
@@ -331,6 +333,7 @@ function resetGame() {
   clearFx();                    // and clear the effect layer
   units = [];
   strikeMarks = { player1: [], player2: [] };
+  tapSel = null;                // no tap-to-place selection survives a new game
   roundNumber = 1;
   roundWins = { player1: 0, player2: 0 };
   chips = { player1: 100, player2: 100 };

@@ -124,6 +124,15 @@ let flopRevealed = false;   // the flop stays face-down until Round Start
 // What is currently being dragged: a hand card, or a unit from the board.
 let dragData = null;
 
+// TAP-TO-PLACE selection — the touch-friendly twin of dragData (see placement.js).
+// iOS fires no HTML5 drag events at all, so on an iPad the drag-only input made the
+// game literally unplayable. Tapping a source SELECTS it, tapping a destination
+// completes the same action a drop would have. Shape mirrors dragData, except a card
+// selection holds the card OBJECT rather than its index: hands get spliced and
+// reordered (play, fuse, redraw), and an index would quietly point at a different
+// card afterwards. `null` = nothing selected.
+let tapSel = null;
+
 // True while players may edit the board (drag cards/units). False during a
 // fight and while a round's result is still on screen.
 let placementOpen = true;

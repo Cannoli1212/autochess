@@ -29,9 +29,16 @@ function initInput() {
         e.dataTransfer.setDragImage(node, CELL_PX / 2, CELL_PX / 2);
       }
     });
-    // Plain click = mark/unmark an enemy square for the King of Clubs' airstrike.
+    // A tap/click on a square means one of two things, in this order: finish (or
+    // start) a tap-to-place selection, or — when nothing is selected and the square
+    // is an empty enemy one — mark it for the King of Clubs' airstrike. handleTapOnCell
+    // reports whether it consumed the tap, so the airstrike keeps its old behaviour
+    // untouched whenever tap-to-place has nothing to say.
     cell.addEventListener("click", function () {
-      handleStrikeClick(Number(cell.dataset.x), Number(cell.dataset.y));
+      const cx = Number(cell.dataset.x);
+      const cy = Number(cell.dataset.y);
+      if (handleTapOnCell(cx, cy)) return;
+      handleStrikeClick(cx, cy);
     });
   }
 
@@ -58,7 +65,98 @@ function initInput() {
       rowEl.classList.remove("bench-drop");
       handleDropOnHand(team);
     });
+    // Tap twin of that drop: with one of your units selected, tapping anywhere on your
+    // bench row sends it back. Taps that land on a CARD bubble up to here, which is what
+    // we want — dropping a unit onto a hand card already behaved this way.
+    rowEl.addEventListener("click", function () {
+      if (!placementOpen || holdMode) return;
+      if (tapSel && tapSel.kind === "unit" && tapSel.team === team) {
+        const sel = tapSel;
+        tapClear(false);                 // clear first: returnUnitToHand re-renders the hand
+        returnUnitToHand(sel);
+      }
+    });
   });
+}
+
+// ── TAP TO PLACE ─────────────────────────────────────────────────────────────
+// A second input path that does everything dragging does, using only taps. It exists
+// because iOS Safari fires NO HTML5 drag events — not one — so on an iPad (stylus or
+// not) the drag-only game could not be played at all. Desktop dragging is untouched;
+// this runs alongside it and works for anyone who finds dragging fiddly.
+//
+// Every drag in this game is "pick a source, then pick a destination", so each one maps
+// onto a pair of taps:
+//   hand card → cell      play the card          hand card → hand card   fuse
+//   board unit → cell     move the unit          board unit → bench row  return to hand
+
+// Drop the current selection. `repaint` redraws immediately; pass false when the caller
+// is about to re-render anyway (avoids painting the board twice for one action).
+function tapClear(repaint) {
+  const had = tapSel !== null;
+  tapSel = null;
+  if (had && repaint !== false) { render(); renderHands(); }
+}
+
+// Select a hand card (or toggle it back off). Stores the card OBJECT — see state.js.
+function tapSelectCard(team, card) {
+  tapSel = { kind: "card", team: team, card: card };
+  render();
+  renderHands();
+  message.textContent = "Selected " + rankLabel(card.rank) + SUITS[card.suit].symbol +
+    " — tap a square in your zone to place it (tap the card again to cancel).";
+}
+
+// Select one of the units already on the board, so the next tap moves it.
+function tapSelectUnit(x, y, team) {
+  tapSel = { kind: "unit", x: x, y: y, team: team };
+  render();
+  renderHands();
+  message.textContent = "Unit selected — tap an empty square to move it, or tap your " +
+    "hand row to take it back (tap it again to cancel).";
+}
+
+// A square was tapped. Returns TRUE if tap-to-place consumed the tap, FALSE to let the
+// airstrike handler have it. Keeping that contract is what stops this from stealing the
+// King of Clubs' marking clicks.
+function handleTapOnCell(x, y) {
+  if (!placementOpen || holdMode) { tapClear(); return false; }
+
+  // Nothing selected yet: tapping your own unit picks it up. Tapping an empty square
+  // means nothing here — fall through so the airstrike can use it.
+  if (tapSel === null) {
+    const u = findUnitAt(x, y);
+    if (u === null) return false;
+    tapSelectUnit(x, y, u.team);
+    return true;
+  }
+
+  // A card is selected → this square is where it gets played. playCard does all the
+  // legality checks (own zone, square free, army cap) and messages on refusal, so a bad
+  // target just cancels the selection and explains itself, same as a failed drop.
+  if (tapSel.kind === "card") {
+    const idx = hands[tapSel.team].indexOf(tapSel.card);
+    const team = tapSel.team;
+    tapClear(false);
+    if (idx === -1) { render(); renderHands(); return true; }   // card vanished (redraw/fuse)
+    playCard(team, idx, x, y);
+    return true;
+  }
+
+  // A unit is selected → tapping it again cancels; any other square is a move.
+  if (tapSel.kind === "unit") {
+    if (tapSel.x === x && tapSel.y === y) {
+      tapClear();
+      updatePlacementMessage();
+      return true;
+    }
+    const sel = tapSel;
+    tapClear(false);
+    moveUnit(sel, x, y);
+    renderHands();
+    return true;
+  }
+  return false;
 }
 
 // Which player's zone does a given row belong to?

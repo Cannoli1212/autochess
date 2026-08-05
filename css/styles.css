@@ -683,6 +683,38 @@
   /* While dragging a card over a valid fuse partner, dash its border as a hint. */
   .card.fuse-target { outline: 2px dashed #2ecc71; outline-offset: 1px; }
 
+  /* ── TAP TO PLACE (see placement.js) ──────────────────────────────────────────
+     The "I am holding this" state for the tap input, standing in for the drag ghost
+     you never get on a touchscreen. CYAN on purpose: gold is "held", purple is
+     legendary, green is fused, red is an airstrike mark — the four glows already
+     spoken for. On a cell it's an INSET shadow so the square keeps its exact size
+     (same rule the .unit glows follow). */
+  .card.tap-sel {
+    outline: 3px solid #29e0ff;
+    outline-offset: 2px;
+    box-shadow: 0 0 10px rgba(41, 224, 255, 0.95);
+    transform: translateY(-4px);      /* lifts out of the row, like a picked-up card */
+  }
+  .cell.tap-sel {
+    box-shadow: inset 0 0 0 3px #29e0ff, 0 0 9px rgba(41, 224, 255, 0.85);
+  }
+
+  /* TOUCH HYGIENE — what makes taps land reliably on iOS.
+     `touch-action: manipulation` drops Safari's 300ms wait-and-see for a double-tap,
+     so a tap registers immediately instead of feeling broken. The callout/user-select
+     pair stops a press-and-hold (very easy to do with a stylus) from popping up the
+     copy/lookup bubble or blue-selecting the card text mid-game. And `cursor: pointer`
+     is not cosmetic here: iOS Safari has a long-standing quirk where click events on
+     plain non-interactive elements can be dropped, and marking them clickable is the
+     documented fix. */
+  .cell, .card, .hand-row {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+  }
+
   /* King of Clubs airstrike: a marked enemy square, awaiting the strike at Round Start. */
   .cell.strike-mark { box-shadow: inset 0 0 0 2px #ff5252, 0 0 6px rgba(255, 82, 82, 0.85); }
 

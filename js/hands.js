@@ -27,6 +27,7 @@ function handTarget() {
 // remain (or, defensively, in SIM_MODE). aiMaybeReroll drives the computer's copy.
 function rerollHand(team) {
   if (redrawsLeft[team] <= 0) return false;
+  tapSel = null;                 // the selected card is about to be discarded
   const kept = [];
   hands[team].forEach(function (c) {
     if (cardCannotDiscard(c)) { kept.push(c); }   // hot potato can't leave the hand
@@ -127,8 +128,10 @@ function renderOneHand(team) {
     // and the rank/suit is a corner tag; in the HAND the rank/suit stays the headline and
     // the sprite is the supporting cue — because a hand is read as a poker hand first.
     const art = (typeof unitArtFor === "function") ? unitArtFor(c) : null;
+    const isTapSel = tapSel && tapSel.kind === "card" && tapSel.card === c;
     card.className = "card" + (art ? " has-art" : "") + (c.held ? " held" : "") +
-      (uniqueOf(c) ? " unique" : "") + (c.fused ? " fused" : "");
+      (uniqueOf(c) ? " unique" : "") + (c.fused ? " fused" : "") +
+      (isTapSel ? " tap-sel" : "");
     // Phase E: in hold mode cards are clicked (not dragged) to hold/release.
     card.draggable = !holdMode;
     const cs = SUITS[c.suit];
@@ -187,6 +190,36 @@ function renderOneHand(team) {
     // Phase E: on the results screen, click to toggle holding this card.
     if (holdMode) {
       card.addEventListener("click", function () { toggleHold(team, cardIndex); });
+    } else {
+      // TAP TO PLACE (see placement.js): tap a card to select it, tap a square to play
+      // it. Tapping a second card that FUSES with the selected one performs the fusion
+      // — the tapped card is the "onto" whose suit wins, exactly as with a drop.
+      card.addEventListener("click", function () {
+        if (!placementOpen) return;
+        // A unit is selected: this tap means "put it back on the bench". Do nothing here
+        // and let it bubble to the hand-row handler, which owns that action.
+        if (tapSel && tapSel.kind === "unit") return;
+        if (tapSel && tapSel.kind === "card" && tapSel.card === c) {
+          tapClear();                               // tapped the selected card again
+          updatePlacementMessage();
+          return;
+        }
+        if (tapSel && tapSel.kind === "card" && tapSel.team === team) {
+          const fromIdx = hands[team].indexOf(tapSel.card);
+          if (fromIdx !== -1 && fromIdx !== cardIndex &&
+              fusableKeyFor(tapSel.card, c)) {
+            tapClear(false);
+            if (fuseCards(team, cardIndex, fromIdx)) {
+              message.textContent = "🃏 Fused into " +
+                FUSABLE_HANDS[hands[team][Math.min(cardIndex, fromIdx)].fusedKey].label +
+                " — one body with both cards' abilities.";
+              renderHands();
+              return;
+            }
+          }
+        }
+        tapSelectCard(team, c);                     // otherwise: select (or switch to) this card
+      });
     }
     cardsEl.appendChild(card);
   }

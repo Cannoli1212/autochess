@@ -181,6 +181,14 @@ function renderCells() {
     cell.draggable = true;                         // a cell with a unit can be dragged
   }
 
+  // Tap-to-place: ring the square whose unit is currently picked up, so a tap-driven
+  // move shows the same "I am holding this" state a drag does. renderCells strips all
+  // classes above, so this is re-applied every redraw like everything else here.
+  if (tapSel && tapSel.kind === "unit") {
+    const selCell = cellAt(tapSel.x, tapSel.y);
+    if (selCell) selCell.classList.add("tap-sel");
+  }
+
   // Airstrike marks (King of Clubs): overlay a red ✕ on each marked square so the
   // player sees their blind targets. State owns the marks; the board just draws them.
   const marks = strikeMarks.player1.concat(strikeMarks.player2);
