@@ -7,8 +7,8 @@
 // replaces a fresh draw, never a bonus. Callers must set the starting hand (empty,
 // or the carried leftovers) first.
 function drawHands() {
-  const targetSize = handTarget();
   ["player1", "player2"].forEach(function (team) {
+    const targetSize = handTarget(team);   // per-team: a joker may widen one hand and not the other
     while (hands[team].length < targetSize) {
       hands[team].push(drawCard(team));
     }
@@ -16,9 +16,13 @@ function drawHands() {
   renderHands();
 }
 
-// This round's hand size (with a safe fallback past the last scheduled round).
-function handTarget() {
-  return HAND_SCHEDULE[roundNumber] || HAND_SCHEDULE[HAND_SCHEDULE.length - 1];
+// This round's hand size (with a safe fallback past the last scheduled round), plus
+// any joker that widens the hand. `team` is optional: called without one — as the
+// sim harnesses do — it returns the plain schedule, so a headless fight can never
+// pick up a live player's joker bonus.
+function handTarget(team) {
+  const base = HAND_SCHEDULE[roundNumber] || HAND_SCHEDULE[HAND_SCHEDULE.length - 1];
+  return base + (team ? jokerSum(team, "handBonus") : 0);
 }
 
 // Spend one redraw: throw the whole hand away and deal a brand-new one of the same
@@ -34,7 +38,7 @@ function rerollHand(team) {
     else { discard[team].push(c); }
   });
   hands[team] = kept;
-  const targetSize = handTarget();
+  const targetSize = handTarget(team);
   while (hands[team].length < targetSize) hands[team].push(drawCard(team));
   redrawsLeft[team] -= 1;
   renderHands();

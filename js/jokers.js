@@ -10,6 +10,45 @@
 // hands.js: a hand is cards you play this round, a joker row is what you keep, and
 // merging them would blur exactly the distinction the feature rests on.
 
+// ── Effects ───────────────────────────────────────────────────────────────────
+
+// Sum a numeric field across the jokers `team` holds. THE bus: every joker effect is
+// a number that some integration point adds in, so a new joker is a data entry rather
+// than new code. Same shape as the existing player-level modifiers teamLootMult and
+// handTax (abilities.js), deliberately — one pattern for "sum a field over a
+// collection", not two.
+//
+// Safe before state exists (jokers[team] may be undefined during early boot) and safe
+// for a team holding nothing, so callers never need to guard.
+function jokerSum(team, field) {
+  const list = (typeof jokers !== "undefined" && jokers[team]) || [];
+  let total = 0;
+  for (let i = 0; i < list.length; i++) {
+    const entry = JOKERS[list[i].jokerKey];
+    if (entry && typeof entry[field] === "number") total += entry[field];
+  }
+  return total;
+}
+
+// The COMBAT integration point, called once per team from startRound's onRoundStart
+// pass — after synergies have baked, so this multiplies the finished number the way
+// the round-start ability hooks do.
+//
+// Today that's just The High Roller: attack scales with how far your chip stack has
+// grown past the opening one, capped at JOKER_ATK_CAP. Reads `chips`, which in table
+// mode has already been loaded from the seats, so it sees the real stack.
+function applyJokerRoundStart(team) {
+  const perChip = jokerSum(team, "atkPerChip");
+  if (perChip <= 0) return 0;
+  const over = Math.max(0, (chips[team] || 0) - ATK_BASELINE_CHIPS);
+  const mult = 1 + Math.min(over * perChip, JOKER_ATK_CAP);
+  if (mult <= 1) return 0;
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].team === team) units[i].attack = Math.round(units[i].attack * mult);
+  }
+  return mult;
+}
+
 // ── Rules ─────────────────────────────────────────────────────────────────────
 
 // How many free slots a player has left.

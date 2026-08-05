@@ -75,7 +75,8 @@ function finishRound(winner) {
   // block above that touches both players regardless of who won, and BEFORE the seat
   // write-back below — which is what actually persists these values onto the seats.
   ["player1", "player2"].forEach(function (team) {
-    comps[team] = comps[team] + COMPS_INCOME + (team === winner ? COMPS_WIN_BONUS : 0);
+    comps[team] = comps[team] + COMPS_INCOME + (team === winner ? COMPS_WIN_BONUS : 0) +
+      jokerSum(team, "compsPerRound");     // The Regular and friends
   });
   turnStatus.textContent = turnStatus.textContent +
     "  " + COMPS_ICON + " +" + COMPS_INCOME + " " + COMPS_LABEL.toLowerCase() + " each" +
@@ -274,6 +275,12 @@ function startRound() {
     runAbilityHook(units[i], "onRoundStart", {});
   }
 
+  // Jokers bake LAST, after synergies and every round-start ability, so a joker that
+  // scales the army multiplies the finished number rather than a half-built one —
+  // the same ordering reason Rally runs after applySynergies.
+  const hrP1 = applyJokerRoundStart("player1");   // kept: the banner reports YOUR multiplier
+  applyJokerRoundStart("player2");                // the opponent's applies just the same, silently
+
   render();
   // Drain the queue NOW rather than letting the first combat tick do it. Everything above
   // this line — the airstrike's deaths, and every round-start buff (the Bowers, Midas,
@@ -284,7 +291,8 @@ function startRound() {
   playFx();
 
   message.textContent = "";
-  turnStatus.textContent = (struck > 0 ? "✕ Airstrike hit " + struck + " unit(s)! " : "") + "⚔️ Fight!";
+  const hrNote = hrP1 > 1 ? "  💎 High Roller: your army swings at " + Math.round(hrP1 * 100) + "%." : "";
+  turnStatus.textContent = (struck > 0 ? "✕ Airstrike hit " + struck + " unit(s)! " : "") + "⚔️ Fight!" + hrNote;
 
   // Phase D2: record YOUR live fight tick-by-tick so it can be rewatched from the tab
   // bar alongside the other matchups. Snapshot the opening board, then one per tick.
@@ -320,7 +328,11 @@ function nextRound() {
   jokerSwapPending = null;      // an unfinished joker swap doesn't survive the round
   packOffer = null;             // nor an unopened pick — the comps are spent either way
   rerollsBought = { player1: 0, player2: 0 };   // reroll prices reset with the free redraws
-  redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };  // fresh redraws
+  // Fresh redraws, widened by any joker that grants extras (The Mechanic).
+  redrawsLeft = {
+    player1: REDRAWS_PER_ROUND + jokerSum("player1", "redrawBonus"),
+    player2: REDRAWS_PER_ROUND + jokerSum("player2", "redrawBonus"),
+  };
 
   // Phase D: cards played this round (the whole board) go to the discard piles.
   discard.player1 = discard.player1.concat(played.player1);

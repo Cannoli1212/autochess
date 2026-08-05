@@ -874,19 +874,45 @@ const COMPS_LABEL = "Comps";
 // point. The shoe conserves it either way: a discarded joker comes back on reshuffle.
 const JOKERS_PER_DECK = 2;
 
-// The joker catalog. Slice 2 ships these as INERT collectibles — name and art only,
-// so the draw/claim/shop machinery can be proven before any of them changes the
-// rules. The effect fields land in Slice 5; the `blurb` is the intent each one is
-// reserved for, and it doubles as the tooltip today.
+// The joker catalog. Every joker here DOES something — nothing inert ships, because a
+// collectible that turns out to be a blank is worse than one that doesn't exist.
+//
+// Effects are plain NUMERIC FIELDS summed across the jokers you hold (jokerSum in
+// jokers.js), the same shape as the existing player-level modifiers teamLootMult and
+// handTax. A joker is data, not code: to add one, name a field an integration point
+// already reads. The four fields today, and where each is read:
+//
+//   compsPerRound  → finishRound's comps payout          (economy)
+//   handBonus      → handTarget, i.e. cards dealt        (draw)
+//   redrawBonus    → nextRound's free-redraw refill      (draw)
+//   atkPerChip     → applyJokerRoundStart, vs ATK_BASELINE_CHIPS (combat)
+//
+// Deliberately kept to four so the four DIFFERENT kinds of integration point are each
+// proven once. The real catalog is its own design pass — see JOKER_BACKLOG below.
 const JOKERS = {
-  theRegular:   { name: "The Regular",     icon: "☕", blurb: "The house knows your name. Earns extra comps every round." },
-  theCounter:   { name: "The Counter",     icon: "🧮", blurb: "Counts what's left in the shoe. Draws you a wider hand." },
-  theMechanic:  { name: "The Mechanic",    icon: "🎩", blurb: "Sleight of hand. Deals you an extra redraw each round." },
-  highRoller:   { name: "The High Roller", icon: "💎", blurb: "Bets big. Your army hits harder the fatter your chip stack." },
-  deadMansHand: { name: "Dead Man's Hand", icon: "💀", blurb: "Aces and eights. Pays out when your units die." },
-  luckyStiff:   { name: "The Lucky Stiff", icon: "🍀", blurb: "Shouldn't have survived that. Sometimes just doesn't die." },
+  theRegular:  { name: "The Regular",     icon: "☕", compsPerRound: 2,
+                 blurb: "The house knows your name. +2 comps every round." },
+  theCounter:  { name: "The Counter",     icon: "🧮", handBonus: 1,
+                 blurb: "Counts what's left in the shoe. +1 card in hand each round." },
+  theMechanic: { name: "The Mechanic",    icon: "🎩", redrawBonus: 1,
+                 blurb: "Sleight of hand. +1 free redraw each round." },
+  highRoller:  { name: "The High Roller", icon: "💎", atkPerChip: 0.002,
+                 blurb: "Bets big. Your whole army hits harder the fatter your chip stack." },
 };
 const JOKER_KEYS = Object.keys(JOKERS);
+
+// The High Roller measures your stack against the opening one, so at 100 chips it does
+// nothing and only a stack you've actually GROWN pays out. Capped so a runaway leader
+// can't convert a chip lead into an unlosable board — the joker should reward being
+// ahead, not end the game.
+const ATK_BASELINE_CHIPS = 100;
+const JOKER_ATK_CAP = 0.5;          // +50% attack, maximum, from chip scaling
+
+// Named but NOT built — the next catalog pass. Each needs an integration point that
+// doesn't exist yet (a death hook, a lethal-damage intercept), which is exactly why
+// they're parked here instead of shipped half-working.
+//   deadMansHand — "Aces and eights. Pays out when your units die."   (needs an onDeath hook)
+//   luckyStiff   — "Shouldn't have survived that. Sometimes doesn't die." (needs a lethal intercept)
 
 // How many jokers you may keep at once. The LIMIT is the whole point: with unlimited
 // slots, claiming a joker is never a decision — you'd always take it and the choice
