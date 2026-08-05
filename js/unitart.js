@@ -89,8 +89,19 @@ let ART_SHEET_H = 0;
     // Hand the drawn size to CSS so ART_SCALE above is the ONE place a sprite's size is
     // decided. .fig-glyph.art sizes itself from this and works out its own overhang.
     document.documentElement.style.setProperty("--art-px", ART_DRAW_PX + "px");
-    // Units already on the board were drawn as text. Repaint them now that there's art.
-    if (typeof render === "function" && !SIM_MODE) render();
+    // Units already on the board were drawn as text. Repaint them now that there's art —
+    // but only once the WHOLE page has loaded. This file is the 7th script tag and render()
+    // reaches into the 17th (hud.js's renderDmgPanel), so a sheet that finishes downloading
+    // in between passes the `typeof render` check and then throws on a function that does
+    // not exist yet. That window is invisible on localhost and real on a CDN, which is
+    // exactly the kind of race that only ever shows up in front of a player. Waiting for
+    // `load` means every script is parsed before we repaint; if the sheet arrives after the
+    // page is already up (slow connection), readyState is "complete" and we repaint at once.
+    const repaintForArt = function () {
+      if (typeof render === "function" && !SIM_MODE) render();
+    };
+    if (document.readyState === "complete") repaintForArt();
+    else window.addEventListener("load", repaintForArt, { once: true });
   };
   img.onerror = function () {
     // Not an error worth shouting about: no pack yet = text glyphs, same as before.
