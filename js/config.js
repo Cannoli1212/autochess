@@ -936,11 +936,46 @@ const JOKERS = {
 
   // ── The hand (activated) ───────────────────────────────────────────────────
   // `activated: true` means this joker isn't a passive number — you CLICK it and make a
-  // choice. See the activation flow in jokers.js. aiUseless because a headless seat has
-  // no one to make the choice.
+  // choice. `action` names what resolving it DOES (see finishJokerAction in jokers.js) and
+  // `needsTarget` says whether a hand card must be picked first. aiUseless on all of these:
+  // a headless seat has no one to make the choice.
   theTailor:   { name: "The Tailor",      icon: "🧵", weight: 2, activated: true,
-                 aiUseless: true,
+                 action: "recutHandCard", needsTarget: true, aiUseless: true,
                  blurb: "Recuts it to match. Once a round, change one card in your hand to any suit." },
+
+  // ── The community board ────────────────────────────────────────────────────
+  // The community is dealt at Round Start, AFTER placement locks, and is re-randomized
+  // every round — so it's deliberately unplannable luck. These three don't let you see it
+  // coming; they change its SHAPE reliably, every round, which is what makes committing to
+  // a build safe. That's their value: they convert variance into a plan.
+  //
+  // The board is SHARED, so a shift applies to everyone. flopShift is SUMMED across both
+  // players (applyJokerFlopShaping), which means an Optimist and a Cooler cancel out —
+  // the Cooler is a real counter, not just a mirror.
+  theDealer:   { name: "The Dealer",      icon: "🎴", weight: 2, activated: true,
+                 action: "callCommunitySuit", aiUseless: true,
+                 blurb: "Deals you one. Once a round, call a suit — one community card turns that suit at Round Start." },
+  // The blurbs below state MEASURED effects, not intended ones. Over 8000 dealt 5-card
+  // boards, chance the community shows each shape:
+  //
+  //                 pair    trips   3-straight   4-straight
+  //   no joker       58%      5%        22%          3.9%
+  //   The Optimist   84%     33%        17%          2.8%
+  //   The Cooler     42%      6%        18%          0.9%
+  //
+  // The Optimist makes FEWER straights, the opposite of the obvious guess: a run needs
+  // DISTINCT consecutive ranks, and cards converging onto the same rank make pairs instead of
+  // extending one. Its real headline is TRIPS — 5% to 33%, a 6.5x jump — and because packCount
+  // reads the community, that tiers rank abilities up to their trips rung. It's an of-a-kind
+  // engine, not a straight engine.
+  //
+  // The Cooler's honest claim is pairs (-16 points) and LONG straights (4-card runs 4x rarer).
+  // Three-card runs barely budge: with 5 cards on a 13-rank range some short run is hard to
+  // avoid. See shiftCommunityTowardMiddle for why spreading has to slide past collisions.
+  theOptimist: { name: "The Optimist",    icon: "🪜", weight: 2, flopShift: 1,
+                 blurb: "Sees it coming together. Community cards shift one rank TOWARD the middle — pairs and trips everywhere." },
+  theCooler:   { name: "The Cooler",      icon: "🧊", weight: 2, flopShift: -1,
+                 blurb: "Kills the table. Community cards shift one rank AWAY from the middle — wrecks pairs and long straights." },
 
   // ── Cards that persist ─────────────────────────────────────────────────────
   // Both of these keep cards ALIVE across rounds instead of handing you new ones,

@@ -201,28 +201,39 @@ function jokerActionReady(team, key) {
   return !jokerActionUsed(team, key);
 }
 
-// Step 1: the player clicked an activated joker in their row. Arm it and ask for a target.
+// Step 1: the player clicked an activated joker in their row. Arm it.
+//
+// `stage` is where the activation is up to: "target" means it still needs a hand card
+// picked, "suit" means the suit chooser is live. A joker with needsTarget skips straight to
+// "suit" — The Dealer acts on the community board, so there's nothing in hand to point at.
 function beginJokerAction(team, key) {
   if (!jokerActionReady(team, key)) return false;
-  jokerActionPending = { key: key, team: team, card: null };
-  message.textContent = "🧵 " + JOKERS[key].name + " — click a card in your hand to recut, " +
-    "or click the joker again to cancel.";
+  const meta = JOKERS[key];
+  jokerActionPending = {
+    key: key, team: team, card: null,
+    stage: meta.needsTarget ? "target" : "suit",
+  };
+  message.textContent = meta.icon + " " + meta.name + " — " +
+    (meta.needsTarget ? "click a card in your hand to recut" : "call a suit below") +
+    ", or click the joker again to cancel.";
   renderJokers();
   renderHands();
   return true;
 }
 
-// Step 2: the player clicked a hand card while an action was armed. Jokers and FUSED cards
-// are refused — a fusion is permanent and makeCardOf can't rebuild one, so recutting it
-// would quietly destroy a made hand.
+// Step 2 (needsTarget jokers only): the player clicked a hand card while an action was armed.
+// Jokers and FUSED cards are refused — a fusion is permanent and makeCardOf can't rebuild
+// one, so recutting it would quietly destroy a made hand.
 function chooseJokerTarget(team, card) {
   if (!jokerActionPending || jokerActionPending.team !== team) return false;
+  if (jokerActionPending.stage !== "target") return false;
   if (cardIsJoker(card)) return false;
   if (card.fused) {
     message.textContent = "🧵 A made hand can't be recut — its suit is part of the fusion.";
     return false;
   }
   jokerActionPending.card = card;
+  jokerActionPending.stage = "suit";
   message.textContent = "🧵 Recut " + rankLabel(card.rank) + SUITS[card.suit].symbol +
     " to which suit?";
   renderJokers();
@@ -230,37 +241,55 @@ function chooseJokerTarget(team, card) {
   return true;
 }
 
-// Step 3: the player picked a suit. THE TAILOR: rebuild the card in that suit at the same
-// rank, in place so it keeps its position in the hand.
-//
-// makeCardOf re-derives attack/hp from suit × rank × STAT_SCALE, which is the whole reason
-// to go through it rather than editing `suit` — a ♠ and a ♥ of the same rank are different
-// bodies. It also means the fresh card starts UNAGED, so any Card Sharp growth is re-applied
-// afterward; without that, holding both jokers would have one quietly undo the other.
+// Step 3: the player picked a suit. What that DOES is dispatched on the entry's `action`, so
+// a new activated joker is a data entry plus one case here rather than a new flow.
 function finishJokerAction(team, suit) {
   if (!jokerActionPending || jokerActionPending.team !== team) return false;
-  const card = jokerActionPending.card;
+  if (jokerActionPending.stage !== "suit") return false;
   const key = jokerActionPending.key;
-  if (!card) return false;
-  const idx = hands[team].indexOf(card);
-  if (idx === -1) { cancelJokerAction(); return false; }
-  if (card.suit === suit) {
-    message.textContent = "🧵 That's already " + SUITS[suit].symbol + " — pick another suit.";
-    return false;                              // not a whiff: keep the chooser open
-  }
+  const action = JOKERS[key].action;
+  let note;
 
-  const recut = makeCardOf(suit, card.rank);
-  if (card.aged) {                             // carry The Card Sharp's growth across
-    recut.aged = card.aged;
-    recut.attack = Math.round(recut.attack * (1 + card.aged));
-    recut.hp = Math.round(recut.hp * (1 + card.aged));
+  if (action === "recutHandCard") {
+    // THE TAILOR: rebuild the card in that suit at the same rank, in place so it keeps its
+    // position in the hand. makeCardOf re-derives attack/hp from suit × rank × STAT_SCALE,
+    // which is the whole reason to go through it rather than editing `suit` — a ♠ and a ♥ of
+    // the same rank are different bodies. The fresh card starts UNAGED, so any Card Sharp
+    // growth is re-applied; without that, holding both jokers would have one undo the other.
+    const card = jokerActionPending.card;
+    if (!card) return false;
+    const idx = hands[team].indexOf(card);
+    if (idx === -1) { cancelJokerAction(); return false; }
+    if (card.suit === suit) {
+      message.textContent = "🧵 That's already " + SUITS[suit].symbol + " — pick another suit.";
+      return false;                            // not a whiff: keep the chooser open
+    }
+    const recut = makeCardOf(suit, card.rank);
+    if (card.aged) {
+      recut.aged = card.aged;
+      recut.attack = Math.round(recut.attack * (1 + card.aged));
+      recut.hp = Math.round(recut.hp * (1 + card.aged));
+    }
+    hands[team][idx] = recut;
+    note = "🧵 Recut " + rankLabel(card.rank) + SUITS[card.suit].symbol + " into " +
+      rankLabel(recut.rank) + SUITS[suit].symbol + " (" + recut.attack + "/" + recut.hp + ").";
+
+  } else if (action === "callCommunitySuit") {
+    // THE DEALER: record the call. It can't resolve now — the community board isn't dealt
+    // until Round Start (growCommunity, after placement locks), so this is a standing order
+    // that applyJokerFlopShaping reads then. Say so plainly, or a player clicks a suit,
+    // sees nothing change, and reasonably concludes it's broken.
+    jokerSuitPick[team] = suit;
+    note = "🎴 Called " + SUITS[suit].symbol + " — one community card will turn " +
+      SUITS[suit].symbol + " at Round Start.";
+
+  } else {
+    return false;                              // unknown action: refuse rather than half-fire
   }
-  hands[team][idx] = recut;
 
   jokerUsedThisRound[team].push(key);
   jokerActionPending = null;
-  message.textContent = "🧵 Recut " + rankLabel(card.rank) + SUITS[card.suit].symbol + " into " +
-    rankLabel(recut.rank) + SUITS[suit].symbol + " (" + recut.attack + "/" + recut.hp + ").";
+  message.textContent = note;
   renderJokers();
   renderHands();
   return true;
@@ -512,32 +541,46 @@ function renderJokers() {
       '</div>';
   }
 
-  // The suit chooser, shown only once an activated joker has a target picked. Built here
+  // The suit chooser, shown once an activated joker reaches its "suit" stage. Built here
   // rather than as fixed markup because the whole row is already rebuilt wholesale on every
   // paint, and this way it can't get out of sync with the pending action.
+  //
+  // A card-targeting joker dims the suit the card already is (nothing to do); a
+  // board-targeting one has no such suit, so all four are live.
   let chooser = "";
-  if (jokerActionPending && jokerActionPending.card) {
+  if (jokerActionPending && jokerActionPending.stage === "suit") {
     const c = jokerActionPending.card;
-    chooser = '<div class="pack-title">🧵 Recut ' + rankLabel(c.rank) + SUITS[c.suit].symbol +
-      ' — pick a suit</div><div class="jslot-row">' +
+    const prompt = c
+      ? "🧵 Recut " + rankLabel(c.rank) + SUITS[c.suit].symbol + " — pick a suit"
+      : JOKERS[jokerActionPending.key].icon + " Call a suit for the community board";
+    chooser = '<div class="pack-title">' + prompt + '</div><div class="jslot-row">' +
       SUIT_NAMES.map(function (s) {
-        const same = (s === c.suit);
+        const same = !!(c && s === c.suit);
         return '<div class="suitpick' + (same ? " same" : "") + '" data-suit="' + s + '" ' +
-          'title="' + (same ? "already this suit" : "recut to " + s) + '" ' +
+          'title="' + (same ? "already this suit" : "choose " + s) + '" ' +
           'style="color:' + SUITS[s].cardColor + '">' + SUITS[s].symbol + '</div>';
       }).join("") + '</div>';
+  }
+
+  // A Dealer call already placed this round: show WHAT was called, since it doesn't resolve
+  // until Round Start and there'd otherwise be nothing on screen to confirm it landed.
+  let called = "";
+  if (jokerSuitPick.player1) {
+    called = '<div class="joker-called">🎴 Called <span style="color:' +
+      SUITS[jokerSuitPick.player1].cardColor + '">' + SUITS[jokerSuitPick.player1].symbol +
+      '</span> — resolves at Round Start</div>';
   }
 
   // The title carries whatever the row is waiting for, so the prompt is where you're looking.
   let hint = "";
   if (jokerSwapPending) hint = " — click one to replace it";
-  else if (jokerActionPending && !jokerActionPending.card) hint = " — now click a card in your hand";
+  else if (jokerActionPending && jokerActionPending.stage === "target") hint = " — now click a card in your hand";
   else if (jokerActionPending) hint = " — pick a suit below";
 
   row.innerHTML =
     '<div class="joker-title">🃏 Your jokers (' + held.length + '/' + JOKER_SLOTS + ')' +
       hint + '</div>' +
-    '<div class="jslot-row">' + slots + '</div>' + chooser;
+    '<div class="jslot-row">' + slots + '</div>' + chooser + called;
 
   // Listeners are attached fresh each paint (the row is small and rebuilt wholesale),
   // matching how renderOneHand and the damage panel already work.
@@ -557,11 +600,11 @@ function renderJokers() {
       const meta = JOKERS[card.jokerKey];
       if (!meta.activated) return;                    // passive joker: nothing to click
       if (jokerActionUsed("player1", card.jokerKey)) {
-        message.textContent = "🧵 " + meta.name + " has already been used this round.";
+        message.textContent = meta.icon + " " + meta.name + " has already been used this round.";
         return;
       }
       if (!beginJokerAction("player1", card.jokerKey)) {
-        message.textContent = "🧵 " + meta.name + " can't be used right now.";
+        message.textContent = meta.icon + " " + meta.name + " can't be used right now.";
       }
     });
   });

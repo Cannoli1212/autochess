@@ -113,6 +113,12 @@ let jokerActionPending = null;
 // hand and the choice would be fake. Reset by nextRound, cleared by resetGame.
 let jokerUsedThisRound = { player1: [], player2: [] };
 
+// The suit each team's Dealer called for this round, or null. Unlike The Tailor — which
+// resolves the moment you pick — The Dealer's choice is a STANDING ORDER: the community
+// board isn't dealt until Round Start (growCommunity, after placement locks), so the
+// conversion can only happen then. Reset by nextRound with the rest of the round state.
+let jokerSuitPick = { player1: null, player2: null };
+
 // How many EXTRA rerolls each player has bought THIS round. Only used to price the
 // next one (COMPS_REROLL_COSTS escalates), so it resets every round with the free
 // redraws. The bought reroll itself is just +1 to redrawsLeft — rerollHand is unchanged.

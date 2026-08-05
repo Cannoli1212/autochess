@@ -171,7 +171,7 @@ function renderOneHand(team) {
     // An ACTIVATED joker awaiting a target (The Tailor) turns your own cards into pick
     // targets. Only while it's waiting, and only your hand — otherwise a card is a card.
     const awaitingPick = !!(jokerActionPending && jokerActionPending.team === team &&
-                            !jokerActionPending.card && team === "player1");
+                            jokerActionPending.stage === "target" && team === "player1");
     const isJokerTarget = !!(jokerActionPending && jokerActionPending.card === c);
     card.className = "card" + (art ? " has-art" : "") + (c.held ? " held" : "") +
       (uniqueOf(c) ? " unique" : "") + (c.fused ? " fused" : "") +
@@ -244,7 +244,8 @@ function renderOneHand(team) {
         // An armed activated joker (The Tailor) is waiting for a card: this tap picks its
         // target rather than selecting the card to play. Checked FIRST — the activation was
         // started deliberately from the joker row, so it owns the next click.
-        if (jokerActionPending && jokerActionPending.team === team && !jokerActionPending.card) {
+        if (jokerActionPending && jokerActionPending.team === team &&
+            jokerActionPending.stage === "target") {
           chooseJokerTarget(team, c);
           return;
         }

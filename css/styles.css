@@ -761,6 +761,11 @@
   .suitpick:hover { background: #24384a; box-shadow: 0 0 10px rgba(107, 213, 224, 0.9); }
   .suitpick.same { opacity: .3; }
 
+  /* A Dealer call that's been placed but hasn't resolved yet. It applies at Round Start
+     (the community isn't dealt until then), so without this line there'd be nothing on
+     screen to confirm the click landed. */
+  .joker-called { font-size: 11px; color: #ffd76b; margin-top: 5px; text-align: center; }
+
   /* While an activated joker waits for a target, your own hand cards become pick targets.
      The dashed outline matches the fuse-target hint below — same idea, same language. */
   .card.jpick { outline: 2px dashed #ffd76b; outline-offset: 1px; cursor: pointer; }
