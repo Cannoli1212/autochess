@@ -67,11 +67,27 @@ family. That's the build order.
 | Family | The one change that unlocks it | Status |
 |---|---|---|
 | **Economy / shop** | `finishRound`'s payout, `teamLootMult`, `rerollPrice`, `packPrice` | **built** |
-| **B — Hand** | A round-start hand pass + `makeCardOf` to re-derive stats | wave 1 |
-| **C — Persistence** | Things surviving `nextRound` — cards (cheap), then stats (new state) | wave 1 / 3 |
+| **B — Hand (activated)** | The activation flow in `jokers.js` + `makeCardOf` to re-derive stats | **built** |
+| **C — Persistence** | Things surviving `nextRound` — cards (built), then stats (new state) | **cards built** / wave 3 |
 | **A — Flop** | `growCommunity` picking a *matching* card from the deck, not the top one | wave 2 |
 | **D — Triggers** | A per-team kill/death tally, paid at `finishRound` | wave 2 |
 | **E — Stats** | `teamSynergyEffects` already returns `{hpMult, atkMult, critBonus, speedBonus}` | wave 2 |
+
+### Activated jokers
+
+Most jokers are a number. A few need you to **choose**, and a choice is a multi-click input mode, not a
+field. `activated: true` marks one; the flow lives in `jokers.js` (`beginJokerAction` →
+`chooseJokerTarget` → `finishJokerAction`) and deliberately copies the shape of the two-step joker
+**swap**: arm a pending action, let the next click resolve it. One pattern for "click, then click
+again", not two.
+
+Always **once per round** (`jokerUsedThisRound`) — an activation you could repeat would recut your whole
+hand and the choice would be fake. A click on a held joker resolves in a fixed order: **finish a swap
+first** (that mode is entered from the hand and must win, or you get trapped in it), then cancel an
+action armed on that joker, then start one.
+
+The Tailor is the only one today. **The Dealer (wave 2) is the same flow** aimed at the community board
+instead of the hand — which is why this is a mechanism and not a special case.
 
 ---
 
@@ -100,7 +116,14 @@ family. That's the build order.
 - **The Bagman** is self-balancing and needs no cap: win the fight and you keep your army, lose and your
   units died so you keep almost nothing. Works because `buildUnit` stores `card: card` on every unit.
 - **The Card Sharp** rewards *not* rerolling, so it plays directly against the Redraw button and against
-  The Valet. A card lost to a reroll takes its growth with it.
+  The Valet. A card lost to a reroll takes its growth with it. Its growth is re-applied after a Tailor
+  recut, because `makeCardOf` returns a fresh card — without that, the two jokers would undo each other.
+
+**Five of the twelve are `aiUseless`** (Valet, Mechanic, Tailor, Bagman, Card Sharp) and four of those
+for the *same* reason: `tableMatch` drafts a fresh hand and resets `played` every match, so a headless
+seat has no reroll and no hand continuity. **Teaching the table to carry seat hands between rounds would
+fix four jokers at once** — the most valuable single piece of table work left, and worth doing before
+the catalog grows much further.
 
 ---
 
