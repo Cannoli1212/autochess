@@ -291,33 +291,61 @@ const RANK_ABILITIES = {
           3: { radius: 2, damage: 20, slowTicks: 16 },   // trips — radius-2 ring (24 cells)
           4: { radius: 2, damage: 25, slowTicks: 20 },   // quads — max ring, hardest bite
         } }],
-  // Rank 9 — POISON: each hit applies `stackDamage` damage-per-tick to the victim.
-  // Pack-scaling: each stack is `stackPerExtra` fatter per extra 9. PLAGUE rank-up
-  // (Batch B): with `transferAt`+ nines in the pool, a poisoned unit that DIES
-  // passes `transferPct` of its stacks to its nearest living teammate — and the
-  // plague keeps jumping down the line as they fall.
-  // Rank 9 — POISON, now SPLIT BY ROLE (casting, Riley 2026-07-15). All four 9s keep the
-  // single-target poison-on-hit passive (no `role`, so it lands on every suit — with the
-  // pack-scaled stack fattening + the PLAGUE-jump, `transferAt`+ nines pass poison to a dying
-  // victim's nearest teammate). The CAST differs by delivery, the same melee/ranged split as
-  // the rank-6 devils — a backline poisoner rakes a line, a frontline poisoner exhales a cloud:
-  //   • RANGED ♣/♠ → "Poison Volley" (poisonVolley kit, unchanged): a piercing arrow down a
-  //     straight 8-direction line THROUGH the aimed target, poisoning it plus every enemy
-  //     behind it (pack-scaled `pierce` depth), each for `poisonStack × stackMult` stacks.
-  //   • MELEE ♥/♦ → "Miasma" (poisonNova kit): a SELF-centered cloud that poisons every enemy
-  //     within `radius` of the caster for `poisonStack × stackMult` stacks. No target needed
-  //     (castTargeting "self"), fires the instant the bar fills. Lower stackMult than the
-  //     Volley on purpose — it rots a whole ring, not a single file.
+  // Rank 9 — POISON + POISON CAST (redesigned 2026-08-05, Riley — the of-a-kind GATE dial, the
+  // LAST combat rank off the old linear per-extra idiom). The COUNT of pooled 9s (fielded 9s +
+  // the shared flop, via packCount) drives everything, baked ONCE at round start so a dying copy
+  // can't weaken the survivors. Like rank 8's Bulwark, the POISON passive is NOT gated — a LONE 9
+  // still rots what it hits; only the CAST is gated behind a pair.
+  //   • POISON — each hit applies `stackDamage` damage-per-tick to the victim (drained in
+  //     combatStep; the status lives on the VICTIM). The stack CLIMBS every rung: lone 5 → pair 8
+  //     → trips 11 → quads 14 (tiers keyed by count, caps at 4; count is always ≥ 1, so tiers[1]
+  //     is the ungated base every 9 gets).
+  //   • PLAGUE — folded into the same table as `transferPct`: from TRIPS, a poisoned unit that
+  //     DIES passes that fraction of its stacks to its nearest living teammate, and the plague
+  //     keeps jumping down the line as they fall. Trips passes HALF; QUADS passes ALL of it, so
+  //     the plague never weakens no matter how many bodies it walks through.
+  //   • CAST — GATED at a PAIR (a lone 9 kills its own mana bar, like a lone 2/4/5/6/7/8). Pair
+  //     unlocks it, trips widens the reach, quads changes its SHAPE. `stackMult` is deliberately
+  //     FLAT across the rungs: it multiplies `poisonStack`, which is already climbing 5→14, and
+  //     poison NEVER decays — climbing both would compound a permanent DoT into a blowout.
+  //     So the rungs pay off in REACH, not in bigger numbers (cast stacks still rise 16→22→28).
+  // ROLE split kept (casting, Riley 2026-07-15): all four 9s share the poison passive (no `role`).
+  // The CAST differs by delivery — a backline poisoner rakes a line, a frontline one exhales:
+  //   • RANGED ♣/♠ → "Poison Volley": a piercing arrow down a straight 8-direction line THROUGH
+  //     the aimed target, poisoning it plus every enemy behind it, each for `poisonStack ×
+  //     stackMult` stacks. pair = 2 bodies behind → trips = 4 → quads = `fullLine`, the arrow
+  //     never stops and rakes the ray clean to the board edge (the twin of Trapline's `fullRow`).
+  //   • MELEE ♥/♦ → "Miasma": a SELF-centered cloud poisoning every enemy within `radius`. No
+  //     target needed (castTargeting "self"), fires the instant the bar fills. pair = radius-1
+  //     (8 cells) → trips = radius-2 (24 cells) → quads = `deathCloud`, the plague bearer exhales
+  //     one FINAL free cloud on its own corpse (onDeath), seeding a 100%-transfer plague as it
+  //     falls. Lower stackMult than the Volley on purpose — it rots a whole ring, not a file.
   // Both are hybrid ATTACK-mana casters (normal shots/swings charge the bar; still auto-attack),
   // both reuse `poisonStack` (baked by poison.onRoundStart) and applyPoison (so both inherit the
   // plague-jump). `castRange` gives the ranged Volley reach; the melee cloud needs none.
-  9:  [{ kind: "poison",      name: "Poison",       stackDamage: 5, stackPerExtra: 3,
-         transferPct: 0.5, transferAt: 3 },
+  9:  [{ kind: "poison",      name: "Poison",
+        // Stack + plague by of-a-kind count; 1=lone is the UNGATED base (every 9 poisons).
+        tiers: {
+          1: { stackDamage: 5 },                          // lone  — rots on hit, no plague
+          2: { stackDamage: 8 },                          // pair  — fatter stacks, cast unlocks
+          3: { stackDamage: 11, transferPct: 0.5 },       // trips — plague starts jumping (half)
+          4: { stackDamage: 14, transferPct: 1.0 },       // quads — plague jumps at FULL strength
+        } },
       { kind: "poisonVolley", name: "Poison Volley", role: "ranged", cast: true, castTargeting: "enemy",
         manaMax: 60, manaPerAttack: 20, castRange: 5,
-        pierce: 2, piercePerExtra: 1, pierceMax: 6, stackMult: 2.0 },
+        // Gated at a pair (no `1` row → a lone 9 kills its own cast). `fullLine` = never stops.
+        tiers: {
+          2: { pierce: 2,        stackMult: 2.0 },   // pair  — unlock, 2 bodies behind the target
+          3: { pierce: 4,        stackMult: 2.0 },   // trips — 4 bodies behind
+          4: { fullLine: true,   stackMult: 2.0 },   // quads — rakes the ray to the board edge
+        } },
       { kind: "poisonNova",  name: "Miasma",        role: "melee",  cast: true, castTargeting: "self",
-        manaMax: 60, manaPerAttack: 20, radius: 1, stackMult: 1.5 }],
+        manaMax: 60, manaPerAttack: 20,
+        tiers: {
+          2: { radius: 1, stackMult: 1.5 },                        // pair  — unlock, 8-cell cloud
+          3: { radius: 2, stackMult: 1.5 },                        // trips — radius-2 cloud (24 cells)
+          4: { radius: 2, stackMult: 1.5, deathCloud: true },      // quads — one last breath on death
+        } }],
   // Rank 10 — RALLY (Batch C rework, was a team-wide +30% attack): an ADJACENCY
   // aura — at fight start it buffs allies within `radius` cells, and each SUIT'S
   // 10 rallies a different stat (the connector card, now with four faces):

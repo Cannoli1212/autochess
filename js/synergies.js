@@ -164,10 +164,26 @@ function bulwarkRungText(rung) {
   const trap = { 2: "traps unlock", 3: "more traps", 4: "trap line across" }[rung];
   return "+" + hp + "% HP · −" + dr + " dmg taken · " + trap;
 }
+// Rank 9 of-a-kind text (redesigned 2026-08-05): a pair/trips/quads of 9s still gets the flat
+// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND the redesigned poison
+// ladder. The per-tick STACK climbs every rung, the CAST unlocks at a pair and grows its reach,
+// and the PLAGUE jump turns on at trips (half stacks) then goes full at quads. Stack and plague
+// are read LIVE from RANK_ABILITIES[9]'s poison tiers so the tooltip can never drift. `rung` is 2/3/4.
+function poisonRungText(rung) {
+  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
+  const poison = RANK_ABILITIES[9].find(function (a) { return a.kind === "poison"; });
+  const t = poison.tiers[rung];
+  const cast = { 2: "cast unlocks", 3: "longer reach", 4: "widest reach" }[rung];
+  const plague = t.transferPct
+    ? " · plague " + Math.round(t.transferPct * 100) + "%"
+    : "";
+  return "+" + hp + "% HP · " + t.stackDamage + " poison/tick · " + cast + plague;
+}
 function ofAKindText(rank, rung) {
   if (Number(rank) === 2) return BERSERKER_RUNG_TEXT[rung];
   if (Number(rank) === 3) return thornsRungText(rung);
   if (Number(rank) === 8) return bulwarkRungText(rung);
+  if (Number(rank) === 9) return poisonRungText(rung);
   return POKER_HANDS.ofAKind[rung].text;
 }
 

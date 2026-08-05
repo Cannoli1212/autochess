@@ -50,6 +50,24 @@ function applyPoison(shooter, victim, stacks) {
   if (t > (victim.poisonTransfer || 0)) victim.poisonTransfer = t;
 }
 
+// One breath of MIASMA (rank 9's melee cast): poison every enemy within the caster's baked
+// cloud radius for `poisonStack × stackMult` stacks. Pulled out of poisonNova.onCast so the
+// QUADS `deathCloud` rung can fire the exact same cloud from onDeath — one last breath on the
+// plague bearer's own corpse — without either copy of the code drifting from the other.
+function exhaleMiasma(unit, ability) {
+  const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
+  const mult = (unit.miasmaMult !== undefined) ? unit.miasmaMult : ability.tiers[2].stackMult;
+  const stacks = Math.round(base * (mult || 1));
+  const radius = (unit.miasmaRadius !== undefined) ? unit.miasmaRadius : ability.tiers[2].radius;
+  emitAbilityShape(unit, "poisonNova", "ring", { radius: radius });   // the cloud's actual reach
+  const foes = enemiesNear(unit, radius);
+  for (let i = 0; i < foes.length; i++) {
+    applyPoison(unit, foes[i], stacks);
+    foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the cloud touches
+    emitFx("poison", { x: foes[i].x, y: foes[i].y, amount: stacks });
+  }
+}
+
 // STUN primitive (casting, Riley 2026-07-15): freeze `victim` for `ticks` — unlike SLOW
 // (which only lengthens the move cooldown), a stunned unit takes NO turn at all: it can't
 // move, can't auto-attack, and can't cast (combatStep checks u.stunUntil in both the acting
@@ -347,22 +365,23 @@ const ABILITIES = {
   // as u.poison, total damage-per-tick). The draining happens in combat.js's
   // combatStep each tick — the status lives on the victim, not on its own ability
   // list, so it can't be a victim-side hook. Ignores HP scaling → great vs tanks.
-  // PHALANX pack-scaling: each stack applied is worth `stackPerExtra` more per
-  // EXTRA 9 in the pool, baked onto unit.poisonStack at fight start.
-  // PLAGUE rank-up (Batch B): with `transferAt`+ nines in the pool, this unit's
-  // poison JUMPS when its victim dies — the fraction is baked here, stamped onto
-  // each victim on hit, and combatStep's transfer block does the jumping (the
-  // status lives on the victim, so the engine owns the death moment).
+  // OF-A-KIND TIERED, UNGATED (redesigned 2026-08-05 — the same dial as ranks 2-8, built like
+  // rank 8's Bulwark). Every 9 poisons: tiers[1] is the lone base, and the stack fattens each
+  // rung (5 → 8 → 11 → 14) off packCount (fielded 9s + the shared flop), baked ONCE at round
+  // start so a copy dying mid-fight can't weaken the survivors.
+  // PLAGUE: the same table carries `transferPct`, so the jump unlocks at TRIPS (half the stacks)
+  // and goes FULL at quads. The fraction is baked here, stamped onto each victim on hit, and
+  // combatStep's transfer block does the jumping (the status lives on the victim, so the engine
+  // owns the death moment).
   poison: {
     onRoundStart: function (unit, ctx, ability) {
-      const count = packCount(unit);
-      unit.poisonStack = ability.stackDamage + (ability.stackPerExtra || 0) * (count - 1);
-      unit.poisonTransfer = (ability.transferAt !== undefined && count >= ability.transferAt)
-        ? (ability.transferPct || 0) : 0;
+      const t = ability.tiers[Math.min(packCount(unit), 4)] || ability.tiers[1];   // 1=lone…4=quads
+      unit.poisonStack = t.stackDamage;
+      unit.poisonTransfer = t.transferPct || 0;
     },
     onDealDamage: function (unit, ctx, ability) {
-      // The pack-scaled stack if baked; else the base (the 1v1 sim path).
-      const stack = (unit.poisonStack !== undefined) ? unit.poisonStack : ability.stackDamage;
+      // The tiered stack if baked; else the lone base (a harness path that skips round-start prep).
+      const stack = (unit.poisonStack !== undefined) ? unit.poisonStack : ability.tiers[1].stackDamage;
       applyPoison(unit, ctx.target, stack);
     },
   },
@@ -370,21 +389,37 @@ const ABILITIES = {
   // POISON VOLLEY (rank 9's cast — the first PIERCING spell). Fires from the mana/cast
   // pass when the bar (attack-charged) fills and an enemy sits within castRange. The arrow
   // flies from the shooter THROUGH the aimed target and onward, poisoning it plus every
-  // enemy behind it on the straight 8-direction ray (up to a pack-scaled `pierce` depth —
-  // baked in onRoundStart). Each struck unit takes `poisonStack × stackMult` stacks via the
-  // shared applyPoison (so it also inherits the plague-jump). No direct damage — the DoT is
-  // the payload. Reuses `poisonStack`, which poison.onRoundStart already baked on this unit.
+  // enemy behind it on the straight 8-direction ray (up to a tiered `pierce` depth — baked in
+  // onRoundStart). Each struck unit takes `poisonStack × stackMult` stacks via the shared
+  // applyPoison (so it also inherits the plague-jump). No direct damage — the DoT is the
+  // payload. Reuses `poisonStack`, which poison.onRoundStart already baked on this unit.
+  // OF-A-KIND GATED (redesigned 2026-08-05 — same pair/trips/quads dial as ranks 2-8). A LONE 9
+  // is a poisoner BODY with NO cast (mana bar killed, like a lone 6/7/8). A PAIR unlocks the
+  // volley, TRIPS doubles how deep it pierces, and QUADS bakes `volleyFullLine` → the arrow
+  // never stops, raking the ray clean to the board edge (the twin of Trapline's `fullRow`).
+  // stackMult stays FLAT across the rungs on purpose: `poisonStack` is already climbing 5→14,
+  // and poison never decays, so the cast's stacks still rise 16→22→28 without compounding.
   poisonVolley: {
     onRoundStart: function (unit, ctx, ability) {
-      const cap = (ability.pierceMax !== undefined) ? ability.pierceMax : Infinity;
-      unit.volleyPierce = Math.min(cap, ability.pierce + (ability.piercePerExtra || 0) * (packCount(unit) - 1));
+      const count = packCount(unit);          // this unit's 9s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 9 rots on hit but looses no volley
+        unit.caster = false;                  // cast pass skips it; the poison passive still lands
+        return;
+      }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.volleyFullLine = !!t.fullLine;     // quads: pierce the WHOLE ray (ignores depth)
+      unit.volleyPierce = t.pierce || 0;
+      unit.volleyMult = t.stackMult;
     },
     onCast: function (unit, ctx, ability) {
       const target = ctx.target;
       if (!target) return;
-      const maxPierce = (unit.volleyPierce !== undefined) ? unit.volleyPierce : ability.pierce;
+      // QUADS — an unstoppable arrow: COLS + ROWS can't be reached on any ray, so it's "no cap".
+      const maxPierce = unit.volleyFullLine ? (COLS + ROWS)
+        : ((unit.volleyPierce !== undefined) ? unit.volleyPierce : ability.tiers[2].pierce);
       const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
-      const stacks = Math.round(base * (ability.stackMult || 1));
+      const mult = (unit.volleyMult !== undefined) ? unit.volleyMult : ability.tiers[2].stackMult;
+      const stacks = Math.round(base * (mult || 1));
       const line = unitsAlongLine(unit, target, maxPierce);
       // Draw the arrow to the LAST unit it actually reached — not to the one it was aimed
       // at. That difference is the whole point of a piercing shot: you can see how deep
@@ -412,18 +447,31 @@ const ABILITIES = {
   // (same as Poison Volley), AND the plague-jump (applyPoison stamps the shooter's transfer onto
   // each victim). Pure dispatch, zero engine change. castTargeting "self" fires it with no aim —
   // the melee 9 is already in the cloud. stackMult is lower than the Volley's: it rots a ring.
+  // OF-A-KIND GATED (redesigned 2026-08-05 — same pair/trips/quads dial as ranks 2-8). A LONE 9
+  // is a poisoner BODY with NO cast (mana bar killed). A PAIR unlocks the cloud, TRIPS widens it
+  // to radius 2, and QUADS bakes `miasmaDeathCloud` → when the plague bearer DIES it exhales one
+  // final free Miasma on its own corpse. That last breath rides the same applyPoison, so at quads
+  // (transferPct 1.0) it seeds a FULL-strength plague on everything standing over the body —
+  // killing the poisoner becomes the worst way to deal with it. Fires from the engine's onDeath
+  // pass, which runs AFTER the poison tick and the transfer block and reads final HP, so it
+  // triggers on any cause of death — including the 9 rotting to death itself.
   poisonNova: {
-    onCast: function (unit, ctx, ability) {
-      const base = (unit.poisonStack !== undefined) ? unit.poisonStack : 5;   // baked by poison.onRoundStart
-      const stacks = Math.round(base * (ability.stackMult || 1));
-      const radius = ability.radius || 1;
-      emitAbilityShape(unit, "poisonNova", "ring", { radius: radius });   // the cloud's actual reach
-      const foes = enemiesNear(unit, radius);
-      for (let i = 0; i < foes.length; i++) {
-        applyPoison(unit, foes[i], stacks);
-        foes[i].spellHitUntil = tickCount + FLASH_TICKS;   // flash each cell the cloud touches
-        emitFx("poison", { x: foes[i].x, y: foes[i].y, amount: stacks });
+    onRoundStart: function (unit, ctx, ability) {
+      const count = packCount(unit);          // this unit's 9s in the pool (units + flop)
+      if (count < 2) {                        // GATE: a lone 9 rots on hit but exhales nothing
+        unit.caster = false;                  // cast pass skips it; the poison passive still lands
+        return;
       }
+      const t = ability.tiers[Math.min(count, 4)];
+      unit.miasmaRadius = t.radius;
+      unit.miasmaMult = t.stackMult;
+      unit.miasmaDeathCloud = !!t.deathCloud;
+    },
+    onCast: function (unit, ctx, ability) {
+      exhaleMiasma(unit, ability);
+    },
+    onDeath: function (unit, ctx, ability) {
+      if (unit.miasmaDeathCloud) exhaleMiasma(unit, ability);   // quads — one last breath
     },
   },
 
