@@ -22,7 +22,17 @@ redrawButton.addEventListener("click", function () {
   if (rerollHand("player1")) {
     message.textContent = "🔄 Redrew your hand — " + redrawsLeft.player1 + " redraw(s) left.";
     updateStatus();
-  }
+    updateShopPanel();          // a redraw can reveal a joker, and prices don't move — but
+  }                             // the button's enabled state depends on the hand being fresh
+});
+
+// The shop: comps buy more fishing (a redraw) or the fish itself (a joker pack).
+// Both buttons live beside Round Start and are only live during your own planning.
+document.getElementById("buyRerollButton").addEventListener("click", function () {
+  buyReroll("player1");
+});
+document.getElementById("buyPackButton").addEventListener("click", function () {
+  buyPack("player1");
 });
 
 // Part B step 1 (now 3-way): cycle Player 2 between the computer, a second human, and
@@ -108,3 +118,4 @@ updateRoundInfo();
 drawHands();
 renderTable();
 renderJokers();
+updateShopPanel();

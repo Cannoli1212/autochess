@@ -894,6 +894,20 @@ const JOKER_KEYS = Object.keys(JOKERS);
 // hunt matter and what stops a long game snowballing into an unreadable pile of rules.
 const JOKER_SLOTS = 3;
 
+// ── The shop ─────────────────────────────────────────────────────────────────
+// What comps are FOR. Two things to buy, and they're deliberately the two ends of
+// the same loop: rerolls are the cheap, repeatable way to FISH the shoe for a joker,
+// and a pack is the expensive way to just BUY one. Fishing is luck you can afford
+// every round; a pack is the guarantee you save up for.
+//
+// Reroll prices ESCALATE within a round so that fishing is self-limiting — without
+// that, a fat comp stack would let you reroll until you found what you wanted and
+// the shoe's rarity would stop meaning anything. Past the end of the list the last
+// price repeats. Prices reset every round along with the free redraws.
+const COMPS_REROLL_COSTS = [2, 4, 6];
+const COMPS_PACK_COST = 8;    // ~2 winning rounds' income, or 3 losing ones
+const PACK_SIZE = 3;          // jokers revealed per pack; you keep ONE
+
 // Phase D: how many 52-card decks make up each player's shoe.
 const DECKS = 2;
 

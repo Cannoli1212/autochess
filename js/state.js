@@ -101,6 +101,16 @@ let jokers = { player1: [], player2: [] };
 // mode, like tapSel — it never survives a round change.
 let jokerSwapPending = null;
 
+// How many EXTRA rerolls each player has bought THIS round. Only used to price the
+// next one (COMPS_REROLL_COSTS escalates), so it resets every round with the free
+// redraws. The bought reroll itself is just +1 to redrawsLeft — rerollHand is unchanged.
+let rerollsBought = { player1: 0, player2: 0 };
+
+// An open joker pack awaiting a pick: { team, cards: [...] }, or null. Pack jokers are
+// MINTED by the shop rather than drawn from the shoe, so the ones you don't pick simply
+// don't exist — nothing to return anywhere. Cleared on pick, round change and reset.
+let packOffer = null;
+
 // Cumulative count of LOW cards (ranks 2-5) each team has PLAYED this game. Bumped
 // in playCard, never decremented, reset only on a new game (resetGame). Drives the
 // King of Spades' uncapped attack scaling — the more cheap bodies you've fielded

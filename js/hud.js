@@ -5,6 +5,7 @@
 function updateStatus() {
   if (SIM_MODE) return;   // headless batch sim: skip DOM (see sim.js)
   updateRedrawButton();   // keep the Redraw button's count + enabled state in sync
+  updateShopPanel();      // and the shop's, which closes the moment you place a unit
   const limit = armySize();
   if (isPlaytest()) {
     turnStatus.textContent =

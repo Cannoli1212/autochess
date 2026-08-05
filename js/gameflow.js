@@ -318,6 +318,8 @@ function nextRound() {
   });
   holdMode = false;
   jokerSwapPending = null;      // an unfinished joker swap doesn't survive the round
+  packOffer = null;             // nor an unopened pick — the comps are spent either way
+  rerollsBought = { player1: 0, player2: 0 };   // reroll prices reset with the free redraws
   redrawsLeft = { player1: REDRAWS_PER_ROUND, player2: REDRAWS_PER_ROUND };  // fresh redraws
 
   // Phase D: cards played this round (the whole board) go to the discard piles.
@@ -375,6 +377,8 @@ function resetGame() {
   comps = { player1: 0, player2: 0 };              // shop money doesn't carry between games
   jokers = { player1: [], player2: [] };           // ...nor does the joker collection
   jokerSwapPending = null;
+  packOffer = null;
+  rerollsBought = { player1: 0, player2: 0 };
   house = 0;                                       // the casino's pot empties
   weakCardsPlayed = { player1: 0, player2: 0 };   // King of Spades' scaling resets
   resetAllStats();                                 // clear round + session damage totals
