@@ -522,16 +522,27 @@ const ABILITIES = {
   // Ace of Hearts — Necromancer: on a kill, pull one RANDOM card off the owner's
   // bench (hands[team]) and spawn it as a unit on the nearest empty cell. It moves
   // to `played` so it's tracked/discarded like any board card. Silently does nothing
-  // if the bench is empty or the board is full. The summon is a BONUS body — it is
-  // added straight to `units` and never checks the round's unit cap.
+  // if the bench holds nothing raisable or the board is full. The summon is a BONUS
+  // body — it is added straight to `units` and never checks the round's unit cap.
+  //
+  // JOKERS ARE SKIPPED, and this is a crash fix rather than a nicety: a joker has no suit,
+  // so buildUnit's SUITS[card.suit].attackSpeed threw and killed the whole fight mid-tick.
+  // Reachable in ordinary play — hold the Ace of Hearts with any unclaimed joker in hand and
+  // get a kill. Candidates are collected as INDEXES into the real bench so the splice still
+  // removes the right card; filtering into a copy would splice the wrong one.
   summonOnKill: {
     onKill: function (unit, ctx, ability) {
       const bench = hands[unit.team];
       if (!bench || bench.length === 0) return;         // nothing left to raise
+      const raisable = [];
+      for (let i = 0; i < bench.length; i++) {
+        if (!cardIsJoker(bench[i])) raisable.push(i);
+      }
+      if (raisable.length === 0) return;                // bench is all jokers: nothing to raise
       const cell = nearestEmptyCell(unit.x, unit.y);
       if (cell === null) return;                        // nowhere to put it
-      const idx = Math.floor(Math.random() * bench.length);
-      const card = bench.splice(idx, 1)[0];             // pull a random bench card
+      const idx = raisable[Math.floor(Math.random() * raisable.length)];
+      const card = bench.splice(idx, 1)[0];             // pull a random RAISABLE bench card
       played[unit.team].push(card);                     // now a board card (discarded at round end)
       units.push(buildUnit(card, cell.x, cell.y, unit.team));
       // Mark the square the body rose on. Without this a unit simply EXISTS next render,
