@@ -568,14 +568,33 @@ const UNIQUE_CARDS = {
   //   J♥ (red)  → Diamonds gain HP (props up the squishy lifesteal suit).
   //   J♠ (black)→ Clubs gain attack speed (leans into the fast suit).
   // The two-eyed jacks (J♦, J♣) stay open for their own designs.
+  // OF-A-KIND (face-card pass, Riley 2026-08-06). The two Bowers share one kit, so they
+  // share one ladder SHAPE: rungs 2-3 pay in magnitude, and quads buys the reach change —
+  // `ownTeamOnly`, which switches off the "it buffs the enemy's half of that suit too"
+  // drawback. That drawback IS the card's identity at every lower rung, which is exactly
+  // why revoking it is worth a top rung: with the whole court of Jacks behind him, the
+  // one-eyed Jack stops shouting to the room and starts giving orders to his own side.
+  // Rung 1 is the shipped number verbatim, so a lone Bower is unchanged.
   "hearts-11": {
     name: "Jack of Hearts",
-    abilities: [{ kind: "bower", buffSuit: "diamonds", hpMult: 1.0 }],
+    abilities: [{ kind: "bower", buffSuit: "diamonds", hpMult: 1.0,
+      tiers: {
+        1: { hpMult: 1.0 },
+        2: { hpMult: 1.4 },
+        3: { hpMult: 1.9 },
+        4: { hpMult: 2.6, ownTeamOnly: true },
+      } }],
     blurb: "One-Eyed Jack — rallies ALL diamonds (both sides): +100% HP",
   },
   "spades-11": {
     name: "Jack of Spades",
-    abilities: [{ kind: "bower", buffSuit: "clubs", speedMult: 0.5 }],
+    abilities: [{ kind: "bower", buffSuit: "clubs", speedMult: 0.5,
+      tiers: {
+        1: { speedMult: 0.5 },
+        2: { speedMult: 0.7 },
+        3: { speedMult: 0.95 },
+        4: { speedMult: 1.3, ownTeamOnly: true },
+      } }],
     blurb: "One-Eyed Jack — rallies ALL clubs (both sides): +50% attack speed",
   },
 
@@ -585,14 +604,34 @@ const UNIQUE_CARDS = {
   //      chips on a round win — read in finishRound via teamLootMult.
   //   J♣ cleave: each of its hits also deals cleaveMult of the damage to enemies
   //      within `radius` cells of the target (onDealDamage kit).
+  // J♦ quads unlocks `lootOnLoss`: the Highwayman takes his cut off the top even when the
+  // job goes bad, clawing back that fraction of the chips that were just stolen FROM you.
+  // It is a transfer, not a mint — the chips come out of the winner's stack, which keeps
+  // the conservation invariant the table scan checks. Read at round end off the frozen
+  // roundPool, because by then the live pool is only survivors plus the flop.
   "diamonds-11": {
     name: "Jack of Diamonds",
-    abilities: [{ kind: "loot", stealMult: 0.5 }],
+    abilities: [{ kind: "loot", stealMult: 0.5,
+      tiers: {
+        1: { stealMult: 0.5 },
+        2: { stealMult: 0.9 },
+        3: { stealMult: 1.4 },
+        4: { stealMult: 2.0, lootOnLoss: 0.4 },
+      } }],
     blurb: "Highwayman — field him and your team steals +50% chips on a round win",
   },
+  // J♣ climbs in magnitude to a full-strength second hit, then quads widens the SPLASH
+  // itself from the 8 cells touching the target to the 24 around it — the rank-6 rule that
+  // the top rung buys reach, not just a bigger number.
   "clubs-11": {
     name: "Jack of Clubs",
-    abilities: [{ kind: "cleave", cleaveMult: 0.5, radius: 1 }],
+    abilities: [{ kind: "cleave", cleaveMult: 0.5, radius: 1,
+      tiers: {
+        1: { cleaveMult: 0.5,  radius: 1 },
+        2: { cleaveMult: 0.65, radius: 1 },
+        3: { cleaveMult: 0.8,  radius: 1 },
+        4: { cleaveMult: 1.0,  radius: 2 },
+      } }],
     blurb: "Cleave — attacks also hit enemies next to the target for 50% damage",
   },
 

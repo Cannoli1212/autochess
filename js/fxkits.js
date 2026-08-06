@@ -75,4 +75,12 @@ const FX_KITS = {
   attackBuffPartner: { color: "#ffd54f", icon: "▲",  onCast: "kit"   },  // K♥ — tether to his Queen
   shieldPartner:     { color: "#cfd8dc", icon: "🛡", onCast: "kit"   },  // Q♥ — tether to her King
   summonOnKill:      { color: "#b39ddb", icon: "✚",  onKill: "pulse" },  // A♥ — a body rose
+  // J♣ — the splash already paints a white number on every body it catches (see the cleave
+  // kit); this is the icon that says WHICH ability spread them, and at quads it is the only
+  // hint that the radius just widened from 8 cells to 24.
+  cleave:            { color: "#e8e8e8", icon: "⚔",  onDealDamage: "pulse" },
+  // J♥/J♠ — the Bower's rally is a round-start buff, the sneakiest kind: it finishes before
+  // you have looked at the board, so a whole suit just IS bigger. The kit's own ▲ bursts mark
+  // who was touched; this marks the Jack that did it.
+  bower:             { color: "#ffd54f", icon: "⚑",  onRoundStart: "pulse" },
 };

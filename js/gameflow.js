@@ -25,6 +25,17 @@ function finishRound(winner) {
     chips[winner] = chips[winner] + steal;
     chips[loser] = chips[loser] - steal;
 
+    // The Highwayman at four Jacks (teamLootSkim) takes his cut off the top even when the
+    // job goes bad: the LOSER claws back a fraction of what was just taken. A transfer out
+    // of the winner's stack, not minted chips, so the table's conservation check still
+    // balances — and capped at the winner's stack for the same reason the steal is capped
+    // at the loser's. 0 for everyone below quads, so this line is inert until then.
+    const skim = Math.min(Math.round(steal * teamLootSkim(loser)), chips[winner]);
+    if (skim > 0) {
+      chips[winner] = chips[winner] - skim;
+      chips[loser] = chips[loser] + skim;
+    }
+
     // B6.1 chunk 3: the "7-2 game" — winning with a 7 AND a 2 in your pool
     // (cards you played this round + the flop) steals bonus chips. Capped so the
     // loser still can't go below 0 (chips[loser] is already the post-steal total).
@@ -48,7 +59,10 @@ function finishRound(winner) {
     turnStatus.textContent = "🏆 " + label(winner) + " wins round " + roundNumber +
       " with " + survivors + " unit(s) left — steals " + steal + " chips!" +
       (bonus > 0 ? "  🃏 7-2 bonus: +" + bonus + " chips!" : "") +
-      (fusedBonus > 0 ? "  ✨ Made-hand bonus: +" + fusedBonus + " chips!" : "");
+      (fusedBonus > 0 ? "  ✨ Made-hand bonus: +" + fusedBonus + " chips!" : "") +
+      // Without this the loser's stack would simply be higher than the announced steal,
+      // with nothing on screen saying why — a silent refund is worse than no refund.
+      (skim > 0 ? "  ♦J Highwayman skims " + skim + " back for " + label(loser) + "!" : "");
   }
   // Queen of Spades — the Black Lady: any player still holding her (or another
   // houseTax card) at round end is bled to the house. Clamped so chips never go

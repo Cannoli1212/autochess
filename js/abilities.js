@@ -604,14 +604,28 @@ const ABILITIES = {
   // it can't re-trigger on-hit effects or recurse; splash kills are cleared by
   // combatStep's normal filter. The primary target already took the full hit.
   cleave: {
+    // OF-A-KIND (face-card pass): baked ONCE here, so a second Jack dying mid-fight can't
+    // shrink the survivor's swing halfway through the round.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.cleaveMult = t.cleaveMult;
+      unit.cleaveRadius = t.radius;
+    },
     onDealDamage: function (unit, ctx, ability) {
-      const splash = Math.round(ctx.damage * ability.cleaveMult);
+      // The baked values if there are any, else the lone base. The fallback is NOT
+      // defensive noise: the Ace of Hearts calls buildUnit mid-fight (see summonOnKill),
+      // and the body it raises is a random bench card that can perfectly well be a J♣ —
+      // which would then arrive having never seen a round start.
+      const mult   = (unit.cleaveMult   !== undefined) ? unit.cleaveMult   : ability.cleaveMult;
+      const radius = (unit.cleaveRadius !== undefined) ? unit.cleaveRadius : ability.radius;
+      const splash = Math.round(ctx.damage * mult);
       if (splash <= 0) return;
       for (let i = 0; i < units.length; i++) {
         const u = units[i];
         if (u.team === unit.team || u === ctx.target) continue;   // enemies only, not the primary
         const dist = Math.max(Math.abs(u.x - ctx.target.x), Math.abs(u.y - ctx.target.y));
-        if (dist <= ability.radius) {
+        if (dist <= radius) {
           u.hp = u.hp - splash;
           recordDamage(unit, u, splash);   // cleave splash counts too
           // Same blind spot as Thorns: raw hp subtraction never touched the fx layer, so
@@ -1169,15 +1183,39 @@ const ABILITIES = {
   // synergies, so it stacks on top of any flush/poker buffs. Multiple copies stack.
   bower: {
     onRoundStart: function (unit, ctx, ability) {
+      // OF-A-KIND (face-card pass). Read here rather than baked onto the unit, because this
+      // whole ability IS its round-start pass — there is no later hook to hand a stamp to.
+      // A body summoned mid-fight by the Ace of Hearts therefore never rallies, which is
+      // the pre-existing behavior and the right one: the speech happens before the battle.
+      // `tiers[1]` is the shipped number, so a lone Bower is unchanged.
+      const t = (ability.tiers && ability.tiers[Math.min(packCount(unit), 4)]) || ability;
+
+      // COPIES DO NOT STACK, and this is load-bearing. Before the ladder existed, letting
+      // every Bower fire its own hook WAS the "more Jacks, more rally" rule. Now the tier
+      // table prices the extra Jacks — a second Jack lifts every Jack's rung — so leaving
+      // the copies to stack multiplies the ladder by the number of bodies. Measured: four
+      // Jacks at ×3.6 each compounds to ×168 max HP across an entire suit, which decides
+      // the fight before the first tick. The FIRST Bower of a given suit on a team does the
+      // rallying; the rest exist to raise its rung. Same reasoning as strikeAllowance.
+      const speaker = units.filter(function (o) {
+        return o.team === unit.team && (o.abilities || []).some(function (a) {
+          return a.kind === "bower" && a.buffSuit === ability.buffSuit;
+        });
+      })[0];
+      if (speaker !== unit) return;
+
       for (let i = 0; i < units.length; i++) {
         const u = units[i];
         if (u.suit !== ability.buffSuit) continue;
-        if (ability.atkMult) u.attack = Math.round(u.attack * (1 + ability.atkMult));
-        if (ability.hpMult) {
-          u.hp = Math.round(u.hp * (1 + ability.hpMult));
-          u.maxHp = Math.round(u.maxHp * (1 + ability.hpMult));
+        // The top rung stops feeding the enemy's half of the suit. Below it the rally is
+        // still indiscriminate — that drawback is the card, not an oversight.
+        if (t.ownTeamOnly && u.team !== unit.team) continue;
+        if (t.atkMult) u.attack = Math.round(u.attack * (1 + t.atkMult));
+        if (t.hpMult) {
+          u.hp = Math.round(u.hp * (1 + t.hpMult));
+          u.maxHp = Math.round(u.maxHp * (1 + t.hpMult));
         }
-        if (ability.speedMult) u.attackSpeed = u.attackSpeed * (1 + ability.speedMult);
+        if (t.speedMult) u.attackSpeed = u.attackSpeed * (1 + t.speedMult);
         // One ▲ per unit touched — no amount, because it may have moved attack AND health
         // AND speed and there's no single honest number for that (see playFx). The burst
         // is the only thing that shows the blast radius, including the part players always
@@ -1609,18 +1647,53 @@ function isSuitExtinguished(team, suit) {
 // by the loser's stack there — scaling the TRANSFER keeps chips conserved (nothing is
 // minted), which is the invariant the table scan checks. The joker uses the same field
 // name `stealMult` as the Jack deliberately: one name for one effect.
+// OF-A-KIND (face-card pass): the Highwayman's cut climbs with the Jacks in your pool.
+// Counted off the FROZEN roundPool, not the live one — this runs in finishRound, where
+// the live pool has already lost every casualty (and the loser's is nothing but the flop).
+function lootTierOf(ability, team, rank) {
+  if (!ability.tiers) return ability;
+  return ability.tiers[Math.min(packCountForRank(team, rank, roundPool[team]), 4)];
+}
+
+// The Jack's own cut is taken ONCE, at its best rung — not summed per copy. The tier
+// table already prices the extra Jacks (a second one lifts the rung), so summing on top
+// would multiply the ladder by the number of bodies, the same double-count the Bower's
+// `speaker` check exists to stop. The JOKER's stealMult still adds on top: it is a
+// genuinely separate source that the of-a-kind ladder knows nothing about.
 function teamLootMult(team) {
-  let total = jokerSum(team, "stealMult");
+  let best = 0;
   const cards = played[team] || [];
   for (let i = 0; i < cards.length; i++) {
     const uniq = uniqueOf(cards[i]);
     if (!uniq) continue;
     const list = uniq.abilities || [];
     for (let j = 0; j < list.length; j++) {
-      if (list[j].kind === "loot") total += list[j].stealMult;
+      if (list[j].kind !== "loot") continue;
+      best = Math.max(best, lootTierOf(list[j], team, cards[i].rank).stealMult || 0);
     }
   }
-  return total;
+  return jokerSum(team, "stealMult") + best;
+}
+
+// The LOSER's claw-back fraction — the Highwayman's quads rung. He takes his cut off the
+// top even when the job goes bad, so a fraction of whatever was just stolen from `team`
+// comes straight back. Returns 0 at every lower rung, and for everyone without the Jack.
+//
+// finishRound applies this as a TRANSFER out of the winner's stack rather than minting
+// chips, which is what keeps the "chips are conserved" invariant the table scan checks.
+function teamLootSkim(team) {
+  let best = 0;                                   // best rung once, never summed — see teamLootMult
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    const uniq = uniqueOf(cards[i]);
+    if (!uniq) continue;
+    const list = uniq.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind !== "loot") continue;
+      best = Math.max(best, lootTierOf(list[j], team, cards[i].rank).lootOnLoss || 0);
+    }
+  }
+  return best;
 }
 
 // How many enemy squares `team` may mark this round — the sum of `squares` from
