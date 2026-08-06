@@ -182,6 +182,37 @@ function applyJokerCardAging(team) {
   return grown;
 }
 
+// ── Permanent growth (The Grinder / The Believer) ─────────────────────────────
+
+// Bank this round's growth for `team`. Called once per round from finishRound, reading
+// `played` — which by then is exactly the board that fought, because picking a unit back up
+// splices its card out again (placement.js). So each card banks exactly once.
+//
+// Accumulates only while the joker is HELD, but applyGrowthTo below applies the bank whether
+// it still is or not: growth you earned stays yours. Fused cards are skipped — a made hand is
+// self-contained (it takes no poker buff either), and its `rank` is only nominally one of its
+// two parts, so banking on it would credit a rank it isn't really.
+function bankJokerGrowth(team) {
+  const perRank = jokerSum(team, "rankGrowthPerPlay");
+  const perSuit = jokerSum(team, "suitGrowthPerPlay");
+  if (perRank <= 0 && perSuit <= 0) return;
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+    if (cardIsJoker(c) || c.fused) continue;
+    if (perRank > 0) rankGrowth[team][c.rank] = (rankGrowth[team][c.rank] || 0) + perRank;
+    if (perSuit > 0) suitGrowth[team][c.suit] = (suitGrowth[team][c.suit] || 0) + perSuit;
+  }
+}
+
+// The banked multiplier for one unit — its rank's bank plus its suit's bank. Read by
+// applySynergies, which folds it into the same additive bracket as the suit and poker buffs.
+function jokerGrowthFor(team, rank, suit) {
+  const r = (rankGrowth[team] && rankGrowth[team][rank]) || 0;
+  const s = (suitGrowth[team] && suitGrowth[team][suit]) || 0;
+  return r + s;
+}
+
 // ── Activated jokers ──────────────────────────────────────────────────────────
 // Almost every joker is a passive numeric field that some integration point adds in.
 // A few need you to CHOOSE — which card, which suit — and a choice is a multi-click

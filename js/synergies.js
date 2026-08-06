@@ -450,18 +450,22 @@ function applySynergies() {
       // its taxed stats + doubled abilities + economy, not stacked rank spikes).
       const pb = u.fused ? { atkMult: 0, hpMult: 0 } : (poker[u.rank] || { atkMult: 0, hpMult: 0 });
 
-      // THE SUCKER (joker): a flat multiplier on this team's LOW cards only. Added into the
-      // same bracket as the suit and poker buffs rather than multiplied on afterwards, so a
-      // low card gets one combined multiplier and can't compound into something absurd when
-      // it's also holding a flush and a pair.
+      // JOKER multipliers, both added into the SAME bracket as the suit and poker buffs
+      // rather than multiplied on afterwards — so a unit gets one combined multiplier and a
+      // low card riding a flush, a pair and a full growth bank can't compound into something
+      // absurd.
+      //   low   — The Sucker: a flat bonus to ranks 2-5 only.
+      //   grown — The Grinder / The Believer: the permanent bank on this unit's rank + suit.
       const low = (u.rank <= JOKER_LOW_RANK_MAX) ? jokerSum(team, "lowRankMult") : 0;
+      const grown = jokerGrowthFor(team, u.rank, u.suit);
+      const jokerMult = low + grown;
 
       // HP = base × (1 + hearts team buff + this unit's poker HP buff). Start full.
-      u.maxHp = Math.round(u.maxHp * (1 + eff.hpMult + pb.hpMult + low));
+      u.maxHp = Math.round(u.maxHp * (1 + eff.hpMult + pb.hpMult + jokerMult));
       u.hp = u.maxHp;
 
       // Attack = base × (1 + diamonds team buff + this unit's poker attack buff).
-      u.attack = Math.round(u.attack * (1 + eff.atkMult + pb.atkMult + low));
+      u.attack = Math.round(u.attack * (1 + eff.atkMult + pb.atkMult + jokerMult));
 
       // Spades (team-wide): crit chance = this unit's own crit + team bonus.
       u.critChance = Math.min(1, (base.crit || 0) + eff.critBonus);

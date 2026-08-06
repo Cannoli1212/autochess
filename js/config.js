@@ -992,6 +992,38 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
 
+  // ── Permanent growth (the ramp jokers) ─────────────────────────────────────
+  // The catalog's only SCALING jokers: weak the round you claim them, frightening if you
+  // claimed them early. Every card you field banks growth on its rank (Grinder) or its suit
+  // (Believer), permanently, and applySynergies reads the bank every round after.
+  //
+  // The two per-play numbers differ because the two builds field different amounts. Rank
+  // repeats are rare — maybe 1-2 of a rank a round — so the Grinder pays more per card. A
+  // mono-suit deck fields 3-4 of its suit EVERY round, so the Believer pays less per card and
+  // still ramps faster in total. Both accumulate at round end from `played`, which is exactly
+  // the final board (picking a unit back up splices it out), so nothing double-counts.
+  //
+  // MEASURED payoff by round 7, as a multiplier on one card with no other buffs (ARMY_SCHEDULE
+  // is 23 bodies over the game):
+  //
+  //   The Believer, mono-suit, full army every round     +115%   x2.15
+  //   The Grinder, replaying ~2 of a rank a round        +140%   x2.40
+  //   BOTH, committed to one rank AND one suit           +345%   x4.45
+  //
+  // The two are comparable alone, which is what the split per-play numbers were for. BOTH
+  // together is the outlier worth watching — though it costs two of three slots on two RARE
+  // jokers you have to find, and it only arrives in the last rounds. Both are single numbers
+  // if it wants turning down.
+  //
+  // Both aiUseless: a headless seat drafts a fresh hand every match and has no per-seat bank,
+  // so there's nothing for a ramp to accumulate into. Same root cause as the Bagman's tag.
+  theGrinder:  { name: "The Grinder",     icon: "📈", weight: 1, rankGrowthPerPlay: 0.10,
+                 aiUseless: true,
+                 blurb: "Grinds the same spot. Every card you field makes ALL your cards of that RANK permanently +10% stronger." },
+  theBeliever: { name: "The Believer",    icon: "🧿", weight: 1, suitGrowthPerPlay: 0.05,
+                 aiUseless: true,
+                 blurb: "Backs one suit. Every card you field makes ALL your cards of that SUIT permanently +5% stronger." },
+
   // ── Kill / death triggers ──────────────────────────────────────────────────
   // Both read the SAME per-fight tally (roundDeaths) from opposite ends, and both mint
   // COMPS rather than chips — chips are zero-sum score, so a payout joker either mints shop

@@ -113,6 +113,19 @@ let jokerActionPending = null;
 // hand and the choice would be fake. Reset by nextRound, cleared by resetGame.
 let jokerUsedThisRound = { player1: [], player2: [] };
 
+// PERMANENT stat growth banked on a rank / a suit, per team: { player1: {9: 0.3}, ... }.
+// The Grinder and The Believer fill these — every card of that rank (or suit) a team fields
+// adds to the bank at round end, and applySynergies reads it every round after.
+//
+// Two deliberate properties:
+//   · It accumulates only WHILE the joker is held, but applies whether or not it still is.
+//     Growth you earned is yours — "permanently buffs" means permanently.
+//   · It survives nextRound (that's the whole point) and is cleared only by resetGame. Which
+//     makes it the first joker state that has to be NEUTRALIZED in simInstall, not merely
+//     snapshotted, or a headless fight would inherit the live player's ramp.
+let rankGrowth = { player1: {}, player2: {} };
+let suitGrowth = { player1: {}, player2: {} };
+
 // The suit each team's Dealer called for this round, or null. Unlike The Tailor — which
 // resolves the moment you pick — The Dealer's choice is a STANDING ORDER: the community
 // board isn't dealt until Round Start (growCommunity, after placement locks), so the

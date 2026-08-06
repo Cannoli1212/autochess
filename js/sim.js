@@ -85,6 +85,7 @@ function simInstall() {
     communityDeck: communityDeck, flopRevealed: flopRevealed,
     armyOverride: armyOverride, jokerUsedThisRound: jokerUsedThisRound,
     jokerSuitPick: jokerSuitPick, roundDeaths: roundDeaths,
+    rankGrowth: rankGrowth, suitGrowth: suitGrowth,
   };
   armyOverride = null;                        // each sim battle sets its own forced size
   clearInterval(combatTimer);                // stop any live fight
@@ -101,6 +102,11 @@ function simInstall() {
                                              // would otherwise honor inside a headless fight
   roundDeaths = { player1: 0, player2: 0 };  // the trigger jokers' tally: a sim battle must not
                                              // add its casualties to the live round's count
+  // The ramp jokers' banks. NEUTRALIZING these matters more than snapshotting them: a live
+  // player seven rounds into a Grinder would otherwise hand every headless fight a +70% rank,
+  // silently skewing both the balance scans and the AI seats' matchups.
+  rankGrowth = { player1: {}, player2: {} };
+  suitGrowth = { player1: {}, player2: {} };
   weakCardsPlayed = { player1: 0, player2: 0 };  // neutral: Warlord's Levy adds nothing
   hands = { player1: [], player2: [] };      // empty bench: Necromancer can't summon
   played = { player1: [], player2: [] };
@@ -125,6 +131,7 @@ function simRestore(s) {
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
   armyOverride = s.armyOverride; jokerUsedThisRound = s.jokerUsedThisRound;
   jokerSuitPick = s.jokerSuitPick; roundDeaths = s.roundDeaths;
+  rankGrowth = s.rankGrowth; suitGrowth = s.suitGrowth;
 }
 
 // THE CARD SCAN. Play every unordered card pair `games` times and tally, for each

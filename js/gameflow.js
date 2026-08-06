@@ -90,6 +90,11 @@ function finishRound(winner) {
     "  " + COMPS_ICON + " +" + COMPS_INCOME + " " + COMPS_LABEL.toLowerCase() + " each" +
     (winner === "draw" ? "." : " (+" + COMPS_WIN_BONUS + " more to " + label(winner) + ").");
 
+  // The ramp jokers bank this round's growth. Must run while `played` still holds the board
+  // that fought — nextRound consumes it (returning the Bagman's survivors, discarding the
+  // rest), so this can't wait until then.
+  ["player1", "player2"].forEach(function (team) { bankJokerGrowth(team); });
+
   updateRoundInfo();
 
   // Phase D: fold the live result back into the SEATS, then run the two other
@@ -425,6 +430,8 @@ function resetGame() {
   jokerActionPending = null;
   jokerUsedThisRound = { player1: [], player2: [] };
   jokerSuitPick = { player1: null, player2: null };
+  rankGrowth = { player1: {}, player2: {} };       // banked growth is per-GAME, so a new game clears it
+  suitGrowth = { player1: {}, player2: {} };
   packOffer = null;
   rerollsBought = { player1: 0, player2: 0 };
   house = 0;                                       // the casino's pot empties
