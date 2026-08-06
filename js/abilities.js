@@ -17,13 +17,20 @@
 // bake a scaled number onto the unit (like applySynergies), so a copy dying
 // mid-fight never weakens the survivors.
 function packCount(unit) {
-  const n = rankCounts(pokerPool(unit.team))[unit.rank] || 1;
-  // The Superstitious (joker): a LONE card counts as a pair, which is enough to switch
-  // an ability ON — and that's all it does. Because gating AND tiering both read this
-  // one number, lifting it outright would silently promote every rung on every unit
-  // (a pair firing as trips, trips as quads). Clamping the lift to a count of 1 keeps
-  // it a gate-opener: a pair still tiers as a pair, trips as trips.
-  if (n === 1 && jokerSum(unit.team, "packGate") > 0) return JOKER_PACK_GATE_FLOOR;
+  return packGateFloor(unit.team, rankCounts(pokerPool(unit.team))[unit.rank] || 1);
+}
+
+// The Superstitious (joker): a LONE card counts as a pair, which is enough to switch
+// an ability ON — and that's all it does. Because gating AND tiering both read this
+// one number, lifting it outright would silently promote every rung on every unit
+// (a pair firing as trips, trips as quads). Clamping the lift to a count of 1 keeps
+// it a gate-opener: a pair still tiers as a pair, trips as trips.
+//
+// Split out of packCount so the tooltip can ask the same question about a card still in
+// hand — "what would this count as if I played it?" — without keeping a second copy of
+// the rule that could quietly disagree with the one combat uses.
+function packGateFloor(team, n) {
+  if (n === 1 && jokerSum(team, "packGate") > 0) return JOKER_PACK_GATE_FLOOR;
   return n;
 }
 

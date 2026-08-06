@@ -1023,3 +1023,102 @@
   }
   .match-tab:hover { background: #262d3d; }
   .match-tab.active { border-color: #5b8def; background: #16233a; color: #fff; font-weight: bold; }
+
+  /* ── CHAMPION TOOLTIP (hover a unit on the board) ───────────────────────────
+     Same surface as .trait-tooltip above and it REUSES that block's .tip-* classes
+     outright, so the two hover panels read as one thing. What's different is only
+     the container: this one is position:FIXED on document.body and moved by JS
+     (tooltip.js), because a .cell is inside #board's overflow:hidden and would slice
+     an absolutely-positioned child off at the board's edge. pointer-events:none so
+     the panel can never get between the mouse and the square it describes — which
+     would otherwise make it flicker itself out of existence. */
+  #championTip {
+    display: none; position: fixed; left: 0; top: 0; z-index: 150;
+    width: 250px; text-align: left; pointer-events: none;
+    background: #0f131b; border: 1px solid #3a4152; border-radius: 8px;
+    padding: 9px 11px; box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+  }
+  /* Header block: the card, then the body it makes. */
+  #championTip .tip-head { font-size: 14px; }
+  .tip-sub {
+    font-size: 10px; color: #8b93a3; margin: -3px 0 7px;
+    letter-spacing: .03em; text-transform: uppercase;
+  }
+  /* Legendary flavour — the reason you kept the card, above the mechanics. */
+  .tip-star {
+    font-size: 11px; color: #d9c2ff; line-height: 1.35;
+    margin: 0 0 7px; padding: 4px 6px;
+    background: #1d1830; border-radius: 5px;
+  }
+  /* One ability: name, then prose, then its ladder. The 7px top margin separates
+     abilities from each other; the first one sits tight under the header. */
+  .tip-abil {
+    font-size: 12px; font-weight: bold; color: #ffd76b;
+    margin: 8px 0 2px;
+  }
+  #championTip > .tip-abil:first-child { margin-top: 0; }
+  .tip-desc { font-size: 11px; color: #c7ccd6; line-height: 1.35; margin-bottom: 3px; }
+  .tip-cast { font-size: 10px; color: #7fd1ff; margin-bottom: 3px; }
+  /* A rung the ability has no row for — the gap that tells you another copy switches
+     something on. Deliberately dimmer than an unreached-but-real rung. */
+  .tip-locked { color: #5a6070; font-style: italic; }
+  /* Live statuses mid-fight — the badge row's glyphs spelled out. Its own class rather
+     than .tip-note because these are neutral facts (Rallied and Stunned both land here),
+     not the warning .tip-note's red is for. */
+  .tip-status {
+    font-size: 10px; color: #9aa4b5; margin-top: 7px;
+    padding-top: 5px; border-top: 1px solid #2a3040;
+  }
+
+  /* ── THE JOKER OFFER (a joker was just drawn) ───────────────────────────────
+     Same skeleton as #flopStage above — fixed, full-window, panel centred on the
+     BOARD by JS — for the same reason: #fxLayer is clipped inside #board and could
+     never hold a panel this size. z-index sits just under the flop stage's 200; the
+     two can't be up at once (nextRound aborts any open offer) but the ordering makes
+     that explicit rather than accidental.
+
+     The ONE behavioural difference from the flop stage: that dim is a skip target,
+     this one swallows clicks. A choice you can dismiss by clicking beside it isn't a
+     choice, and this is the game's only blocking prompt. It follows that the panel
+     here takes pointer events (the flop panel is pure decoration and doesn't). */
+  #jokerStage { position: fixed; inset: 0; z-index: 190; }
+  .jstage-dim {
+    position: absolute; inset: 0;
+    background: rgba(8, 10, 14, 0.78);
+    cursor: default;
+    animation: fstageDim 260ms ease-out both;   /* the flop stage's fade — one keyframe, two users */
+  }
+  .jstage-panel {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 320px; max-width: 88vw; text-align: center;
+    background: #141a24; border: 2px solid #6bd5e0; border-radius: 12px;
+    padding: 18px 20px 15px;
+    box-shadow: 0 0 26px rgba(107, 213, 224, 0.35), 0 12px 40px rgba(0,0,0,0.7);
+  }
+  .jstage-tag {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: #6bd5e0; margin-bottom: 8px;
+  }
+  .jstage-icon { font-size: 46px; line-height: 1; margin-bottom: 6px; }
+  .jstage-name { font-size: 19px; font-weight: bold; color: #fff; margin-bottom: 7px; }
+  .jstage-blurb { font-size: 12px; color: #c7ccd6; line-height: 1.45; }
+
+  .jstage-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; }
+  .jstage-btn {
+    font-size: 14px; font-weight: bold; padding: 8px 20px; border-radius: 8px;
+    border: 2px solid #3a4152; background: #1b2130; color: #cdd6e5; cursor: pointer;
+  }
+  .jstage-btn.yes { border-color: #2ecc71; color: #2ecc71; }
+  .jstage-btn.yes:hover { background: #16281d; box-shadow: 0 0 10px rgba(46, 204, 113, 0.8); }
+  .jstage-btn.no:hover { background: #262d3d; }
+  .jstage-btn.back { font-size: 12px; font-weight: normal; padding: 6px 14px; }
+  .jstage-btn.back:hover { background: #262d3d; }
+  /* Says out loud that declining is free. Without it, "Pass" reads as throwing a card
+     away, and the offer stops being a real choice. */
+  .jstage-foot { font-size: 10px; color: #8b93a3; margin-top: 10px; line-height: 1.4; }
+
+  /* Row-full: the three you're holding, picked from inside the same panel rather than
+     kicking the decision out to the message bar. Reuses .jslot so a held joker looks
+     identical here and in #jokerRow. */
+  .jstage-ask { font-size: 12px; color: #ffd76b; margin: 15px 0 8px; }
+  .jstage-slots { display: flex; gap: 8px; justify-content: center; }

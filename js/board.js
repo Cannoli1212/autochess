@@ -150,6 +150,10 @@ function render() {
   // changing shape by the time anything measures it.
   renderDmgPanel();       // keep the live damage tracker in lockstep with the board
   renderUnits();
+  // A champion tooltip held open during a fight rebuilds here, so its HP, shields and
+  // statuses move with the board instead of freezing at whatever you first pointed at.
+  // No-op when nothing is hovered. Guarded because tooltip.js is a later script tag.
+  if (typeof championTipRefresh === "function") championTipRefresh();
 }
 
 // ── THE SQUARES ──────────────────────────────────────────────────────────────
@@ -173,11 +177,17 @@ function renderCells() {
   // A square holding a unit is still what you pick up when you drag, and still what
   // shows the hover tooltip — the unit's own shape sits on a sheet above that ignores
   // the mouse entirely, so the square underneath stays the thing you interact with.
+  //
+  // No `title` here any more. The board's hover description is now the rich champion
+  // panel in tooltip.js, which reads the same statusList this cell used to. Leaving the
+  // native attribute on would mean the OS tooltip crawling out on top of that panel a
+  // second or two later, saying a shorter version of the same thing. figureTitle is
+  // untouched and still the tooltip everywhere it was the ONLY one — hand cards, pack
+  // cards, joker slots.
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
     const cell = cellAt(u.x, u.y);
     if (!cell) continue;
-    cell.title = figureTitle(u) + statusText(u);   // glyphs on the board, words on hover
     cell.draggable = true;                         // a cell with a unit can be dragged
   }
 

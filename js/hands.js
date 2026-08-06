@@ -7,13 +7,22 @@
 // replaces a fresh draw, never a bonus. Callers must set the starting hand (empty,
 // or the carried leftovers) first.
 function drawHands() {
-  ["player1", "player2"].forEach(function (team) {
-    const targetSize = handTarget(team);   // per-team: a joker may widen one hand and not the other
-    while (hands[team].length < targetSize) {
-      hands[team].push(drawCard(team));
-    }
-  });
+  ["player1", "player2"].forEach(topUpHand);
   renderHands();
+  // A joker in the fresh hand announces itself instead of sitting there looking like a
+  // card you can't play. No-op for anyone but the live player (see jokeroffer.js).
+  maybeOfferJoker("player1");
+}
+
+// Deal one team back up to its target hand size. The ONE place cards are drawn to fill
+// a hand, so the three callers can't drift: the round-start deal, a redraw, and the
+// single replacement card that follows a joker leaving the hand. Per-team by design —
+// a joker may widen one hand and not the other.
+function topUpHand(team) {
+  const targetSize = handTarget(team);
+  while (hands[team].length < targetSize) {
+    hands[team].push(drawCard(team));
+  }
 }
 
 // This round's hand size (with a safe fallback past the last scheduled round), plus
@@ -38,10 +47,12 @@ function rerollHand(team) {
     else { discard[team].push(c); }
   });
   hands[team] = kept;
-  const targetSize = handTarget(team);
-  while (hands[team].length < targetSize) hands[team].push(drawCard(team));
+  topUpHand(team);
   redrawsLeft[team] -= 1;
   renderHands();
+  // A redraw deals a whole new hand, so it can turn up several jokers at once. The offer
+  // chain handles them one at a time — see maybeOfferJoker.
+  maybeOfferJoker(team);
   return true;
 }
 
@@ -126,6 +137,11 @@ function renderOneHand(team) {
   for (let i = 0; i < hand.length; i++) {
     const c = hand[i];
     const card = document.createElement("div");
+    // Which hand slot this is. Read by the champion tooltip (tooltip.js) to look the card
+    // back up on a repaint — it deliberately holds the INDEX rather than the card object,
+    // so a card that gets played while you're hovering it closes the panel instead of
+    // describing something that has left the hand.
+    card.dataset.handIndex = i;
     // The unit this card BECOMES, drawn on the card itself — so choosing what to play is a
     // choice between visible things rather than between two numbers and a suit symbol.
     // unitArtFor takes a card as happily as a unit (both carry suit+rank), so the hand and
@@ -180,7 +196,11 @@ function renderOneHand(team) {
     // Phase E: in hold mode cards are clicked (not dragged) to hold/release.
     card.draggable = !holdMode;
     const cs = SUITS[c.suit];
-    card.title = figureTitle(c);
+    // No `title` on a playable card any more: the champion tooltip (tooltip.js) now
+    // describes bench cards in full, and leaving the native attribute on would mean the
+    // OS tooltip crawling out on top of that panel a second later with a shorter version
+    // of the same thing. The JOKER branch above keeps its title — the panel skips jokers,
+    // so figureTitle is still the only description they have.
     // A fused card shows BOTH parts (7♠2♦); a normal card its single rank+suit.
     const figInner = c.fused ? fusedGlyphHTML(c, "cardColor") : (rankLabel(c.rank) + cs.symbol);
     card.innerHTML =

@@ -362,6 +362,8 @@ function nextRound() {
   clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
   clearFx();                    // wipe any effects still floating from the fight just ended
   flopRevealAbort();            // and any half-played reveal, WITHOUT starting its fight
+  jokerOfferAbort();            // and any unanswered joker offer — its hand is about to
+                                // be topped up anyway, and drawHands re-offers below
   tapSel = null;                // and any tap-to-place selection from last round
   // Every unplayed leftover card carries into the next round automatically (holding
   // is no longer optional). We just clear any stale `held` flag; nothing is discarded
@@ -448,6 +450,7 @@ function resetGame() {
   // Reset can't normally land mid-show — but if a reveal is somehow still up, tear the
   // stage down. Abort, not finish: the discarded round's fight must never start.
   flopRevealAbort();
+  jokerOfferAbort();             // same belt and braces for an unanswered joker offer
   units = [];
   strikeMarks = { player1: [], player2: [] };
   tapSel = null;                // no tap-to-place selection survives a new game

@@ -89,16 +89,28 @@ let ART_SHEET_H = 0;
     // Hand the drawn size to CSS so ART_SCALE above is the ONE place a sprite's size is
     // decided. .fig-glyph.art sizes itself from this and works out its own overhang.
     document.documentElement.style.setProperty("--art-px", ART_DRAW_PX + "px");
-    // Units already on the board were drawn as text. Repaint them now that there's art —
-    // but only once the WHOLE page has loaded. This file is the 7th script tag and render()
-    // reaches into the 17th (hud.js's renderDmgPanel), so a sheet that finishes downloading
-    // in between passes the `typeof render` check and then throws on a function that does
-    // not exist yet. That window is invisible on localhost and real on a CDN, which is
+    // Everything drawn before now used text glyphs, because unitArtFor() returned null
+    // while ART_READY was false. Repaint EVERY surface that draws a card or a unit — all
+    // three of them. Getting this list wrong is invisible on a warm cache and broken on a
+    // cold one: the very first hand is dealt synchronously at the bottom of main.js, long
+    // before a 63 KB PNG can finish downloading, so on a first visit renderOneHand takes
+    // its no-art branch and doesn't even create the .cart div. For a long time this repaint
+    // called render() alone, so the BOARD got its sprites and the hand stayed text until
+    // the player happened to click something. If a fourth art surface is ever added, it
+    // belongs in this list too.
+    //
+    // Only once the WHOLE page has loaded, though. This file is the 9th script tag and
+    // render() reaches into the 20th (hud.js's renderDmgPanel), so a sheet that finishes
+    // downloading in between passes the `typeof` check and then throws on a function that
+    // does not exist yet. That window is invisible on localhost and real on a CDN, which is
     // exactly the kind of race that only ever shows up in front of a player. Waiting for
     // `load` means every script is parsed before we repaint; if the sheet arrives after the
     // page is already up (slow connection), readyState is "complete" and we repaint at once.
     const repaintForArt = function () {
-      if (typeof render === "function" && !SIM_MODE) render();
+      if (SIM_MODE) return;
+      if (typeof render === "function") render();                     // board units
+      if (typeof renderHands === "function") renderHands();           // both hands
+      if (typeof renderPackOffer === "function") renderPackOffer();   // card-pack faces
     };
     if (document.readyState === "complete") repaintForArt();
     else window.addEventListener("load", repaintForArt, { once: true });

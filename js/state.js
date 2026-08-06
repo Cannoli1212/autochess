@@ -101,6 +101,14 @@ let jokers = { player1: [], player2: [] };
 // mode, like tapSel — it never survives a round change.
 let jokerSwapPending = null;
 
+// A joker that has just been DRAWN and is being offered, or null. Shape:
+// { team, card, stage, done } — `stage` is "choose" (accept/decline) or "replace" (the
+// row is full, pick which held joker it takes over from), and `done` is the callback
+// continuation fired exactly once when the player resolves it. Like jokerSwapPending
+// this is pure input state and never survives a round change; unlike it, it BLOCKS —
+// the dim behind the panel swallows clicks, so nothing else can happen until you choose.
+let jokerOffer = null;
+
 // An ACTIVATED joker mid-use (The Tailor): { key, team, card }. Most jokers are passive
 // numeric fields, but a few need you to CHOOSE — which card, which suit — and that's a
 // multi-click input mode, not a number. `card` is null until you've picked the card to act

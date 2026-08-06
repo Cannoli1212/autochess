@@ -86,6 +86,7 @@ function simInstall() {
     armyOverride: armyOverride, jokerUsedThisRound: jokerUsedThisRound,
     jokerSuitPick: jokerSuitPick, roundDeaths: roundDeaths,
     rankGrowth: rankGrowth, suitGrowth: suitGrowth,
+    jokerOffer: jokerOffer,
   };
   armyOverride = null;                        // each sim battle sets its own forced size
   clearInterval(combatTimer);                // stop any live fight
@@ -100,6 +101,9 @@ function simInstall() {
                                              // activated joker's once-per-round budget can't leak
   jokerSuitPick = { player1: null, player2: null };     // ...nor a Dealer call, which growCommunity
                                              // would otherwise honor inside a headless fight
+  jokerOffer = null;                         // sandboxed with the rest: a headless fight tops up
+                                             // hands of its own, and must never trip the live
+                                             // player's draw-time offer popup
   roundDeaths = { player1: 0, player2: 0 };  // the trigger jokers' tally: a sim battle must not
                                              // add its casualties to the live round's count
   // The ramp jokers' banks. NEUTRALIZING these matters more than snapshotting them: a live
@@ -132,6 +136,7 @@ function simRestore(s) {
   armyOverride = s.armyOverride; jokerUsedThisRound = s.jokerUsedThisRound;
   jokerSuitPick = s.jokerSuitPick; roundDeaths = s.roundDeaths;
   rankGrowth = s.rankGrowth; suitGrowth = s.suitGrowth;
+  jokerOffer = s.jokerOffer;
 }
 
 // THE CARD SCAN. Play every unordered card pair `games` times and tally, for each
