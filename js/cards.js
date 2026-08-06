@@ -23,15 +23,19 @@ function fusedGlyphHTML(card, colorField) {
   return '<span style="color:' + s[colorField] + '">' + glyph + '</span>';
 }
 
-// Build one card of a specific suit + rank. Stats = base × rank × STAT_SCALE.
+// Build one card of a specific suit + rank. Stats = base × rankStatMult(rank) × STAT_SCALE.
+// rankStatMult COMPRESSES the rank ladder (see config.js) so the hand you build outweighs
+// the card you drew. It returns half-ranks, so round once here — nothing downstream should
+// ever see a fractional attack or hp.
 function makeCardOf(suit, rank) {
   const s = SUITS[suit];
+  const eff = rankStatMult(rank);
   const card = {
     suit: suit,
     rank: rank,
     range: s.range,
-    attack: s.attack * rank * STAT_SCALE,
-    hp: s.hp * rank * STAT_SCALE,
+    attack: Math.round(s.attack * eff * STAT_SCALE),
+    hp: Math.round(s.hp * eff * STAT_SCALE),
   };
   // Target Dummy (rank 3): a pure reflect-wall — ZERO attack, HP boosted by
   // DUMMY_HP_MULT. Baked in at card creation so the hand shows its real "0/big"

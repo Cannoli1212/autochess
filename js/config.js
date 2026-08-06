@@ -865,9 +865,31 @@ const FLOP_SHRINK_MS  = 420;   // the big cards flying down into the flop row
 // air that already existed. Keep it under COMBAT_TICK_MS and it stays free.
 const FLOP_POP_MS     = 400;
 
-// Global stat multiplier (B4). Final stat = suitBase × rank × STAT_SCALE.
+// Global stat multiplier (B4). Final stat = suitBase × rankStatMult(rank) × STAT_SCALE.
 // Bump to 100 for even bigger numbers, or 1 to shrink — one knob.
 const STAT_SCALE = 10;
+
+// Rank is a TILT, not the whole game. Base stats used to be a straight line in rank
+// (Ace = 7× a 2), which meant the card you DREW mattered more than the hand you BUILT —
+// every poker bonus except quads was smaller than the gap between a 2 and an ace. This
+// pulls the low ranks UP toward the ace, which stays fixed as the benchmark:
+//   effRank = ACE_RANK − RANK_COMPRESSION × (ACE_RANK − rank)
+// RANK_COMPRESSION 1 = the old straight line, 0 = every rank identical to an ace.
+// 0.5 puts the whole 2→A spread at 1.75×, i.e. between a Pair (×1.5) and Trips (×2.5),
+// so building a hand beats drafting a big card. Turn it DOWN to flatten further.
+const ACE_RANK         = 14;
+const RANK_COMPRESSION = 0.5;
+
+// Per-rank escape hatch for the tuning pass that comes later: any rank listed here uses
+// this effective rank verbatim and ignores RANK_COMPRESSION. Empty = the pure curve.
+const RANK_STAT_OVERRIDE = {};
+
+// The effective rank a card's stats are built from. ONE place, so every card-creation
+// path (shoe, flop, joker recut, playtest picker, sim deck) gets the same curve for free.
+function rankStatMult(rank) {
+  if (RANK_STAT_OVERRIDE[rank] !== undefined) return RANK_STAT_OVERRIDE[rank];
+  return ACE_RANK - RANK_COMPRESSION * (ACE_RANK - rank);
+}
 
 // Rank 3 "Target Dummy" HP multiplier: a wall trades ALL offense + mobility for
 // bulk, so its HP is scaled up on top of the normal suit×rank. One knob for how
