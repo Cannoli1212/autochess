@@ -131,77 +131,83 @@ function renderTraitBar() {
 
 // The poker section of the sidebar: an of-a-kind ladder row per repeated rank (so you
 // see pair→trips→quads), plus a compact row for each active named/shaped hand.
-// Rank 2's of-a-kind reward is the Berserker ABILITY now, not the flat +atk/HP stat
-// buff (see pokerBuffs' rank-2 guard + abilities.js `berserker`). So the poker chips /
-// tooltips must NOT print "+50% atk/HP" for a pair/trips/quads of 2s — they'd lie. This
-// returns the correct rung text: the Berserker ladder for rank 2, the generic of-a-kind
-// text for everyone else. `rung` is the of-a-kind count clamped to 2/3/4.
-const BERSERKER_RUNG_TEXT = {
-  2: "unlock + HP · ramp when hurt · shields on cast",
-  3: "+more HP/ramp · bigger shield/cast",
-  4: "+big HP · biggest shield/cast",
-};
-// Rank 3 of-a-kind text (redesigned 2026-07-22): a pair/trips/quads of 3s rewards BOTH
-// the flat HP buff (still applied by pokerBuffs — keep advertising it) AND the Thorns
-// reflect %, which now SCALES with the of-a-kind count (see RANK_ABILITIES[3] tiers). Both
-// numbers are read LIVE from their source (POKER_HANDS.ofAKind for HP, the thorns tiers for
-// reflect) so the tooltip can never drift from the actual buffs when either is retuned.
-function thornsRungText(rung) {
-  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
-  const thorns = RANK_ABILITIES[3].find(function (a) { return a.kind === "thorns"; });
-  const reflect = Math.round(thorns.tiers[rung].reflect * 100);
-  return "+" + hp + "% HP · reflect " + reflect + "% of damage";
-}
-// Rank 8 of-a-kind text (redesigned 2026-07-23): a pair/trips/quads of 8s still gets the flat
-// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND the redesigned Bulwark/
-// trap ladder. DR CLIMBS every rung and the trap CAST unlocks at a pair, grows at trips, and
-// becomes a full line at quads. The DR number is read LIVE from RANK_ABILITIES[8]'s bulwark tiers
-// so the tooltip can never drift from the actual reduction when it's retuned. `rung` is 2/3/4.
-function bulwarkRungText(rung) {
-  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
-  const bulwark = RANK_ABILITIES[8].find(function (a) { return a.kind === "bulwark"; });
-  const dr = bulwark.tiers[rung].reduce;
-  const trap = { 2: "traps unlock", 3: "more traps", 4: "trap line across" }[rung];
-  return "+" + hp + "% HP · −" + dr + " dmg taken · " + trap;
-}
-// Rank 9 of-a-kind text (redesigned 2026-08-05): a pair/trips/quads of 9s still gets the flat
-// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND the redesigned poison
-// ladder. The per-tick STACK climbs every rung, the CAST unlocks at a pair and grows its reach,
-// and the PLAGUE jump turns on at trips (half stacks) then goes full at quads. Stack and plague
-// are read LIVE from RANK_ABILITIES[9]'s poison tiers so the tooltip can never drift. `rung` is 2/3/4.
-function poisonRungText(rung) {
-  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
-  const poison = RANK_ABILITIES[9].find(function (a) { return a.kind === "poison"; });
-  const t = poison.tiers[rung];
-  const cast = { 2: "cast unlocks", 3: "longer reach", 4: "widest reach" }[rung];
-  const plague = t.transferPct
-    ? " · plague " + Math.round(t.transferPct * 100) + "%"
-    : "";
-  return "+" + hp + "% HP · " + t.stackDamage + " poison/tick · " + cast + plague;
-}
-// Rank 10 of-a-kind text (redesigned 2026-08-05): a pair/trips/quads of 10s still gets the flat
-// +atk/HP buff (pokerBuffs keeps applying it — keep advertising it) AND a stronger Rally aura.
-// The awkward bit is that the chip is per-RANK while Rally's magnitude is per-SUIT — the four 10s
-// have four separate ladders — so print all four, in the suit order the ability entry lists them.
-// Note the two buffs land on DIFFERENT units: the flat +HP on the 10s themselves, the rally on
-// their NEIGHBORS. Every number is read LIVE off RANK_ABILITIES[10] so the tooltip can't drift.
-function rallyRungText(rung) {
-  const hp = Math.round(POKER_HANDS.ofAKind[rung].hpMult * 100);
-  const rally = RANK_ABILITIES[10].find(function (a) { return a.kind === "rally"; });
-  const pct = function (suit, key) {
-    return Math.round(rally.suits[suit].tiers[rung][key] * 100);
+//
+// ── ONE RUNG, IN WORDS (rewritten 2026-08-06) ────────────────────────────────
+// This used to be six functions: a hardcoded BERSERKER_RUNG_TEXT map plus a bespoke
+// thorns/bulwark/poison/rally writer each, and a plain "+150% atk/HP" fallback for
+// everyone else. That fallback was the problem. It was ALREADY the only thing ranks
+// 4-7 ever said — a pair of 5s advertised a stat buff and never mentioned that it had
+// just switched Ward on — and the 2026-08-06 cut made it worse by shrinking the one
+// number it did print. The ranks whose payout MOVED were the ranks with no words.
+//
+// So the ladder line is now GENERATED from ABILITY_TEXT (abilitytext.js), which already
+// carries a `rung(tierObj, ability, count)` writer for every gated ability — written for
+// the champion tooltip, under the same rule this needs: read every number live out of the
+// tier object, never hardcode it. Reusing it means the sidebar and the hover panel say the
+// same thing because they are the same sentence, and a future rank redesign updates both
+// for free. Six hand-maintained functions became one.
+//
+// Two wrinkles this has to handle that the champion tooltip does not: the sidebar row is
+// per-RANK, so there is no suit to pick a ladder with, and a rank can carry FOUR of them
+// (rank 10's per-suit rally) or two (rank 4's ranged/melee Giant Slayer). Every branch is
+// printed, tagged with the suits it applies to — see ofAKindLadders.
+
+// Every (tag, tiers) pair a rank ability can offer, tagged with the suits it lands on.
+// Mirrors tipTierTable in tooltip.js, except it enumerates the branches instead of
+// picking the one a given unit uses. `tag` is "" when the ability treats all four suits
+// alike, which is the common case and prints nothing.
+function ofAKindLadders(a) {
+  const sym = function (suits) {
+    return suits.map(function (s) { return SUITS[s].symbol; }).join("");
   };
-  return "+" + hp + "% HP · rally: +" + pct("hearts", "hpMult") + "% HP / +"
-    + pct("spades", "critBonus") + "% crit / +" + pct("clubs", "speedMult") + "% spd / "
-    + pct("diamonds", "lifestealPct") + "% drain";
+  if (a.suits) {
+    return SUIT_NAMES.filter(function (s) { return a.suits[s]; }).map(function (s) {
+      return { tag: SUITS[s].symbol, tiers: a.suits[s].tiers };
+    });
+  }
+  if (a.tiersRanged || a.tiersMelee) {
+    const out = [];
+    if (a.tiersRanged) out.push({ tag: sym(["clubs", "spades"]), tiers: a.tiersRanged });
+    if (a.tiersMelee)  out.push({ tag: sym(["hearts", "diamonds"]), tiers: a.tiersMelee });
+    return out;
+  }
+  if (!a.tiers) return [];
+  // A whole ENTRY can be role-locked (rank 6's two Hellfire flavors, rank 4's Kill Dash),
+  // in which case the tag comes off the entry rather than off a pair of tier tables.
+  const tag = a.role === "ranged" ? sym(["clubs", "spades"])
+            : a.role === "melee"  ? sym(["hearts", "diamonds"]) : "";
+  return [{ tag: tag, tiers: a.tiers }];
 }
+
+// One of-a-kind rung, in words: the flat stat line plus a clause per gated ability that
+// is switched on at this rung. `rung` is the count clamped to 2/3/4.
+//
+// Rank 2 is the deliberate exception on the stat line: it pays NO flat buff (see
+// pokerBuffs' rank-2 guard), so printing one would be a lie. It has read as ability-only
+// since 2026-07-22 — which is exactly the shape the 2026-08-06 cut moved every other
+// rank toward, just less far.
+//
+// An ability with no row at this rung is SKIPPED, not marked locked: on a one-line chip
+// its absence at pair and appearance at trips is already the clearest way to say "a third
+// copy turns this on". The champion tooltip, which has room for a full ladder, does spell
+// out "locked" — see tipAbilityHTML.
 function ofAKindText(rank, rung) {
-  if (Number(rank) === 2) return BERSERKER_RUNG_TEXT[rung];
-  if (Number(rank) === 3) return thornsRungText(rung);
-  if (Number(rank) === 8) return bulwarkRungText(rung);
-  if (Number(rank) === 9) return poisonRungText(rung);
-  if (Number(rank) === 10) return rallyRungText(rung);
-  return POKER_HANDS.ofAKind[rung].text;
+  const parts = [];
+  if (Number(rank) !== 2) parts.push(ofAKindRung(rank, rung).text);
+
+  (RANK_ABILITIES[Number(rank)] || []).forEach(function (a) {
+    const words = ABILITY_TEXT[a.kind];
+    if (!words || !words.rung) return;                  // no writer yet → stay quiet
+    ofAKindLadders(a).forEach(function (lad) {
+      const t = lad.tiers[rung];
+      if (!t) return;                                   // not switched on at this rung
+      const line = words.rung(t, a, rung);
+      if (!line) return;
+      parts.push((lad.tag ? lad.tag + " " : "") + line);
+    });
+  });
+
+  return parts.join(" · ");
 }
 
 function renderPokerTraits(bar, team) {
@@ -221,13 +227,13 @@ function renderPokerTraits(bar, team) {
       if (n < 2) return;
       any = true;
       const shown = Math.min(n, 4);
-      const info = POKER_HANDS.ofAKind[shown];
+      const info = ofAKindRung(rank, shown);
       const pips = [2, 3, 4].map(function (k) {
         return { label: k, hit: n >= k, cur: shown === k };
       });
       let tip = '<div class="tip-head">' + rankLabel(rank) + "s · " + n + " in pool</div>";
       [2, 3, 4].forEach(function (k) {
-        const t = POKER_HANDS.ofAKind[k];
+        const t = ofAKindRung(rank, k);
         const on = shown === k;
         tip += '<div class="tip-tier' + (on ? " on" : "") + (n >= k ? " reached" : "") + '">' +
                '<b>' + t.label + " · " + k + '</b> ' + ofAKindText(rank, k) + '</div>';
@@ -377,6 +383,16 @@ function hasSevenTwo(cards) {
   return has7 && has2;
 }
 
+// THE ONE PLACE the of-a-kind rung for a rank is looked up. Clamps the count to the
+// quads cap and honors OF_A_KIND_OVERRIDE, so a rank with its own table (reserved for
+// the J/Q/K/A pass — see config.js) can never pay one number in combat and display
+// another in the sidebar. Returns null below a pair. `rank` may be a string key.
+function ofAKindRung(rank, count) {
+  if (count < 2) return null;
+  const table = OF_A_KIND_OVERRIDE[Number(rank)] || POKER_HANDS.ofAKind;
+  return table[Math.min(count, 4)] || null;
+}
+
 // Tally how many times each rank appears: { rank: count, ... }.
 function rankCounts(ranks) {
   const counts = {};
@@ -421,10 +437,8 @@ function pokerBuffs(team) {
   // Of-a-kind: a rank appearing 2+ times buffs every unit of that rank.
   Object.keys(counts).forEach(function (rank) {
     if (Number(rank) === 2) return;   // 2s' of-a-kind reward is the Berserker ability now
-    let n = counts[rank];
-    if (n < 2) return;
-    if (n > 4) n = 4;                          // cap at quads
-    const t = POKER_HANDS.ofAKind[n];
+    const t = ofAKindRung(rank, counts[rank]);   // null below a pair; caps at quads
+    if (!t) return;
     addPokerBuff(buffs, rank, t.atkMult, t.hpMult);
   });
 
@@ -497,9 +511,12 @@ function bestHandsFor(team) {
       return;
     }
     if (n > 4) n = 4;                                  // cap at quads, like pokerBuffs
-    const t = POKER_HANDS.ofAKind[n];
+    const t = ofAKindRung(rank, n);
+    // Scored off `score`, NOT atkMult. The two used to be the same number, which meant
+    // the 2026-08-06 stat cut would have quietly demoted QUADS below a Full House in
+    // this banner — a hand's HEADLINE rank is about what it means, not what it pays.
     out.push({ key: "ofAKind" + n, name: t.label.toUpperCase(), ranks: [rank],
-               detail: rankLabel(rank) + "s", score: t.atkMult + 0.02 });
+               detail: rankLabel(rank) + "s", score: t.score + 0.02 });
   });
 
   const doyle = POKER_HANDS.named.doyle;

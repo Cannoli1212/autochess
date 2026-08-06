@@ -11,9 +11,10 @@
 //
 // THE ONE RULE: hardcode the VERB PHRASE, never the NUMBER. Every figure in here is
 // read live out of the tier object it is describing, so a balance change moves the
-// tooltip with it and the two can't drift apart. This is the same discipline as
-// bulwarkRungText and friends in synergies.js:160 — copied deliberately, because
-// that sidebar has already proved it works.
+// tooltip with it and the two can't drift apart. The trait sidebar used to keep its own
+// hand-written copy of these sentences; as of 2026-08-06 it generates its of-a-kind
+// ladder from THIS table instead (see ofAKindText in synergies.js), so the hover panel
+// and the sidebar chip can no longer disagree — they are the same sentence.
 //
 // SHAPE. Keyed by ability `kind`. Each entry may have:
 //   desc  — one sentence: what the ability does, no numbers. Always present.

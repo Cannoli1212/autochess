@@ -111,15 +111,20 @@ const STRATEGIES = [
   {
     id: "paired", name: "Set Miner",
     desc: "stack duplicate ranks for pair/trips/quads",
-    // Reads POKER_HANDS.ofAKind directly — the exact table that pays the buff — and
-    // multiplies by the number of cards carrying it, since the buff is per-card.
+    // Scored off the of-a-kind COUNT, not off the stat table (Riley, 2026-08-06). It used
+    // to read POKER_HANDS.ofAKind.hpMult — correct while that table WAS the reward, wrong
+    // the moment the reward moved into the ability ladders. At the cut values (0.15/0.40/
+    // 1.00) an hpMult score barely prefers a pair, so the archetype would have quietly
+    // stopped mining sets and the tournament would have measured nothing. The count IS the
+    // payout now — it gates and tiers every rank ability through packCount — so `n - 1`
+    // (0 for a lone card, 1/2/3 up the ladder) tracks the real reward and needs no retuning
+    // when a tier is rebalanced. Still multiplied by the copies, since the buff is per-card.
     score: function (cards) {
       const counts = rankCounts(ranksOf(cards));
       let total = 0;
       for (const r in counts) {
         const n = Math.min(counts[r], 4);
-        const rung = POKER_HANDS.ofAKind[n];
-        if (rung) total += counts[r] * rung.hpMult;
+        if (n >= 2) total += counts[r] * (n - 1);
       }
       return total;
     },

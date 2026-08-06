@@ -82,10 +82,17 @@ const RANK_ABILITIES = {
   //   reflect — fraction of damage taken that is bounced back (1.0 = 100%, >1.0 = net gain)
   3:  [{ kind: "thorns",      name: "Thorns",
         tiers: {
+        // Category A, × COMP 2026-08-06 (was 0.50 / 0.85 / 1.35). A wall's total thorns
+        // output over a fight is bounded by the HP it has to absorb damage WITH, so the
+        // stat cut shrank its damage even though `reflect` is written as a ratio. The
+        // LONE rung is untouched: a count of 1 never took the poker buff, so it never
+        // lost anything. QUADS is deliberately UNDER parity — the honest number is 3.78,
+        // but "hitting this wall kills you almost four times over" stops being a fight
+        // and starts being a rule. 2.5 first; raise it if quads-of-3s underperforms.
           1: { reflect: 0.20 },   // lone  — reflects SOME of the damage
-          2: { reflect: 0.50 },   // pair  — a good amount
-          3: { reflect: 0.85 },   // trips — most of the hit
-          4: { reflect: 1.35 },   // quads — reflects MORE than it takes (net damage while inert)
+          2: { reflect: 0.70 },   // pair  — a good amount
+          3: { reflect: 1.70 },   // trips — more than the hit it took
+          4: { reflect: 2.50 },   // quads — reflects far MORE than it takes (net damage while inert)
         } },
       { kind: "targetDummy",  name: "Target Dummy" }],
   // Rank 4 — HASTE + GIANT SLAYER, OF-A-KIND GATED (redesigned 2026-07-22, Riley — same
@@ -152,9 +159,12 @@ const RANK_ABILITIES = {
        { kind: "wardCast",    name: "Ward",         cast: true, castTargeting: "self",
          manaMax: 50, manaRegen: 8,
          tiers: {
-           2: { shieldFrac: 0.6, stack: false },   // pair  — one strong shield, reapplied once depleted
-           3: { shieldFrac: 1.0, stack: false },   // trips — a BIGGER single shield, same one-at-a-time rule
-           4: { shieldFrac: 0.5, stack: true },    // quads — layer a new shield on each full bar (builds up)
+        // Category A, × COMP 2026-08-06 (was 0.6 / 1.0 / 0.5). shieldFrac is ×maxHp, so
+        // this was the single most double-cut number in the game: a quads-of-5s lost 60%
+        // of its HP and therefore 60% of every shield it cast, on top of the stat loss.
+           2: { shieldFrac: 0.84, stack: false },  // pair  — one strong shield, reapplied once depleted
+           3: { shieldFrac: 2.00, stack: false },  // trips — a BIGGER single shield, same one-at-a-time rule
+           4: { shieldFrac: 1.40, stack: true },   // quads — layer a new shield on each full bar (builds up)
          } }],
   // Rank 6 — EXECUTIONER + HELLFIRE, SPLIT BY ROLE and now OF-A-KIND GATED (casting Riley
   // 2026-07-15; of-a-kind dial added Riley 2026-07-23): the DEVIL rank. All four 6s keep the
@@ -182,16 +192,25 @@ const RANK_ABILITIES = {
       { kind: "fireball",    name: "Hellfire",     role: "ranged", cast: true, castTargeting: "enemy",
         manaMax: 60, manaPerAttack: 15, castRange: 4,
         tiers: {
-          2: { spellPower: 2.0, radius: 1, splashMult: 0.5 },               // pair  — base fireball (today's values)
-          3: { spellPower: 3.0, radius: 1, splashMult: 0.5 },               // trips — damage up moderately
-          4: { spellPower: 3.0, radius: 1, splashMult: 0.5, hitAll: true }, // quads — full damage to EVERY enemy (board nuke)
+        // Category A on spellPower, × COMP 2026-08-06 (was 2.0 / 3.0 / 3.0); radius and
+        // splashMult are Category C and stay put. QUADS keeps MIRRORING trips rather than
+        // taking its own ×2.8 — `hitAll` already multiplies this number by the whole enemy
+        // board, which is a far bigger lever than the coefficient. The shape is unchanged
+        // from before the cut: quads buys REACH, not a bigger number.
+          2: { spellPower: 2.8, radius: 1, splashMult: 0.5 },               // pair  — base fireball
+          3: { spellPower: 6.0, radius: 1, splashMult: 0.5 },               // trips — damage up moderately
+          4: { spellPower: 6.0, radius: 1, splashMult: 0.5, hitAll: true }, // quads — full damage to EVERY enemy (board nuke)
         } },
       { kind: "burnAura",    name: "Hellfire Aura", role: "melee",  cast: true, castTargeting: "self",
         manaMax: 60, manaPerAttack: 15,
         tiers: {
-          2: { radius: 1, spellPower: 0.6 },                  // pair  — base ring (today's nova)
-          3: { radius: 2, spellPower: 0.9 },                  // trips — bigger ring + more damage
-          4: { radius: 2, spellPower: 0.9, fullStart: true }, // quads — trips ring/damage + opens the fight FULLY charged
+        // Category A on spellPower, × COMP 2026-08-06 (was 0.6 / 0.9 / 0.9). Unlike the
+        // ranged 6 above, QUADS DOES take its own ×2.8 here: a self-centered ring hits
+        // whoever is already next to it, so `fullStart` buys tempo, not target count —
+        // there's no hidden multiplier to hold the coefficient down for.
+          2: { radius: 1, spellPower: 0.84 },                  // pair  — base ring (today's nova)
+          3: { radius: 2, spellPower: 1.80 },                  // trips — bigger ring + more damage
+          4: { radius: 2, spellPower: 2.52, fullStart: true }, // quads — biggest ring + opens the fight FULLY charged
         } }],
   // Rank 7 — GAMBLER + SLOT MACHINE, now OF-A-KIND GATED (redesigned Riley 2026-07-23 — same pair/
   // trips/quads dial as ranks 2-6). Every 7 keeps the UNGATED Gambler passive (on-hit random damage
@@ -219,39 +238,48 @@ const RANK_ABILITIES = {
       { kind: "slotMachine", name: "Slot Machine", cast: true, castTargeting: "enemy",
         manaMax: 45, manaPerAttack: 15, castRange: 5,
         jackpot: {
-          3: { chance: 0.08, spellPower: 6.0, radius: 2, gold: 10 },   // trips — small chance, heavy nuke + minted gold
-          4: { chance: 0.15, spellPower: 9.0, radius: 2, gold: 20 },   // quads — better odds, bigger payout
+          // Category A on spellPower only, × COMP 2026-08-06 (was 6.0 / 9.0). `chance` and
+          // `radius` are Category C; `gold` is ECONOMY, not combat, and must never ride a
+          // combat compensation factor.
+          3: { chance: 0.08, spellPower: 12.0, radius: 2, gold: 10 },   // trips — small chance, heavy nuke + minted gold
+          4: { chance: 0.15, spellPower: 25.2, radius: 2, gold: 20 },   // quads — better odds, bigger payout
         },
         tiers: {
+          // The reels are a MIXED bag, so the 2026-08-06 compensation is applied PER FIELD,
+          // not per reel: `spellPower` / `healPower` (×attack) and `frac` (×maxHp) are
+          // Category A and took × COMP; `stacks`, `ticks`, `jumps`, `jumpRange`, `falloff`,
+          // `pierce`, `radius` and the haste `mult`/`cap` are B or C and are untouched. This
+          // is the clearest illustration of why the rule sorts by FIELD: two entries in the
+          // same array can belong to different categories.
           2: [ // PAIR — modest reels
-            { effect: "hellfire",   spellPower: 2.0 },
-            { effect: "chain",      spellPower: 1.5, jumps: 3, jumpRange: 3, falloff: 0.7 },
+            { effect: "hellfire",   spellPower: 2.8 },
+            { effect: "chain",      spellPower: 2.1, jumps: 3, jumpRange: 3, falloff: 0.7 },
             { effect: "poisonLine", stacks: 10, pierce: 2 },
             { effect: "stun",       ticks: 8 },
-            { effect: "nova",       spellPower: 0.6, radius: 1 },
-            { effect: "shield",     frac: 0.4 },
+            { effect: "nova",       spellPower: 0.84, radius: 1 },
+            { effect: "shield",     frac: 0.56 },
             { effect: "haste",      mult: 0.2, cap: 3.0 },
-            { effect: "heal",       healPower: 4.0 },
+            { effect: "heal",       healPower: 5.6 },
           ],
           3: [ // TRIPS — stronger reels
-            { effect: "hellfire",   spellPower: 3.0 },
-            { effect: "chain",      spellPower: 2.0, jumps: 4, jumpRange: 3, falloff: 0.7 },
+            { effect: "hellfire",   spellPower: 6.0 },
+            { effect: "chain",      spellPower: 4.0, jumps: 4, jumpRange: 3, falloff: 0.7 },
             { effect: "poisonLine", stacks: 16, pierce: 3 },
             { effect: "stun",       ticks: 12 },
-            { effect: "nova",       spellPower: 0.9, radius: 2 },
-            { effect: "shield",     frac: 0.7 },
+            { effect: "nova",       spellPower: 1.8, radius: 2 },
+            { effect: "shield",     frac: 1.4 },
             { effect: "haste",      mult: 0.3, cap: 4.0 },
-            { effect: "heal",       healPower: 5.5 },
+            { effect: "heal",       healPower: 11.0 },
           ],
           4: [ // QUADS — biggest reels
-            { effect: "hellfire",   spellPower: 4.0 },
-            { effect: "chain",      spellPower: 2.5, jumps: 5, jumpRange: 3, falloff: 0.7 },
+            { effect: "hellfire",   spellPower: 11.2 },
+            { effect: "chain",      spellPower: 7.0, jumps: 5, jumpRange: 3, falloff: 0.7 },
             { effect: "poisonLine", stacks: 22, pierce: 4 },
             { effect: "stun",       ticks: 16 },
-            { effect: "nova",       spellPower: 1.2, radius: 2 },
-            { effect: "shield",     frac: 1.0 },
+            { effect: "nova",       spellPower: 3.36, radius: 2 },
+            { effect: "shield",     frac: 2.8 },
             { effect: "haste",      mult: 0.4, cap: 6.0 },
-            { effect: "heal",       healPower: 7.0 },
+            { effect: "heal",       healPower: 19.6 },
           ],
         } }],
   // Rank 8 — BULWARK + TRAP CAST (redesigned 2026-07-23, Riley — the of-a-kind GATE dial, same
@@ -647,10 +675,53 @@ const SYNERGIES = {
 // chunk; chunk 1 only detects + displays. Rewards are first-pass, tune later.
 const POKER_HANDS = {
   // Of-a-kind: N cards sharing a rank. Keyed by count → pair(2)/trips(3)/quads(4).
+  //
+  // CUT HARD 2026-08-06 (Riley) — was 0.5 / 1.5 / 4.0. Duplicate ranks used to pay
+  // TWICE: this flat stat spike, AND every rank ability, which gates and tiers off the
+  // same count via packCount. The strategy tournament measured the result — the Set
+  // Miner archetype won 57.3%, the strongest of seven. So the stats are now a small
+  // CONSOLATION and the ABILITY LADDER is the payout. A pair should be interesting
+  // because it switches something on, not because your card silently got fatter.
+  // Rank 2 has worked exactly this way since 2026-07-22 (see pokerBuffs' rank-2 guard);
+  // this is that idea extended to every rank, stopping short of zero. See
+  // OFAKIND-REBALANCE.md for the before/after measurements.
+  //
+  // `score` is NOT a buff — it is how bestHandsFor RANKS this hand against the others
+  // for the flop-reveal callout banner. It used to read atkMult, which meant shrinking
+  // the buff would silently demote QUADS below a Full House in the banner. Split out so
+  // the two can be tuned independently; these are the pre-cut atkMults on purpose.
+  //
+  // ── THE COMPENSATION RULE (read this before retuning any gated tier) ──────────
+  // Cutting this table cuts SOME ABILITIES TWICE, invisibly. Plenty of tier values are
+  // FRACTIONS OF THE UNIT'S OWN STATS — `shieldFrac`×maxHp, `spellPower`×attack — so a
+  // unit that lost 60% of its HP also lost 60% of its shield without a single ability
+  // number changing. Isolating the poker buff, the multiplier a unit carries goes:
+  //
+  //     rung     before    after    retained
+  //     pair      ×1.50    ×1.15      77%
+  //     trips     ×2.50    ×1.40      56%
+  //     quads     ×5.00    ×2.00      40%
+  //
+  // Restoring those abilities to parity therefore needs ×1.30 / ×1.79 / ×2.50. We round
+  // UP — COMP = { pair 1.4, trips 2.0, quads 2.8 } — because the whole point is to leave
+  // abilities holding MORE than they held before. Applied 2026-08-06 to ranks 3, 5, 6, 7.
+  //
+  // It is applied to THAT CATEGORY ONLY. Sort any tier value you touch into one of three:
+  //   A — multiplied by the unit's own attack/maxHp (spellPower, shieldFrac, healPower,
+  //       reflect — a wall's reflect output is bounded by its own HP). → × COMP.
+  //   B — a flat absolute number (bulwark `reduce`, trap `damage`, poison `stackDamage`,
+  //       stun `ticks`). → LEAVE IT. These got a free RELATIVE buff when every unit's HP
+  //       shrank; multiplying them too would double-pay. Rank 8 is the one to watch.
+  //   C — a pure ratio of something that also shrank (Giant Slayer `bonus`, `chance`,
+  //       Rally's ladders, `transferPct`, `speedMult`, radii/`pierce`). → LEAVE IT. Their
+  //       relative worth never moved. This is the dial for the NEXT pass if pairs land
+  //       too weak.
+  // Rank 2 needs none of this: it was already exempt from the table above, so its stats
+  // did not move. It is the control — do not "fix" it.
   ofAKind: {
-    2: { label: "Pair",  atkMult: 0.5, hpMult: 0.5, text: "+50% atk/HP" },
-    3: { label: "Trips", atkMult: 1.5, hpMult: 1.5, text: "+150% atk/HP" },
-    4: { label: "Quads", atkMult: 4.0, hpMult: 4.0, text: "+400% atk/HP" },
+    2: { label: "Pair",  atkMult: 0.15, hpMult: 0.15, score: 0.5, text: "+15% atk/HP" },
+    3: { label: "Trips", atkMult: 0.40, hpMult: 0.40, score: 1.5, text: "+40% atk/HP" },
+    4: { label: "Quads", atkMult: 1.00, hpMult: 1.00, score: 4.0, text: "+100% atk/HP" },
   },
   // Named hands: detected by which ranks are present in the pool (any count ≥1).
   // Doyle Brunson = a 10 AND a 2 (combat buff, chunk 2); 7-2 = a 7 AND a 2
@@ -682,6 +753,21 @@ const POKER_HANDS = {
     fullHouse: { label: "Full House", atkMult: 1.5, hpMult: 1.5, text: "+150% atk/HP to the 3+2" },
   },
 };
+
+// PER-RANK of-a-kind override, keyed by rank → the same {2,3,4} rung shape as
+// POKER_HANDS.ofAKind above. Any rank listed here uses ITS table verbatim; every rank
+// not listed uses the shared one. Empty = the shared table for everybody. Same escape
+// hatch as RANK_STAT_OVERRIDE below, for the same reason: one rank needing different
+// numbers should not mean a second code path.
+//
+// RESERVED FOR THE FACE-CARD PASS (Riley, 2026-08-06). J/Q/K/A are the one group with
+// NO of-a-kind ability ladder — RANK_ABILITIES only covers ranks 2-10, and a face's
+// power lives in UNIQUE_CARDS, which never reads packCount. So the 2026-08-06 cut takes
+// real power off face pairs with nothing handing it back. They ride the shared reduced
+// table for now, deliberately; when the face pass happens, the fix is entries here
+// (bigger flat rungs, since a face's ability can't tier) or a packCount ladder on the
+// UNIQUE_CARDS abilities — no change to pokerBuffs either way.
+const OF_A_KIND_OVERRIDE = {};
 
 // FUSION ("made hands") — during placement you may drag one hand card onto a
 // partner to FUSE the pair into ONE special unit. Keyed like POKER_HANDS.named;

@@ -1,7 +1,7 @@
 <meta charset="utf-8" />
 <title>Autochess — 7-Round Mode</title>
 
-<link rel="stylesheet" href="css/styles.css?v=leg145" />
+<link rel="stylesheet" href="css/styles.css?v=leg148" />
 
 <p id="roundInfo">Round 1 of 7 — Rounds won: Player 1: 0 · Player 2: 0</p>
 
@@ -98,35 +98,39 @@
      restated the #traitBar sidebar beside the board, and the two legend blocks
      were static tutorial text — both pushed the board up out of view. -->
 
-<script src="js/config.js?v=leg145"></script>
-<script src="js/abilitytext.js?v=leg145"></script>
-<script src="js/abilities.js?v=leg145"></script>
-<script src="js/state.js?v=leg145"></script>
-<script src="js/cards.js?v=leg145"></script>
-<script src="js/jokers.js?v=leg145"></script>
-<script src="js/flop.js?v=leg145"></script>
-<script src="js/synergies.js?v=leg145"></script>
-<script src="js/unitart.js?v=leg145"></script>
-<script src="js/board.js?v=leg145"></script>
-<script src="js/motion.js?v=leg145"></script>
-<script src="js/fx.js?v=leg145"></script>
-<script src="js/fxkits.js?v=leg145"></script>
-<script src="js/flopreveal.js?v=leg145"></script>
-<script src="js/hands.js?v=leg145"></script>
-<script src="js/placement.js?v=leg145"></script>
-<script src="js/ai.js?v=leg145"></script>
-<script src="js/pathing.js?v=leg145"></script>
-<script src="js/combat.js?v=leg145"></script>
-<script src="js/hud.js?v=leg145"></script>
-<script src="js/tableview.js?v=leg145"></script>
-<script src="js/gameflow.js?v=leg145"></script>
-<script src="js/sim.js?v=leg145"></script>
-<script src="js/table.js?v=leg145"></script>
+<!-- Balance instrument only: the seeded RNG. Loads FIRST because it patches a
+     global (Math.random) and nothing may draw before it is defined — but note it
+     installs NOTHING on load, so live play is untouched until you call seeded(). -->
+<script src="js/rng.js?v=leg148"></script>
+<script src="js/config.js?v=leg148"></script>
+<script src="js/abilitytext.js?v=leg148"></script>
+<script src="js/abilities.js?v=leg148"></script>
+<script src="js/state.js?v=leg148"></script>
+<script src="js/cards.js?v=leg148"></script>
+<script src="js/jokers.js?v=leg148"></script>
+<script src="js/flop.js?v=leg148"></script>
+<script src="js/synergies.js?v=leg148"></script>
+<script src="js/unitart.js?v=leg148"></script>
+<script src="js/board.js?v=leg148"></script>
+<script src="js/motion.js?v=leg148"></script>
+<script src="js/fx.js?v=leg148"></script>
+<script src="js/fxkits.js?v=leg148"></script>
+<script src="js/flopreveal.js?v=leg148"></script>
+<script src="js/hands.js?v=leg148"></script>
+<script src="js/placement.js?v=leg148"></script>
+<script src="js/ai.js?v=leg148"></script>
+<script src="js/pathing.js?v=leg148"></script>
+<script src="js/combat.js?v=leg148"></script>
+<script src="js/hud.js?v=leg148"></script>
+<script src="js/tableview.js?v=leg148"></script>
+<script src="js/gameflow.js?v=leg148"></script>
+<script src="js/sim.js?v=leg148"></script>
+<script src="js/table.js?v=leg148"></script>
 <!-- Balance instrument only: the strategy-archetype tournament. Loads after ai/sim/
      table because it drives all three; nothing in the game calls into it. -->
-<script src="js/simstrategy.js?v=leg145"></script>
+<script src="js/simstrategy.js?v=leg148"></script>
 <!-- Both reach into abilities/board/hands/jokers, so they load late — but always
      BEFORE main.js, which is the bootstrap and must stay last. -->
-<script src="js/tooltip.js?v=leg145"></script>
-<script src="js/jokeroffer.js?v=leg145"></script>
-<script src="js/main.js?v=leg145"></script>
+<script src="js/tooltip.js?v=leg148"></script>
+<script src="js/jokeroffer.js?v=leg148"></script>
+<script src="js/main.js?v=leg148"></script>
