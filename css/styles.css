@@ -640,31 +640,14 @@
     display: flex; flex-direction: column; align-items: center; gap: 16px;
   }
 
-  /* The ready cascade. Chips light left→right before the deal. */
-  .fstage-ready { display: flex; gap: 8px; }
-  .fstage-chip {
-    font-size: 11px; font-weight: bold; letter-spacing: 0.5px;
-    padding: 4px 9px; border-radius: 11px;
-    color: #6d7c8c; background: #232c37; border: 1px solid #38465a;
-    transition: none;
-  }
-  .fstage-chip.lit {
-    color: #0f1720; background: #6bd5e0; border-color: #9be8f0;
-    box-shadow: 0 0 10px rgba(107, 213, 224, 0.55);
-    animation: fstageChip 220ms ease-out;
-  }
-  @keyframes fstageChip {
-    0%   { transform: scale(0.8); }
-    55%  { transform: scale(1.18); }
-    100% { transform: scale(1); }
-  }
-
   .fstage-banner {
     font-size: 26px; font-weight: bold; letter-spacing: 1px;
     min-height: 32px;
     text-shadow: 0 2px 6px #000;
   }
-  .fstage-banner.deal { color: #9ecbff; font-size: 19px; letter-spacing: 3px; }
+  /* The opening title card. The stage names the ROUND and shows the COMMUNITY CARDS —
+     it deliberately lists no players or seats. */
+  .fstage-banner.round { color: #9ecbff; font-size: 19px; letter-spacing: 3px; }
   .fstage-banner.hit  { color: #ffd54f; text-shadow: 0 0 14px rgba(255, 213, 79, 0.5), 0 2px 6px #000; }
   .fstage-banner.cold { color: #7f8b99; font-size: 19px; }
 

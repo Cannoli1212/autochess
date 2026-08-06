@@ -846,7 +846,7 @@ const FLOP_REVEAL_SPEED = 1;
 // Measured end-to-end: ~4.2s for a three-card round, ~5.3s for a five-card river.
 // The river is longer because the flips dominate it — that's the suspense, but it's
 // also why the click-to-skip exists.
-const FLOP_READY_MS   = 520;   // seat chips light up left→right, then "DEALING"
+const FLOP_TITLE_MS   = 520;   // the "ROUND N OF 7" title card, before the deal
 const FLOP_DEAL_MS    = 260;   // one card's flight from the deck to its slot
 const FLOP_DEAL_GAP   = 110;   // stagger between consecutive deals
 const FLOP_SETTLE_MS  = 280;   // the pause after the last card lands, before any flip

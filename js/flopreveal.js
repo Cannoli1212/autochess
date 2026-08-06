@@ -6,9 +6,13 @@
 // at all: growCommunity() called renderFlop() and three small rectangles blinked into
 // existence above the board. This module gives it the entrance it earns:
 //
-//   ready cascade → cards dealt face-down over the board → flipped ONE AT A TIME with
-//   a beat between each → your biggest hand called out → cards shrink into the row →
+//   round title → cards dealt face-down over the board → flipped ONE AT A TIME with a
+//   beat between each → your biggest hand called out → cards shrink into the row →
 //   your buffed units pulse → fight.
+//
+// The stage shows only the COMMUNITY CARDS and the ROUND NUMBER (Riley, 2026-08-05).
+// It does not name players or list the seats — the table panel already does that, and
+// a roll-call of six seats made the moment about the lobby rather than the board.
 //
 // THREE THINGS SHAPED THIS DESIGN, all of them constraints from the existing code:
 //
@@ -31,7 +35,7 @@
 // cards were already dealt and shaped by growCommunity before we're called, so this is
 // render-only and cannot move balance.
 //
-// Depends on: config (timings), state (flop, units, tableActive, seats), cards
+// Depends on: config (timings, MAX_ROUNDS), state (flop, roundNumber, units), cards
 // (rankLabel, SUITS), flop (renderFlop), synergies (bestHandsFor), board (unitNodeFor,
 // playHandPop).
 
@@ -142,8 +146,6 @@ function buildFlopStage(boardEl) {
   panel.style.top = Math.round(rect.top + rect.height / 2) + "px";
   stage.appendChild(panel);
 
-  panel.appendChild(buildReadyChips());
-
   const banner = document.createElement("div");
   banner.className = "fstage-banner";
   panel.appendChild(banner);
@@ -175,23 +177,6 @@ function buildFlopStage(boardEl) {
   flopDeckOrigin = { x: rect.right + 90, y: rect.top + rect.height / 2 };
 }
 
-// The ready cascade. Rendered on the STAGE rather than stamped onto the seat badges in
-// #tablePanel deliberately: renderTable() rebuilds that markup wholesale, so anything
-// written into it is one repaint away from vanishing. This owns its own pixels.
-function buildReadyChips() {
-  const ready = document.createElement("div");
-  ready.className = "fstage-ready";
-  const atTable = (typeof tableActive !== "undefined") && tableActive &&
-                  (typeof seats !== "undefined") && seats;
-  const n = atTable ? seats.length : 2;
-  for (let i = 0; i < n; i++) {
-    const chip = document.createElement("span");
-    chip.className = "fstage-chip";
-    chip.textContent = (i === 0) ? "YOU" : (atTable ? "S" + i : "P2");
-    ready.appendChild(chip);
-  }
-  return ready;
-}
 
 function buildBigCard(c) {
   const cs = SUITS[c.suit];
@@ -227,15 +212,10 @@ function runFlopTimeline() {
   const n = flopBigCards.length;
   let t = 0;
 
-  // 1. Seats ready up, left to right.
-  const chips = flopStageEl.querySelectorAll(".fstage-chip");
-  const step = FLOP_READY_MS / (chips.length + 1);
-  for (let i = 0; i < chips.length; i++) {
-    const chip = chips[i];
-    flopAt(t + step * i, function () { chip.classList.add("lit"); });
-  }
-  flopAt(t + step * chips.length, function () { setFlopBanner("ALL IN — DEALING", "deal"); });
-  t += FLOP_READY_MS;
+  // 1. The title beat: which round this is, and nothing else. The stage names only the
+  //    round and shows only the community cards — no player or seat list.
+  setFlopBanner("ROUND " + roundNumber + " OF " + MAX_ROUNDS, "round");
+  t += FLOP_TITLE_MS;
 
   // 2. The deal: cards fly in from the shoe, face-down, on a stagger.
   for (let i = 0; i < n; i++) {
@@ -369,7 +349,6 @@ function flopShrinkToRow() {
   flopStageEl.style.pointerEvents = "none";        // skipping is moot from here on
   const fade = { duration: fms(FLOP_SHRINK_MS), easing: "ease-out", fill: "forwards" };
   flopStageEl.querySelector(".fstage-dim").animate([{ opacity: 1 }, { opacity: 0 }], fade);
-  flopStageEl.querySelector(".fstage-ready").animate([{ opacity: 1 }, { opacity: 0 }], fade);
   flopStageEl.querySelector(".fstage-banner").animate(
     [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(.9)" }], fade);
 
