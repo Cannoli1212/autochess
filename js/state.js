@@ -188,6 +188,16 @@ let flop = [];
 let communityDeck = [];
 let flopRevealed = false;   // the flop stays face-down until Round Start
 
+// THE ROUND-START POOL SNAPSHOT (face-card pass, Riley 2026-08-06). pokerPool() reads
+// live `units` and the live `flop` — which is exactly right DURING a fight, and wrong
+// AFTER one: combat.js's death filter strips every casualty out of `units`, so by the
+// time finishRound runs, the loser's pool is empty and the winner's is only survivors.
+// Anything that asks "how many of this rank did I have?" at round END (the Jack of
+// Diamonds' loot, the Queen of Spades' fielded tax) would read a pool that no longer
+// describes the army that fought. So beginFight freezes the pool here, and those readers
+// hand it to packCountForRank explicitly. Cleared in nextRound.
+let roundPool = { player1: [], player2: [] };
+
 // What is currently being dragged: a hand card, or a unit from the board.
 let dragData = null;
 

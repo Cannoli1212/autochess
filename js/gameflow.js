@@ -313,6 +313,12 @@ function beginFight(struck) {
   // boosted stats are visible as the fight begins.
   applySynergies();
 
+  // FREEZE the poker pool for the round (face-card pass). Taken here, with the flop
+  // revealed and the full army still standing, because this is the last moment the pool
+  // describes the army that is about to fight — the death filter starts eating it on the
+  // first tick. finishRound's of-a-kind reads (loot, the Black Lady's tax) count off this.
+  ["player1", "player2"].forEach(function (team) { roundPool[team] = pokerPool(team); });
+
   // Rank abilities that fire once as the fight begins (Rally). Run AFTER
   // applySynergies so an aura multiplies the already-buffed attack numbers.
   for (let i = 0; i < units.length; i++) {
@@ -365,6 +371,9 @@ function nextRound() {
   jokerOfferAbort();            // and any unanswered joker offer — its hand is about to
                                 // be topped up anyway, and drawHands re-offers below
   tapSel = null;                // and any tap-to-place selection from last round
+  roundPool = { player1: [], player2: [] };   // last round's frozen poker pool is spent;
+                                // empty again means "we are between rounds", so
+                                // packCountForRank goes back to reading the live pool
   // Every unplayed leftover card carries into the next round automatically (holding
   // is no longer optional). We just clear any stale `held` flag; nothing is discarded
   // here — drawHands only tops the carried hand up to the new round's HAND_SCHEDULE.

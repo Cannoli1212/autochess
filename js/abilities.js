@@ -17,7 +17,28 @@
 // bake a scaled number onto the unit (like applySynergies), so a copy dying
 // mid-fight never weakens the survivors.
 function packCount(unit) {
-  return packGateFloor(unit.team, rankCounts(pokerPool(unit.team))[unit.rank] || 1);
+  return packCountForRank(unit.team, unit.rank);
+}
+
+// The same count, asked about a RANK rather than a unit — for the face-card legendaries
+// that are read outside combat, from cards, where there is no unit to hand (the Jack of
+// Diamonds' loot and the Queen of Spades' tax both resolve in finishRound). Split out so
+// there is exactly ONE definition of "how many of this rank do I have": a second copy of
+// this rule that could disagree with the one combat uses is precisely the bug nobody
+// would ever notice.
+//
+// `pool` is optional and defaults to the LIVE pool, which is what every in-combat caller
+// wants. The round-end readers pass roundPool[team] instead, because by then the death
+// filter has eaten the live one (see the roundPool comment in state.js).
+//
+// Passing the pool in, rather than having this function reach for the snapshot itself, is
+// deliberate: a global preference would mean any headless harness that runs while a live
+// round is open — a balance scan from the console mid-fight, a table seat's match — would
+// silently count off the LIVE game's army instead of its own. Which army you are asking
+// about is genuinely the caller's question, so the caller answers it.
+function packCountForRank(team, rank, pool) {
+  const ranks = (pool && pool.length) ? pool : pokerPool(team);
+  return packGateFloor(team, rankCounts(ranks)[rank] || 1);
 }
 
 // The Superstitious (joker): a LONE card counts as a pair, which is enough to switch
@@ -1503,13 +1524,21 @@ function runAbilityHook(unit, hookName, ctx) {
 
 // The LIVING same-team, same-suit unit of a given rank — a card's "royal partner"
 // (the K♥/Q♥ bond: each finds the other by rank). null if it isn't on the board.
-function livingPartner(unit, rank) {
+//
+// `anySuit` (face-card pass, Riley 2026-08-06) is the of-a-kind unlock: with a court full
+// of Queens, the bond widens to ANY same-team royal of that rank rather than only her own
+// suit. A same-suit partner is ALWAYS preferred when one is alive, so switching this on can
+// never demote a real K♥/Q♥ bond to an off-suit stand-in. Omitted/false = today exactly,
+// including the tie-order, because the loop still returns the first same-suit match it sees.
+function livingPartner(unit, rank, anySuit) {
+  let offsuit = null;
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
-    if (u !== unit && u.team === unit.team && u.suit === unit.suit &&
-        u.rank === rank && u.hp > 0) return u;
+    if (u === unit || u.team !== unit.team || u.rank !== rank || u.hp <= 0) continue;
+    if (u.suit === unit.suit) return u;                  // the true bond, first match, as ever
+    if (anySuit && offsuit === null) offsuit = u;         // remember the best stand-in, keep looking
   }
-  return null;
+  return anySuit ? offsuit : null;
 }
 
 // If `target` is a guarded Queen whose royal partner (her King) is alive, return
@@ -1546,6 +1575,15 @@ function handTax(team) {
 // Does `team`'s ENEMY have a fielded queen that extinguishes `suit`? If so, that
 // suit's flush synergy is switched off for `team` (see teamSynergyEffects). Reads
 // live units, so the extinguisher only needs to be on the board at round start.
+//
+// An extinguisher may name its victims three ways, newest first: a `tiers` ladder (the
+// Heartbreaker snuffs more suits the more Queens you hold), a flat `suits` list, or the
+// original single `suit`. The fallback chain means the shipped
+// `{ kind:"extinguish", suit:"hearts" }` entry keeps working with nothing changed.
+//
+// The tier is read INLINE, never from a field baked at round start: this runs inside
+// applySynergies, which gameflow.js calls BEFORE the onRoundStart hook loop — a baked
+// stamp would always be one round stale.
 function isSuitExtinguished(team, suit) {
   const enemy = (team === "player1") ? "player2" : "player1";
   for (let i = 0; i < units.length; i++) {
@@ -1553,7 +1591,11 @@ function isSuitExtinguished(team, suit) {
     if (u.team !== enemy) continue;
     const list = u.abilities || [];
     for (let j = 0; j < list.length; j++) {
-      if (list[j].kind === "extinguish" && list[j].suit === suit) return true;
+      const a = list[j];
+      if (a.kind !== "extinguish") continue;
+      const t = a.tiers && a.tiers[Math.min(packCount(u), 4)];
+      const snuffed = (t && t.suits) || a.suits || [a.suit];
+      if (snuffed.indexOf(suit) !== -1) return true;
     }
   }
   return false;

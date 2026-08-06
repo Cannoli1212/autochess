@@ -191,9 +191,13 @@ function ofAKindLadders(a) {
 // its absence at pair and appearance at trips is already the clearest way to say "a third
 // copy turns this on". The champion tooltip, which has room for a full ladder, does spell
 // out "locked" — see tipAbilityHTML.
-function ofAKindText(rank, rung) {
+function ofAKindText(rank, rung, team) {
   const parts = [];
-  if (Number(rank) !== 2) parts.push(ofAKindRung(rank, rung).text);
+  // ofAKindRung returns null for a rung a rank's table doesn't define. Unreachable while
+  // OF_A_KIND_OVERRIDE is empty — and the face-card pass is precisely the change that can
+  // fill it, so guard rather than assume.
+  const stat = Number(rank) !== 2 ? ofAKindRung(rank, rung) : null;
+  if (stat) parts.push(stat.text);
 
   (RANK_ABILITIES[Number(rank)] || []).forEach(function (a) {
     const words = ABILITY_TEXT[a.kind];
@@ -204,6 +208,32 @@ function ofAKindText(rank, rung) {
       const line = words.rung(t, a, rung);
       if (!line) return;
       parts.push((lad.tag ? lad.tag + " " : "") + line);
+    });
+  });
+
+  // FACE RANKS (J/Q/K/A) have no RANK_ABILITIES ladder — their of-a-kind power lives
+  // per-SUIT in UNIQUE_CARDS, because four Kings means four DIFFERENT bespoke cards rather
+  // than four copies of one kit. Without this branch a quad-Kings chip would print nothing
+  // but the flat stat line, which is the exact "a face pair is a meaningless decision"
+  // complaint this pass exists to fix, merely relocated from combat into the sidebar.
+  //
+  // Each clause is tagged with its suit symbol, the same convention ofAKindLadders uses for
+  // rank 10's four rally faces. `team` filters to the suits actually in play: all four suits
+  // carry a legendary at every face rank, and an untagged four-clause line on a one-line chip
+  // would be unreadable.
+  SUIT_NAMES.forEach(function (s) {
+    const uniq = UNIQUE_CARDS[s + "-" + Number(rank)];
+    if (!uniq) return;
+    if (team && !units.some(function (u) {
+      return u.team === team && u.suit === s && u.rank === Number(rank);
+    })) return;
+    (uniq.abilities || []).forEach(function (a) {
+      const words = ABILITY_TEXT[a.kind];
+      if (!words || !words.rung || !a.tiers) return;
+      const t = a.tiers[rung];
+      if (!t) return;
+      const line = words.rung(t, a, rung);
+      if (line) parts.push(SUITS[s].symbol + " " + line);
     });
   });
 
@@ -236,7 +266,7 @@ function renderPokerTraits(bar, team) {
         const t = ofAKindRung(rank, k);
         const on = shown === k;
         tip += '<div class="tip-tier' + (on ? " on" : "") + (n >= k ? " reached" : "") + '">' +
-               '<b>' + t.label + " · " + k + '</b> ' + ofAKindText(rank, k) + '</div>';
+               '<b>' + t.label + " · " + k + '</b> ' + ofAKindText(rank, k, team) + '</div>';
       });
       const nameHTML = info.label + " of " + rankLabel(rank) +
                        ' <span class="trait-count">×' + n + '</span>';

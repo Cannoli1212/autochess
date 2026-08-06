@@ -235,4 +235,180 @@ const ABILITY_TEXT = {
     desc: "Grows stronger with every ally fighting beside it, and feeds some of that back " +
           "to them.",
   },
+
+  // ── The 16 legendaries (J/Q/K/A) ──────────────────────────────────────────
+  // Until now NOT ONE legendary had an entry here, which had a consequence nobody
+  // intended: tipAbilityHTML skips any ability carrying neither a `name` nor an entry in
+  // this table, so thirteen of these kits were INVISIBLE in the champion panel, and the
+  // five that do carry a name rendered as a heading with nothing underneath. A face card's
+  // whole identity was one ★ blurb line. These entries are what let the of-a-kind ladders
+  // below actually be read — and they un-hide the passives even at a lone copy.
+  //
+  // `name` is supplied here only for the kits that don't carry one on their config entry
+  // (see the SHAPE note at the top of this file). Vanish, Sniper Round, Aegis Vow, Rally
+  // and Cleric already name themselves and win.
+
+  // ── Jacks — the knave: the help, the hired hand ───────────────────────────
+  bower: {
+    name: "Bower",
+    desc: "The one-eyed Jack rallies an entire suit as the fight begins — and until he has " +
+          "the court behind him, he rallies the enemy's half of that suit too.",
+    rung: function (t, a) {
+      const what = t.hpMult != null    ? "+" + abilPct(t.hpMult) + " max HP"
+                 : t.speedMult != null ? "+" + abilPct(t.speedMult) + " attack speed"
+                 : t.atkMult != null   ? "+" + abilPct(t.atkMult) + " attack" : "";
+      return "every " + SUITS[a.buffSuit].symbol + " gets " + what +
+             (t.ownTeamOnly ? " — YOURS only" : " — on both boards");
+    },
+  },
+  loot: {
+    name: "Highwayman",
+    desc: "Field him and your team skims a bigger cut off every round it wins. Pure economy — " +
+          "he never has to swing to pay.",
+    rung: function (t) {
+      return "steal +" + abilPct(t.stealMult) + " chips on a win" +
+             (t.lootOnLoss ? " · and skim a cut even when you LOSE" : "");
+    },
+  },
+  cleave: {
+    name: "Cleave",
+    desc: "Every hit carries through into the enemies standing around its target.",
+    rung: function (t) {
+      return "splash " + abilPct(t.cleaveMult) + " damage across the " +
+             abilRingCells(t.radius) + " cells around the target";
+    },
+  },
+
+  // ── Queens — the court: control, support, curses ──────────────────────────
+  royalGuard: {
+    name: "Royal Guard",
+    desc: "While her King stands, every hit meant for her lands on him instead.",
+    rung: function (t) {
+      return t.anyRoyalSink ? "ANY King on your team takes her hits"
+                            : "her own King takes her hits";
+    },
+  },
+  shieldPartner: {
+    desc: "Every time her bar fills she banks a shield onto her King rather than striking.",
+    rung: function (t) {
+      return "shields him for " + abilPct(t.shieldFrac) + " of her max HP" +
+             (t.anyRoyalCast ? " · and any King will do" : "");
+    },
+  },
+  extinguish: {
+    name: "Heartbreaker",
+    desc: "A hard counter: while she is fielded, the enemy's suit synergy simply does not " +
+          "switch on. She never has to survive — the damage is done before the first tick.",
+    rung: function (t) {
+      const syms = t.suits.map(function (s) { return SUITS[s].symbol; }).join("");
+      return "snuffs the enemy's " + syms + (t.suits.length > 1 ? " synergies" : " synergy");
+    },
+  },
+  cleric: {
+    desc: "A board-wide healer who mends her most-wounded ally each cast, and hits soft to " +
+          "pay for it.",
+    rung: function (t) {
+      return "mends for " + t.healPower + "× her attack" +
+             (t.splash ? " · and the allies beside the patient" : "");
+    },
+  },
+  houseTax: {
+    name: "The Black Lady",
+    desc: "You cannot discard her. Held, she bleeds you chips to the house every round — the " +
+          "only way to be rid of her is to field her. With her sisters beside her, the bleeding " +
+          "starts flowing the other way.",
+    rung: function (t, a) {
+      if (!t.enemyPenalty) {
+        return "no upside yet — held, she still costs you " + a.penalty + " chips a round";
+      }
+      return "fielded, the ENEMY bleeds " + t.enemyPenalty + " chips a round" +
+             (t.shootTheMoon ? " — doubled, and you pay no house tax at all" : "");
+    },
+  },
+
+  // ── Kings — the commander: snowballs and bombardment ──────────────────────
+  royalVow: {
+    name: "Royal Vow",
+    desc: "His death is not the end of him: it leaves his Queen briefly untouchable.",
+    rung: function (t) {
+      return "she is untouchable for " + t.invulnTicks + " ticks after he falls";
+    },
+  },
+  attackBuffPartner: {
+    desc: "Each cast is an order, not a blow — his Queen swings harder for a short window, " +
+          "refreshed every time the bar fills.",
+    rung: function (t) {
+      return "+" + abilPct(t.mult - 1) + " attack for " + t.buffTicks + " ticks" +
+             (t.allRoyals ? " · to EVERY royal you field" : "");
+    },
+  },
+  midasKing: {
+    name: "Midas Touch",
+    desc: "He is worth exactly what you are: his strength rises with your chip stack and " +
+          "falls with it, though never all the way down.",
+    rung: function (t) {
+      return "+" + abilPct(t.perChip * 100) + " attack per 100 chips over the baseline · " +
+             "never below " + abilPct(t.floor) +
+             (t.platesHp ? " · and the gold plates his health too" : "");
+    },
+  },
+  airstrike: {
+    name: "Airstrike",
+    desc: "Mark squares on the enemy's half during planning, blind, before their army is " +
+          "revealed. Anything standing there dies before the fight begins.",
+    rung: function (t) {
+      return "mark " + t.squares + " enemy squares" +
+             (t.blastFirst ? " · the first one blows a 5-cell cross" : "");
+    },
+  },
+  warlordLevy: {
+    name: "Warlord's Levy",
+    desc: "Every cheap body you have spent this game feeds him. Cumulative all game, and " +
+          "never capped.",
+    rung: function (t) {
+      return "+" + abilPct(t.perCard) + " attack per cheap card played" +
+             (t.wideLevy ? " · 6s and 7s now count too" : "");
+    },
+  },
+
+  // ── Aces — the elite: singular, decisive ──────────────────────────────────
+  infiltrator: {
+    name: "Infiltrator",
+    desc: "Ignores the placement rules entirely — drop it anywhere, including deep in the " +
+          "enemy's own zone. It still costs a unit slot, so a greedy dive just feeds them a kill.",
+  },
+  dropAggro: {
+    desc: "Strikes, then slips the focus fire: enemies re-path off it and swing at someone else.",
+    rung: function (t) {
+      return "untargetable " + t.ticks + " ticks" +
+             (t.ambushMult ? " · ×" + t.ambushMult + " damage on the swing out of stealth" : "") +
+             (t.ghost ? " · and splash, poison and traps stop finding it too" : "");
+    },
+  },
+  sniperShot: {
+    desc: "Charges a special round while it auto-fires, then looses it at the enemy's deepest " +
+          "unit — though a body standing in the way can take it instead.",
+    rung: function (t) {
+      return t.spellPower + "× attack to the backline · " +
+             (t.pierce ? "pierces every body on the line" : "a body can block it");
+    },
+  },
+  shieldOnKill: {
+    name: "Aegis",
+    desc: "Every kill banks a shield, so the further it cuts into the line the harder it is " +
+          "to stop.",
+    rung: function (t) {
+      return "shield worth " + abilPct(t.fraction) + " of the victim's max HP" +
+             (t.mirrorFrac ? " · " + abilPct(t.mirrorFrac) + " of it mirrors to the nearest ally" : "");
+    },
+  },
+  summonOnKill: {
+    name: "Necromancer",
+    desc: "Each kill drags a body up to fight beside it — free, and over the round's unit cap.",
+    rung: function (t) {
+      if (t.raiseSlain) return "raises the SLAIN ENEMY itself to fight for you";
+      return t.bodies + (t.bodies === 1 ? " body" : " bodies") + " off your bench per kill" +
+             (t.statMult ? " at +" + abilPct(t.statMult) + " stats" : "");
+    },
+  },
 };
