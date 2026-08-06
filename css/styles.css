@@ -229,6 +229,9 @@
   .fx-block   { color: #cfd8dc; font-size: 12px; letter-spacing: .06em; }
   /* An execution is the opposite: the loudest thing on the board. */
   .fx-execute { color: #ff5252; font-size: 24px; text-shadow: 0 0 6px #000, 0 0 10px rgba(255,0,0,.9); }
+  /* Lucky Stiff cheated death — big and bright, because a unit surviving lethal damage is
+     the most confusing thing on the board if it happens quietly. */
+  .fx-survive { color: #7dffb0; font-size: 22px; text-shadow: 0 0 6px #000, 0 0 10px rgba(60,255,150,.9); }
 
   /* WEEK 3 — the words for everything that ISN'T damage.
      These are deliberately QUIETER than the damage numbers (smaller, softer colours).

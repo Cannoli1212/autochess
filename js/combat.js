@@ -347,7 +347,11 @@ function attackTarget(attacker, target) {
   // payoff (Ace of Diamonds banks a shield, Ace of Hearts summons a bench card).
   // Fired here, once, the moment HP crosses 0 — the dead unit is filtered out later
   // in combatStep, so this is the last chance to react to the kill.
-  if (sink.hp <= 0) {
+  //
+  // A unit holding an unspent Lucky Stiff save is NOT a kill: combatStep will veto its death
+  // later this tick. Checking here keeps the two in step — otherwise the attacker banks a
+  // shield or raises a body off a corpse that gets back up.
+  if (sink.hp <= 0 && !sink.luckySave) {
     runAbilityHook(attacker, "onKill", { target: sink });
   }
 }
@@ -381,7 +385,8 @@ function dealSpellDamage(caster, target, amount) {
   if (soaked > 0) emitFx("absorb", { x: sink.x, y: sink.y, uid: sink.uid, amount: soaked });
   if (dmg > 0)    emitFx("spell",  { x: sink.x, y: sink.y, uid: sink.uid, amount: dmg });
   runAbilityHook(sink, "onDamaged", { attacker: caster, damage: dmg });
-  if (sink.hp <= 0) runAbilityHook(caster, "onKill", { target: sink });
+  // Same rule as attackTarget: a target the Lucky Stiff is about to save isn't a kill.
+  if (sink.hp <= 0 && !sink.luckySave) runAbilityHook(caster, "onKill", { target: sink });
 }
 
 // Healing (casting Slice 2): the mirror of dealSpellDamage — restore HP, capped at the
@@ -613,6 +618,27 @@ function combatStep() {
       const enemy = units[i].team === "player1" ? "player2" : "player1";
       recordDamage(null, units[i], units[i].poison, enemy);
     }
+  }
+
+  // ── THE LUCKY STIFF: the lethal-damage veto ────────────────────────────────
+  // The engine has four places that reduce HP — an auto-attack, a spell, a trap and the
+  // poison drain — and none of them had a pre-death hook. Rather than add a veto to all four
+  // (and to whatever the fifth turns out to be), this intercepts at the ONE point death is
+  // actually decided: the moment before the dead are processed. Anything that dropped a unit
+  // to 0 or below is caught here, whatever did it.
+  //
+  // Must run BEFORE everything below — the plague transfer, the onDeath hooks, the death FX
+  // and the roundDeaths tally all key off `hp <= 0`, and a saved unit is not dead, so it must
+  // not pass its plague on, fire its death rattle, or be counted as a casualty.
+  //
+  // The chance was already rolled and baked per-unit at round start (applyJokerRoundStart), so
+  // this only spends a save that exists. One per unit per fight, so it can never stall a fight.
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.hp > 0 || !u.luckySave) continue;
+    u.luckySave = 0;                       // spent
+    u.hp = 1;                              // a sliver, not a reset — this is a reprieve
+    if (!SIM_MODE) emitFx("survive", { x: u.x, y: u.y, uid: u.uid });
   }
 
   // Poison transfer (rank 9's plague rank-up): anyone dying this tick WHILE

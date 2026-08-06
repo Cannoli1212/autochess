@@ -102,6 +102,10 @@ const FX_NUMBER_KINDS = {
   gold:   { cls: "fx-gold",   prefix: "💰+" },  // 777 payout / Gambler's steal
   summon: { cls: "fx-summon", text: "✚" },      // Necromancer raised a body here
   shield: { cls: "fx-shield", prefix: "🛡+" },  // a shield was BANKED (absorb is it being SPENT)
+  // The Lucky Stiff cheated death here. Needs saying loudly: a unit surviving a hit that
+  // should have killed it is the single most confusing thing that can happen on the board
+  // if it happens silently — it reads as the damage numbers being wrong.
+  survive:{ cls: "fx-survive",text: "🩹" },     // lethal refused; the unit is left on 1 HP
 };
 
 // ── The BEAM primitive: draw a line between two board squares ────────────────

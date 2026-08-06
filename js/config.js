@@ -992,6 +992,17 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
 
+  // ── Cheating death ─────────────────────────────────────────────────────────
+  // Each of your units gets ONE roll, the first time something would kill it, to survive at
+  // 1 HP instead. One roll per unit per fight, so it can never stall a fight into the tick
+  // guard, and a saved unit is left on a sliver — a reprieve, not a reset.
+  //
+  // Worth more than it looks: survivors are what the chip steal is counted from
+  // (CHIPS_PER_SURVIVOR), so a unit that lives at 1 HP both keeps swinging AND fattens the
+  // haul if you win. At 25% over a 5-unit board that's ~1.25 extra bodies a fight.
+  luckyStiff:  { name: "The Lucky Stiff",  icon: "🩹", weight: 1, luckySaveChance: 0.25,
+                 blurb: "Shouldn't have survived that. Each of your units has a 25% chance to cheat death once, living at 1 HP." },
+
   // ── Permanent growth (the ramp jokers) ─────────────────────────────────────
   // The catalog's only SCALING jokers: weak the round you claim them, frightening if you
   // claimed them early. Every card you field banks growth on its rank (Grinder) or its suit

@@ -115,10 +115,25 @@ function paySeatComps(seat, opts) {
 // pass — after synergies have baked, so this multiplies the finished number the way
 // the round-start ability hooks do.
 //
-// Today that's just The High Roller: attack scales with how far your chip stack has
-// grown past the opening one, capped at JOKER_ATK_CAP. Reads `chips`, which in table
-// mode has already been loaded from the seats, so it sees the real stack.
+// Two jokers land here, and the return value is only about the first:
+//
+//   The High Roller — attack scales with how far your chip stack has grown past the opening
+//     one, capped at JOKER_ATK_CAP. Reads `chips`, which in table mode has already been
+//     loaded from the seats, so it sees the real stack. Returned so startRound can report it.
+//   The Lucky Stiff — stamps each unit with its ONE chance to cheat death, baked here (like
+//     every other per-fight number) so it can't be re-rolled mid-fight.
 function applyJokerRoundStart(team) {
+  // Lucky Stiff first: it has to be stamped whether or not the High Roller is held, so it
+  // can't sit behind that joker's early return.
+  const saveChance = jokerSum(team, "luckySaveChance");
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].team !== team) continue;
+    // Roll ONCE per unit, now, rather than at the moment of death. Baking the outcome means a
+    // unit's fate is fixed for the fight — the same reason Berserk and Bulwark bake their
+    // numbers at round start — and it keeps the save from re-rolling every lethal hit.
+    units[i].luckySave = (saveChance > 0 && Math.random() < Math.min(1, saveChance)) ? 1 : 0;
+  }
+
   const perChip = jokerSum(team, "atkPerChip");
   if (perChip <= 0) return 0;
   const over = Math.max(0, (chips[team] || 0) - ATK_BASELINE_CHIPS);
