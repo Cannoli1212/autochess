@@ -1,7 +1,7 @@
 # Jokers — the catalog
 
 The design doc for the joker layer. **Read this before adding a joker entry to
-`js/config.js`.** Written 2026-08-05 (Riley's design pass).
+`js/config.js`.** Written 2026-08-05 (Riley's design pass). **All three waves shipped: 23 jokers.**
 
 A joker is **not a unit**. It has no suit, no rank, no attack and no HP, it can never be placed on the
 board, and it is the game's only *player-level* upgrade. You may hold `JOKER_SLOTS` (3) at a time — the
@@ -94,9 +94,10 @@ family. That's the build order.
 | **Economy / shop** | `finishRound`'s payout, `teamLootMult`, `rerollPrice`, `packPrice` | **built** |
 | **B — Hand (activated)** | The activation flow in `jokers.js` + `makeCardOf` to re-derive stats | **built** |
 | **A — Flop** | `applyJokerFlopShaping` inside `growCommunity` | **built** |
+| **C — Persistence** | Cards surviving `nextRound`, then the `rankGrowth` / `suitGrowth` banks | **built** |
 | **D — Triggers** | The `roundDeaths` tally, paid at `finishRound` | **built** |
 | **E — Stats** | The `low` term in `applySynergies` | **built** (one entry) |
-| **C — Persistence** | Things surviving `nextRound` — cards (built), then stats (new state) | **cards built** / wave 3 |
+| **F — Combat primitives** | A lethal veto + a retrigger in `combat.js` | **built** |
 
 ### Activated jokers
 
@@ -231,15 +232,76 @@ already-buffed one, which is why the blurb says "+100%" and not "double". The fi
 
 ## Wave 3 — needs real primitives
 
-Wave 3 takes the catalog from **18 to ~24** and is the first wave where nothing is a one-liner.
+Wave 3 was the first wave where nothing was a one-liner — every entry needed a new engine
+primitive. **Catalog 18 → 23.**
 
-| | Joker | Primitive needed |
-|---|---|---|
-| 📈 | **The Grinder** | Playing a rank permanently buffs all your cards of that rank. Persistent per-rank state surviving `nextRound` — **must** join the sim snapshot |
-| 🧿 | **The Believer** | Same, keyed by **suit** — promotes mono-suit decks. Shares the Grinder's state; build them together |
-| 🃏 | **The Understudy** | Your joker plays as a real **wild card** in the poker pool. `pokerPool` returns `number[]` and a wild isn't a rank, so the pool's representation changes — and it's the shared input to `pokerBuffs`, `packCount` *and* `renderPokerTraits`. The thematically perfect joker and the most invasive change in the catalog: build it last, alone |
-| 🩹 | **The Lucky Stiff** | A unit sometimes survives lethal. Needs a lethal-damage intercept — `combat.js` writes `sink.hp` with no pre-death veto |
-| 🔁 | **The Shill** | One unit strikes twice on its first hit. **Double Tap / retrigger** — `FUSION-IDEAS.md` primitive #1, so the cost is shared with the fusion roadmap |
+| | Joker | Rarity | Field | Effect |
+|---|---|---|---|---|
+| 📈 | The Grinder | rare | `rankGrowthPerPlay: 0.10` | fielding a card permanently buffs that **rank** |
+| 🧿 | The Believer | rare | `suitGrowthPerPlay: 0.05` | the same, keyed by **suit** |
+| 🩹 | The Lucky Stiff | rare | `luckySaveChance: 0.25` | each unit may cheat death once, at 1 HP |
+| 🔁 | The Shill | rare | `firstHitDoubles: 1` | each unit strikes **twice** on its first hit |
+| 🃏 | The Understudy | rare | `wildCards: 1` | your joker counts as an extra card of your commonest **rank** |
+
+### The primitives it added
+
+**A lethal-damage veto** (Lucky Stiff). Four places reduce HP — attack, spell, trap, poison drain —
+and none had a pre-death hook. Rather than bolt a veto onto all four, it intercepts at the one point
+death is *decided*: the pass in `combatStep` just before the dead are processed. Placement is
+load-bearing — it runs before the plague transfer, the `onDeath` hooks, the death FX and the
+`roundDeaths` tally, all of which key off `hp <= 0`, and a saved unit is not dead.
+
+The chance is **baked per unit at round start**, not rolled at death, so a unit's fate is fixed for
+the fight and the save can't re-roll on every lethal hit. `onKill` now checks for an unspent save at
+both its trigger sites, or an attacker banks a shield off a corpse that gets back up.
+
+**Double Tap / retrigger** (Shill) — `FUSION-IDEAS` primitive #1, so **7-7 Hockey Sticks now has its
+engine support waiting**. `attackTarget` re-enters itself once. A full re-entry, not "damage twice":
+the second swing rolls its own crit, banks its own mana, can be dodged, and emits its own number, so
+the player sees two hits because two hits happened. `doubleTaps` is a *counter*, so two Shills double
+the first two swings. Three guards: no chain, no swinging at a corpse, and none if Thorns killed the
+attacker.
+
+**Persistent growth** (Grinder / Believer) — the first joker state that must be **neutralized** in
+`simInstall`, not merely snapshotted. A player seven rounds into a Grinder would otherwise hand every
+headless fight a +230% rank. Verified by control, not assertion: the fat bank demonstrably *does*
+change combat (a 9♠ from 270 → 554) yet reads `{}` inside `tableMatch`.
+
+### The Understudy: the invasive change that wasn't
+
+Planned as the riskiest thing in the catalog, because `pokerPool` returns `number[]` and feeds
+`pokerBuffs`, `packCount`, `bestStraight`, `fullHouseRanks` *and* `renderPokerTraits`.
+
+It didn't need to be. **The wild resolves to a concrete rank inside `pokerPool`, before the pool is
+returned** — so every consumer keeps reading a plain `number[]` and not one of them changed. That's
+the whole implementation.
+
+It resolves to the rank you hold **most** of, which is the strongest reading rather than a compromise:
+of-a-kind count doesn't just pay stats, it *gates and tiers every rank ability* through `packCount`. A
+wild that turns a pair into trips beats one that completes a straight, and it's predictable enough to
+build around. Ties go to the higher rank. It even completes a full house ([8,8,9,9] + wild → trips 9
+over pair 8), and it's the only wave-3 joker that is **not** `aiUseless` — a seat has a pool too.
+
+### Measured payoffs
+
+| Joker | Measurement |
+|---|---|
+| The Shill | seat win rate **54.8% → 67.0%** over 400 headless matches — the strongest single combat joker |
+| The Lucky Stiff | winning survivors **460 → 528** (+15%), so ~15% more chips stolen too |
+| The Believer | mono-suit, full army every round: **×2.15** on that suit by round 7 |
+| The Grinder | replaying ~2 of a rank a round: **×2.40** on that rank by round 7 |
+| Both ramps | committed to one rank *and* one suit: **×4.45** — the outlier to watch |
+
+### Open balance question: the rarity shape is inverted
+
+The catalog is **10 rare / 8 uncommon / 5 common**, because every wave-3 entry was weighted rare. A
+catalog usually wants the opposite pyramid — many commons, few rares — and right now every joker with
+a *game* effect is uncommon or better while all five commons are economy/shop jokers.
+
+It isn't broken (each individual rare is ~2.2% of a draw), but "rare" means less when 10 of 23 are
+rare. Cheapest fixes, all single numbers: demote the milder rares (the Lucky Stiff and The Card Sharp
+are the obvious candidates — incremental rather than build-defining), or re-space the weights
+themselves (common 6 / uncommon 3 / rare 1) so the shape holds regardless of the counts.
 
 **Deferred, unscheduled:** 🗼 the super card — fuse your whole hand into one unit. `FUSABLE_HANDS` is
 rank-pair keyed, so this needs a new whole-hand fusion path.
