@@ -85,7 +85,15 @@ function pairSeats(seats) {
 // Phase D2: pass an array as `frames` and a board snapshot is pushed each tick, so
 // the fight can be replayed on the real board later. Omit it (balance scans do) and
 // nothing is recorded — behavior is otherwise identical.
-function tableMatch(seatA, seatB, armySizeThisRound, frames) {
+// The last two arguments exist only for the balance harness (simstrategy.js) and are
+// undefined on every shipped call site, so the live game and the existing scans take
+// exactly the paths they always did:
+//   • `communityRound` — the TRUE round number, used only to size the community. The
+//     normal path conflates round with army size (see below), which means no scan has
+//     ever dealt the 5-card river. The harness passes the real round to fix that.
+//   • a seat may carry `.hand` (cards persist across rounds, so leftovers carry like
+//     the live game) and `.strategy` (its drafting personality).
+function tableMatch(seatA, seatB, armySizeThisRound, frames, communityRound) {
   // Side assignment: A is always player1, B always player2 for this match. (Which
   // physical zone that is doesn't bias anything — the AI mirrors its placement.)
   units = [];
@@ -93,7 +101,7 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
   traps = [];                                      // simInstall wraps BOTH headless fights, so
                                                    // clear per-match or fight 1's bombs arm fight 2
   resetRoundStats();
-  roundNumber = armySizeThisRound;                 // sizes this match's community deck (communityTarget)
+  roundNumber = (communityRound === undefined) ? armySizeThisRound : communityRound;
   armyOverride = armySizeThisRound;                // force aiPlaceUnits to place exactly this many units
   weakCardsPlayed = { player1: 0, player2: 0 };
   played = { player1: [], player2: [] };
@@ -108,12 +116,15 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames) {
     // Hand = army + 1, matching the live HAND_SCHEDULE (place all but one), widened by
     // any hand-size joker the seat holds. Reroll still isn't emulated here, so background
     // AIs stay a touch weaker than a rerolling human — a pre-existing gap, not a new one.
-    player1: simDraftHand(armySizeThisRound + 1 + jokerSum("player1", "handBonus")),
-    player2: simDraftHand(armySizeThisRound + 1 + jokerSum("player2", "handBonus")),
+    // A seat that brought its OWN hand (the balance harness, which drafts + rerolls per
+    // its strategy) passes the array BY REFERENCE on purpose: playCard splices placed
+    // cards out of it, so whatever is left is the seat's carry into the next round.
+    player1: seatA.hand || simDraftHand(armySizeThisRound + 1 + jokerSum("player1", "handBonus")),
+    player2: seatB.hand || simDraftHand(armySizeThisRound + 1 + jokerSum("player2", "handBonus")),
   };
 
-  aiPlaceUnits("player1");
-  aiPlaceUnits("player2");
+  aiPlaceUnits("player1", seatA.strategy);
+  aiPlaceUnits("player2", seatB.strategy);
 
   flop = [];
   growCommunity();                                 // this round's community (renderFlop is gated by SIM_MODE)

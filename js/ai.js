@@ -35,8 +35,31 @@ function aiPickCell(team, card) {
 // Place a full army for an AI team: strongest card first (by attack + hp), until
 // it has placed its roundNumber units or runs out of cards. We re-scan the hand
 // each pass because playCard() splices the placed card out of it.
-function aiPlaceUnits(team) {
+//
+// `strategy` is OPTIONAL and only the balance harness passes it (see simstrategy.js).
+// Omit it and this is the original greedy bot, byte-for-byte — every shipped caller
+// (gameflow's live P2, sim.js, table.js) takes that path.
+//
+// Why a strategy needs the whole army up front: a pair, a flush and a straight are
+// properties of a SET of cards, so they are invisible to a loop that grades one card
+// at a time. strategyPickArmy picks the best legal subset in one shot; this loop then
+// just places that plan in order. We hold the chosen CARD OBJECTS rather than hand
+// indices because playCard splices the hand out from under us on every pass.
+function aiPlaceUnits(team, strategy) {
+  const plan = strategy ? strategyPickArmy(hands[team], armySize(), strategy) : null;
+
   while (countUnits(team) < armySize() && hands[team].length > 0) {
+    if (plan) {
+      // Next planned card that is still in hand. The guard is defensive only — a card
+      // can't leave the hand except by being placed by this very loop.
+      let idx = -1;
+      while (plan.length > 0 && idx === -1) idx = hands[team].indexOf(plan.shift());
+      if (idx === -1) break;                     // plan exhausted
+      const spot = aiPickCell(team, hands[team][idx]);
+      if (spot === null) break;
+      playCard(team, idx, spot.x, spot.y);
+      continue;
+    }
     // Find the strongest card still in hand. JOKERS are skipped: they have no attack
     // or hp (the score would be NaN) and they can't be placed at all. bestIdx starts
     // at -1 rather than 0 so a hand of nothing but jokers breaks out of the loop
