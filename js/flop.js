@@ -43,7 +43,11 @@ function growCommunity() {
   // growCommunity call (table.js) shapes a headless fight identically.
   applyJokerFlopShaping();
   flopRevealed = true;
-  renderFlop();
+  // NOTE: this deliberately does NOT render. Dealing and SHOWING are now separate:
+  // flopReveal() (flopreveal.js) owns the reveal and calls renderFlop() itself once
+  // the cinematic has landed, so the row can't pop face-up before the cards have been
+  // flipped over. Nothing is lost on the headless paths — table.js and sim.js call
+  // this inside SIM_MODE, where renderFlop was already a no-op.
 }
 
 // ── Joker shaping (The Optimist / The Cooler / The Dealer) ────────────────────

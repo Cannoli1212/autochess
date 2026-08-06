@@ -464,6 +464,78 @@ function addPokerBuff(buffs, rank, atkMult, hpMult) {
   buffs[rank].hpMult += hpMult;
 }
 
+// The poker hands a team has MADE, strongest first — the read-only counterpart to
+// pokerBuffs. Same pool, same evaluators (rankCounts / bestStraight / fullHouseRanks),
+// so the flop reveal's callout and the buffs that actually land can never disagree:
+// this returns DESCRIPTIONS where pokerBuffs returns multipliers. That's the same
+// reason the detection helpers were kept centralized when the old per-player hand
+// lists were deleted (see the note above teamSynergyEffects).
+//
+// Each entry carries the `ranks` that FORM the hand, which is exactly what the reveal
+// glows on the community cards and pulses on your units.
+//
+// Ordered by the atkMult the hand actually PAYS, not by poker's own hand ranking,
+// because "your biggest hand" here means the one that buffs you most — quads (+400%)
+// genuinely beat a full house (+150%) in this game, and a small straight (+40%) loses
+// to a plain pair (+50%). Reading the number straight out of POKER_HANDS means
+// retuning those rewards re-sorts this automatically. The small per-shape bonus only
+// breaks ties between hands paying the same multiplier (full house over trips).
+function bestHandsFor(team) {
+  const counts = rankCounts(pokerPool(team));
+  const out = [];
+
+  Object.keys(counts).forEach(function (key) {
+    const rank = Number(key);
+    let n = counts[key];
+    if (n < 2) return;
+    // Rank 2 pays NO stat buff — its of-a-kind reward is the Berserker ability
+    // (see pokerBuffs) — so it's announced as an unlock and scored below every real
+    // hand, letting the callout fall through to whatever else you made.
+    if (rank === 2) {
+      out.push({ key: "berserk", name: "BERSERKERS", ranks: [2],
+                 detail: "your 2s wake up", score: 0.01 });
+      return;
+    }
+    if (n > 4) n = 4;                                  // cap at quads, like pokerBuffs
+    const t = POKER_HANDS.ofAKind[n];
+    out.push({ key: "ofAKind" + n, name: t.label.toUpperCase(), ranks: [rank],
+               detail: rankLabel(rank) + "s", score: t.atkMult + 0.02 });
+  });
+
+  const doyle = POKER_HANDS.named.doyle;
+  if (doyle.ranks.every(function (r) { return (counts[r] || 0) >= 1; })) {
+    out.push({ key: "doyle", name: doyle.label.toUpperCase(), ranks: doyle.ranks.slice(),
+               detail: "10 + 2", score: doyle.atkMult + 0.01 });
+  }
+
+  // Straight and full house mirror pokerBuffs' tiering exactly — including the
+  // run.slice(0, 5) that decides WHICH five of a longer run actually get buffed, so
+  // the cards that glow are the cards that pay.
+  const run = bestStraight(counts);
+  if (run) {
+    const cfg = POKER_HANDS.shaped.straight;
+    const full = run.length >= 5;
+    const tier = full ? cfg.full : cfg.small;
+    const buffed = full ? run.slice(0, 5) : run.slice();
+    out.push({ key: full ? "straight" : "smallStraight",
+               name: full ? "STRAIGHT" : "SMALL STRAIGHT",
+               ranks: buffed,
+               detail: buffed.map(rankLabel).join(" · "),
+               score: tier.atkMult + 0.03 });
+  }
+
+  const fh = fullHouseRanks(counts);
+  if (fh) {
+    const f = POKER_HANDS.shaped.fullHouse;
+    out.push({ key: "fullHouse", name: f.label.toUpperCase(), ranks: fh.slice(),
+               detail: rankLabel(fh[0]) + "s full of " + rankLabel(fh[1]) + "s",
+               score: f.atkMult + 0.05 });
+  }
+
+  out.sort(function (a, b) { return b.score - a.score; });
+  return out;
+}
+
 // B5.2 + B6.1: bake both teams' synergies into their units, just before combat.
 function applySynergies() {
   ["player1", "player2"].forEach(function (team) {

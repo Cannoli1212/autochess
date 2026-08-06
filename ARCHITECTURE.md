@@ -45,6 +45,7 @@ autochess/
     ├── state.js       # SINGLE SOURCE OF TRUTH: mutable state + DOM refs + tiny reads
     ├── cards.js       # card factory + finite shoe (draw/discard/shuffle)
     ├── flop.js        # community flop (own deck, hide/reveal, display)
+    ├── flopreveal.js  # the Round Start cinematic: deal/flip/call-out the community
     ├── synergies.js   # suit-count synergy detection + buff application
     ├── board.js       # grid construction + render() units onto squares
     ├── hands.js       # hand + draw/discard pile rendering
@@ -67,14 +68,15 @@ rule bending.
 | **state** | All persistent game state (`units`, `hands/draw/discard/played`, `flop/communityDeck/flopRevealed`, `roundNumber/roundWins`, `chips`, combat flags, `dragData/placementOpen`) + DOM refs + trivial reads (`label`, `countUnits`) | — (leaf) |
 | **cards** | What a card is + the shoe (`rankLabel`, `makeCardOf`, `makeCard`, `buildShoe`, `shuffle`, `initShoes`, `reshuffle`, `drawCard`) | config, state |
 | **flop** | Community flop deck + reveal + display (`initCommunityDeck`, `hideFlop`, `dealFlop`, `flopCount`, `renderFlop`) | config, state, cards |
-| **synergies** | Suit counts → tier buffs (`suitCount`, `effectiveSuitCount`, `synergyTier`, `renderSynergies`, `renderTraitBar`, `teamSynergyEffects`, `applySynergies`) | config, state, flop |
+| **flopreveal** | The Round Start cinematic — deal, flip, call out the hand, land the cards (`flopReveal`, `flopRevealAbort`). Render-only: it never touches game state, and it no-ops entirely under `SIM_MODE`. Takes a **callback continuation** because nothing in this codebase is async | config, state, cards, flop, synergies, board |
+| **synergies** | Suit counts → tier buffs (`suitCount`, `effectiveSuitCount`, `synergyTier`, `renderSynergies`, `renderTraitBar`, `teamSynergyEffects`, `applySynergies`) + read-only hand naming (`bestHandsFor`, the counterpart to `pokerBuffs`) | config, state, flop |
 | **board** | Grid build + `render()` (`buildBoard`, `cellAt`, `findUnitAt`, `render`) | config, state, cards |
 | **hands** | Hand & pile display (`drawHands`, `renderHands`, `updateShoeDisplay`, `renderOneHand`) | config, state, cards |
 | **jokers** | Claiming & holding jokers — the player-level upgrade layer (`jokerSlotsFree`, `claimJoker`, `swapJoker`, `tryClaimFromHand`, `trySwapInto`, `renderJokers`) | config, state, cards |
 | **placement** | Drag-and-drop input (`initInput`, `zoneOfRow`, `handleDropOnCell`, `playCard`, `moveUnit`, `handleDropOnHand`, `returnUnitToHand`, `updatePlacementMessage`) | config, state, board, hands, hud |
 | **combat** | Auto-battle sim (`nearestEnemy`, `attackTarget`, `combatStep` → returns result) | config, state, board |
 | **hud** | Read-only display (`updateStatus`, `updateRoundInfo`, `updateChipInfo`) | state, synergies |
-| **gameflow** | Round/match loop + chip economy (`startRound`, `finishRound`, `endGame`, `nextRound`, `resetGame`); owns the combat interval | config, state, flop, synergies, board, hands, hud, combat |
+| **gameflow** | Round/match loop + chip economy (`startRound` → `beginFight`, `finishRound`, `endGame`, `nextRound`, `resetGame`); owns the combat interval. `startRound` is split in two: the flop reveal runs between the halves, and `beginFight` is its continuation | config, state, flop, flopreveal, synergies, board, hands, hud, combat |
 | **main** | Bootstrap: `buildBoard`, `initInput`, wire buttons/hand-drop, initial calls | (all) |
 
 ## Dependency flow (acyclic — read top-to-bottom = "depends on")
@@ -121,7 +123,7 @@ combat → hud → gameflow → main`
 
 > **The `<script>` list in `game.html` is the authority, not this line.** Several
 > modules added since this document was written (`abilities`, `unitart`, `motion`,
-> `fx`, `fxkits`, `ai`, `pathing`, `tableview`, `sim`, `table`) sit in that list and
+> `fx`, `fxkits`, `flopreveal`, `ai`, `pathing`, `tableview`, `sim`, `table`) sit in that list and
 > not here. Because these are classic scripts and every cross-module call resolves at
 > call time, load order only actually matters for top-level code — so the omissions
 > are a documentation gap, not a bug. Read `game.html` when adding a module.

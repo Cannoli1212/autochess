@@ -615,6 +615,104 @@
   .flop-back { background: #2b3a4a; border-color: #4a6a8a; }
   .flop-back .cfig { color: #7fa8cf; }
 
+  /* ── THE FLOP REVEAL (flopreveal.js) ────────────────────────────────────────
+     A full-viewport stage that only exists while the cinematic is running. It has to
+     live here rather than inside #fxLayer: that layer is clipped to the board
+     (overflow:hidden) and the flop row sits outside the board entirely, so a card
+     could never travel between them. position:fixed means the JS can position the
+     panel straight from getBoundingClientRect() with no coordinate conversion.
+     z-index clears everything else on the page (#fxLayer, the top layer, is 20). */
+  #flopStage { position: fixed; inset: 0; z-index: 200; }
+  .fstage-dim {
+    position: absolute; inset: 0;
+    background: rgba(8, 10, 14, 0.72);
+    /* The ONE element on the stage that takes clicks — it's the skip target. */
+    cursor: pointer;
+    animation: fstageDim 260ms ease-out both;
+  }
+  @keyframes fstageDim { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Centred on the board's midpoint, which JS writes into left/top. */
+  .fstage-panel {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+
+  /* The ready cascade. Chips light left→right before the deal. */
+  .fstage-ready { display: flex; gap: 8px; }
+  .fstage-chip {
+    font-size: 11px; font-weight: bold; letter-spacing: 0.5px;
+    padding: 4px 9px; border-radius: 11px;
+    color: #6d7c8c; background: #232c37; border: 1px solid #38465a;
+    transition: none;
+  }
+  .fstage-chip.lit {
+    color: #0f1720; background: #6bd5e0; border-color: #9be8f0;
+    box-shadow: 0 0 10px rgba(107, 213, 224, 0.55);
+    animation: fstageChip 220ms ease-out;
+  }
+  @keyframes fstageChip {
+    0%   { transform: scale(0.8); }
+    55%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  .fstage-banner {
+    font-size: 26px; font-weight: bold; letter-spacing: 1px;
+    min-height: 32px;
+    text-shadow: 0 2px 6px #000;
+  }
+  .fstage-banner.deal { color: #9ecbff; font-size: 19px; letter-spacing: 3px; }
+  .fstage-banner.hit  { color: #ffd54f; text-shadow: 0 0 14px rgba(255, 213, 79, 0.5), 0 2px 6px #000; }
+  .fstage-banner.cold { color: #7f8b99; font-size: 19px; }
+
+  .fstage-row { display: flex; gap: var(--fbig-gap, 14px); }
+
+  /* One big community card. The 3D flip lives on .fbig-inner; .fbig itself owns the
+     perspective and stays untransformed, so getBoundingClientRect() on it during the
+     shrink reports the real on-screen slot. Starts invisible — the deal animation is
+     what brings it in, and a card that never got dealt should never be seen. */
+  .fbig {
+    width: var(--fbig-w, 96px); height: var(--fbig-h, 132px);
+    perspective: 700px;
+    opacity: 0;
+  }
+  .fbig-inner {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+  }
+  .fbig-face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6);
+  }
+  .fbig-back {
+    background: repeating-linear-gradient(45deg, #2b3a4a 0 7px, #22303e 7px 14px);
+    border: 2px solid #4a6a8a;
+  }
+  .fbig-front {
+    background: #f5f5f5;
+    border: 2px solid #caa14a;               /* gold edge = community card, as in the row */
+    font-size: calc(var(--fbig-w, 96px) * 0.36);
+    transform: rotateY(180deg);              /* pre-turned, so the inner's -180° reveals it */
+  }
+  /* A card that forms the hand being called out. */
+  .fbig.fbig-hit .fbig-front {
+    border-color: #ffd54f;
+    box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.35), 0 0 26px rgba(255, 213, 79, 0.6),
+                0 8px 22px rgba(0, 0, 0, 0.6);
+    animation: fbigHit 900ms ease-in-out infinite;
+  }
+  @keyframes fbigHit {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.22); }
+  }
+
   /* Card hands, drawn fresh each round (one card type for now). */
   .hands { margin-top: 22px; }
   .hand-row {

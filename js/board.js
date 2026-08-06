@@ -308,6 +308,25 @@ function playFlinch(node) {
   ], { duration: 220, easing: "ease-in-out" });
 }
 
+// THE HAND POP: a unit swells and flares gold for a moment. Fired by the flop reveal
+// on every unit whose rank forms the hand it just called out — the last beat of the
+// cinematic, after the dim has cleared, so it reads as "those community cards did THIS
+// to these units". Same animate() reasoning as the lunge above: one restartable shot
+// that cleans up after itself, no CSS class to get stuck on.
+//
+// Deliberately on _fig rather than _glyph (which the flinch uses): this is the whole
+// card swelling with its buff, not a body part reacting.
+function playHandPop(node) {
+  if (!node || !node._fig) return;
+  if (node._popAnim) node._popAnim.cancel();
+  node._popAnim = node._fig.animate([
+    { transform: "scale(1)",    filter: "none" },
+    { transform: "scale(1.28)", filter: "brightness(1.7) drop-shadow(0 0 7px #ffd54f)", offset: 0.35 },
+    { transform: "scale(1.08)", filter: "brightness(1.3) drop-shadow(0 0 4px #ffd54f)", offset: 0.65 },
+    { transform: "scale(1)",    filter: "none" },
+  ], { duration: FLOP_POP_MS, easing: "ease-out" });
+}
+
 // Repaint one unit's shape: the numbers, the bars, the badges, the glows.
 function paintUnitNode(node, u) {
   const su = SUITS[u.suit];

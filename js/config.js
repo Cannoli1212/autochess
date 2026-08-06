@@ -830,6 +830,41 @@ const FLASH_TICKS = 1;
 // you're rewatching, not fighting. Turn it down if replays feel sluggish.
 const REPLAY_TICK_MS = 420;
 
+// ── THE FLOP REVEAL (cinematic) ───────────────────────────────────────────────
+// Round Start deals the community board as a SHOW: a ready cascade, cards flying in
+// face-down over the middle of the board, then flipping one at a time with a beat
+// between each, then the biggest hand you made gets called out. Only then does the
+// fight start. Every number below is wall-clock only — the reveal is render-only and
+// runs entirely outside the engine, so none of this touches balance (the headless
+// sims never reach it at all; see the SIM_MODE guard in flopreveal.js).
+//
+// One master knob. 1 = as tuned below, 0.5 = brisk, 0 = skip the cinematic entirely
+// and snap the flop face-up the way it used to. Every duration is multiplied by it,
+// so the beats stay in proportion at any speed.
+const FLOP_REVEAL_SPEED = 1;
+
+// Measured end-to-end: ~4.2s for a three-card round, ~5.3s for a five-card river.
+// The river is longer because the flips dominate it — that's the suspense, but it's
+// also why the click-to-skip exists.
+const FLOP_READY_MS   = 520;   // seat chips light up left→right, then "DEALING"
+const FLOP_DEAL_MS    = 260;   // one card's flight from the deck to its slot
+const FLOP_DEAL_GAP   = 110;   // stagger between consecutive deals
+const FLOP_SETTLE_MS  = 280;   // the pause after the last card lands, before any flip
+const FLOP_FLIP_MS    = 340;   // one card turning over
+// THE SUSPENSE DIAL. The silence between one card landing face-up and the next
+// starting to turn. Everything else here is mechanical; this is the one that decides
+// whether the reveal feels tense or merely slow. It's multiplied by (cards - 1), so it
+// dominates the five-card river — turn it DOWN first if the reveal starts to drag, and
+// UP if you want the river in particular to feel like an execution.
+const FLOP_FLIP_GAP   = 220;
+const FLOP_CALLOUT_MS = 1000;  // banner + gold pulse on the cards that made the hand
+const FLOP_SHRINK_MS  = 420;   // the big cards flying down into the flop row
+// Your buffed units pulsing once the dim has cleared. This one does NOT extend the
+// show: the fight is handed off the moment the pop starts, and setInterval waits a
+// full COMBAT_TICK_MS (800ms) before the first tick — so the pop plays out over dead
+// air that already existed. Keep it under COMBAT_TICK_MS and it stays free.
+const FLOP_POP_MS     = 400;
+
 // Global stat multiplier (B4). Final stat = suitBase × rank × STAT_SCALE.
 // Bump to 100 for even bigger numbers, or 1 to shrink — one knob.
 const STAT_SCALE = 10;

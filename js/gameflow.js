@@ -272,17 +272,42 @@ function startRound() {
   // hand through the fight so the player can pick which to hold on the results
   // screen. They're discarded (or kept) in nextRound() instead.
 
-  // Phase A: TOP UP the community board to this round's target. This reveals the
-  // round's new card — the flop (R1), turn (R4), or river (R6) — that was hidden
-  // during planning. On the "stays" rounds the board is already full, so it's a
-  // no-op. Cards from earlier rounds were already face-up while you planned.
+  // Deal this round's community board. DEALT, not yet SHOWN: growCommunity no longer
+  // renders — flopReveal (below) owns the reveal, so the cards can't appear face-up in
+  // the row before the cinematic has turned them over.
   growCommunity();
-  renderSynergies();
 
   // King of Clubs' Airstrike: the enemy army has appeared — destroy any enemy unit
   // caught on a marked square BEFORE synergies bake on the survivors (so the dead
   // don't count toward the enemy's suit/poker bonuses).
+  //
+  // Moved AHEAD of the reveal (it used to sit just below): an enemy airstrike can kill
+  // one of YOUR units, and the hand the reveal calls out must not be built on a unit
+  // that's already dead. Its own ordering constraint is untouched — applySynergies
+  // still runs after it, down in beginFight. The render() picks up the casualties so
+  // the board underneath the reveal is honest; the strike's queued fx still drain at
+  // playFx() as the fight opens, which is exactly where those death ghosts belong.
   const struck = resolveStrikes();
+  render();
+
+  // THE REVEAL (flopreveal.js). Everything from here to the first combat tick now
+  // happens inside a callback: the community board is dealt as a cinematic and the
+  // fight begins when it lands. There's no async anywhere in this codebase, so this is
+  // a plain continuation rather than a promise — and flopReveal guarantees it fires
+  // exactly once on every path (headless, switched off via FLOP_REVEAL_SPEED, skipped
+  // by a click, or played in full). inCombat and the disabled start button are already
+  // set above, so nothing can re-enter startRound while the show is running.
+  flopReveal(function () { beginFight(struck); });
+}
+
+// The second half of starting a round: bake every buff, paint the board, and run the
+// combat loop. Split out of startRound so the flop reveal can sit between the two.
+// Nothing in here was reordered — it's the same sequence it always was, just deferred
+// until the reveal is done. renderSynergies in particular has to be on THIS side of the
+// seam: run any earlier and the trait sidebar would name your hand while the community
+// cards were still face-down.
+function beginFight(struck) {
+  renderSynergies();
 
   // B5.2: bake each team's suit synergies into their units, then redraw so the
   // boosted stats are visible as the fight begins.
@@ -336,6 +361,7 @@ function startRound() {
 function nextRound() {
   clearMatchTabs();             // Phase D2: stop any replay + drop last round's recordings
   clearFx();                    // wipe any effects still floating from the fight just ended
+  flopRevealAbort();            // and any half-played reveal, WITHOUT starting its fight
   tapSel = null;                // and any tap-to-place selection from last round
   // Every unplayed leftover card carries into the next round automatically (holding
   // is no longer optional). We just clear any stale `held` flag; nothing is discarded
@@ -418,6 +444,10 @@ function resetGame() {
   clearInterval(combatTimer);   // stop any battle that's running
   clearMatchTabs();             // Phase D2: stop any replay + drop recordings
   clearFx();                    // and clear the effect layer
+  // Belt and braces: the dim swallows clicks during a reveal (they skip it instead), so
+  // Reset can't normally land mid-show — but if a reveal is somehow still up, tear the
+  // stage down. Abort, not finish: the discarded round's fight must never start.
+  flopRevealAbort();
   units = [];
   strikeMarks = { player1: [], player2: [] };
   tapSel = null;                // no tap-to-place selection survives a new game
