@@ -291,7 +291,37 @@ function pokerPool(team) {
   // a 7 or a 2 to the pool, so it can't complete other units' pairs / Doyle.
   units.forEach(function (u) { if (u.team === team && !u.fused) ranks.push(u.rank); });
   flop.forEach(function (c) { ranks.push(c.rank); });
+
+  // THE UNDERSTUDY (joker): a WILD card in the pool. It RESOLVES to a concrete rank here,
+  // before the pool is returned, which is what keeps this from being the invasive change it
+  // looks like — rankCounts, bestStraight, fullHouseRanks, packCount and renderPokerTraits
+  // all keep reading a plain number[] and need no changes at all.
+  //
+  // It resolves to the rank the team has MOST of, so it extends your biggest group. That's
+  // the dominant use of a wild here by a wide margin, because of-a-kind count doesn't just
+  // pay stats — via packCount it GATES and TIERS every rank ability, so turning a pair into
+  // trips is worth more than any straight. Re-picked after each wild, so two Understudies
+  // both pile onto the (now larger) group rather than splitting.
+  const wilds = jokerSum(team, "wildCards");
+  for (let i = 0; i < wilds; i++) {
+    const r = mostCommonRank(ranks);
+    if (r === null) break;                 // nothing on the board yet: a wild has nothing to copy
+    ranks.push(r);
+  }
   return ranks;
+}
+
+// The rank appearing most often in `ranks`, ties going to the HIGHER rank (the same
+// tie-break bestStraight uses). Null for an empty pool. Only The Understudy needs this.
+function mostCommonRank(ranks) {
+  if (ranks.length === 0) return null;
+  const counts = rankCounts(ranks);
+  let bestRank = null, bestCount = 0;
+  Object.keys(counts).forEach(function (key) {
+    const r = Number(key), n = counts[key];
+    if (n > bestCount || (n === bestCount && r > bestRank)) { bestRank = r; bestCount = n; }
+  });
+  return bestRank;
 }
 
 // The best STRAIGHT in a rank-count map (from rankCounts): the LONGEST run of

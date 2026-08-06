@@ -992,6 +992,20 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
 
+  // ── The wild card ──────────────────────────────────────────────────────────
+  // The thematically correct centrepiece of the whole feature: a joker IS a wild card, and
+  // this is the only entry that makes the game's poker layer literally poker.
+  //
+  // It RESOLVES to the rank you hold most of, rather than staying abstract — see pokerPool.
+  // That's not a compromise, it's the strongest reading: of-a-kind count doesn't merely pay
+  // stats, it GATES and TIERS every rank ability through packCount. So a wild that turns your
+  // pair into trips is worth more than one that completes a straight, and it's predictable
+  // enough that you can build for it.
+  //
+  // NOT aiUseless: it reads the pool, which a headless seat has exactly like you do.
+  theUnderstudy: { name: "The Understudy", icon: "🃏", weight: 1, wildCards: 1,
+                 blurb: "Stands in for anyone. Your joker counts as an extra card of whatever RANK you hold most of." },
+
   // ── Retrigger ──────────────────────────────────────────────────────────────
   // Every one of your units swings TWICE the first time it connects. A burst opener, not a
   // sustained buff: the extra damage all lands in the first exchange, which is exactly when
