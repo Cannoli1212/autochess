@@ -992,6 +992,18 @@ const JOKERS = {
                  aiUseless: true,
                  blurb: "Sharpens what he sits on. Each round a card goes unplayed in your hand, it gains +10% attack and HP." },
 
+  // ── Retrigger ──────────────────────────────────────────────────────────────
+  // Every one of your units swings TWICE the first time it connects. A burst opener, not a
+  // sustained buff: the extra damage all lands in the first exchange, which is exactly when
+  // a fight is decided — killing an enemy before it swings back is worth far more than the
+  // same damage spread over the fight.
+  //
+  // The number is how many of each unit's swings are doubled, so two Shills double the first
+  // TWO. Rides the general Double Tap primitive (FUSION-IDEAS #1) that combat.js now has, so
+  // the 7-7 Hockey Sticks fusion has its engine support waiting.
+  theShill:    { name: "The Shill",        icon: "🔁", weight: 1, firstHitDoubles: 1,
+                 blurb: "Bets it twice. Each of your units strikes TWICE on its first hit of the fight." },
+
   // ── Cheating death ─────────────────────────────────────────────────────────
   // Each of your units gets ONE roll, the first time something would kill it, to survive at
   // 1 HP instead. One roll per unit per fight, so it can never stall a fight into the tick

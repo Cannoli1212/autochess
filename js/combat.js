@@ -193,7 +193,10 @@ function nearestEmptyCell(ox, oy) {
 
 // Resolve one attack, running ability hooks at each moment: dodge check →
 // crit → outgoing-damage abilities → apply → target reacts → attacker reacts.
-function attackTarget(attacker, target) {
+// `isRetrigger` marks a swing that IS the second half of a double tap (see the bottom of
+// this function). It exists purely so a retriggered swing can't retrigger again — one extra
+// swing, never a chain. Every caller in the engine omits it.
+function attackTarget(attacker, target, isRetrigger) {
   // ATTACK-MANA (casting Slice 2): a caster whose mana fills from SWINGING (manaPerAttack
   // > 0, e.g. the Queen of Clubs Cleric) banks mana here — once per swing, the moment it
   // commits, so a dodged/blanked hit still charges the bar (like TFT). Regen-mana casters
@@ -353,6 +356,27 @@ function attackTarget(attacker, target) {
   // shield or raises a body off a corpse that gets back up.
   if (sink.hp <= 0 && !sink.luckySave) {
     runAbilityHook(attacker, "onKill", { target: sink });
+  }
+
+  // ── DOUBLE TAP / RETRIGGER (The Shill) ─────────────────────────────────────
+  // The swing resolves a SECOND time. Deliberately a full re-entry into this function
+  // rather than "deal the damage twice": the second swing rolls its own crit, banks its own
+  // mana, is dodged or shrugged off on its own merits, and emits its own numbers — so what
+  // the player sees is two hits, because two hits happened.
+  //
+  // `doubleTaps` is a COUNTER baked per unit at round start, not a flag, so two Shills double
+  // the first two swings rather than the same one twice. It's also the general primitive
+  // FUSION-IDEAS calls for (#1, Double Tap): any future ability kit can grant a unit a
+  // retrigger by adding to this counter.
+  //
+  // Three guards, each load-bearing:
+  //   !isRetrigger — one extra swing only. Without it a unit with 2 taps recurses.
+  //   target alive — the first swing may have killed it; don't swing at a corpse. A target
+  //                  the Lucky Stiff is about to save also reads as dead here, correctly.
+  //   attacker alive — the first swing may have killed the ATTACKER, via Thorns.
+  if (!isRetrigger && (attacker.doubleTaps || 0) > 0 && sink.hp > 0 && attacker.hp > 0) {
+    attacker.doubleTaps = attacker.doubleTaps - 1;
+    attackTarget(attacker, target, true);
   }
 }
 

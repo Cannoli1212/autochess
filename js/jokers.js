@@ -126,12 +126,16 @@ function applyJokerRoundStart(team) {
   // Lucky Stiff first: it has to be stamped whether or not the High Roller is held, so it
   // can't sit behind that joker's early return.
   const saveChance = jokerSum(team, "luckySaveChance");
+  const taps = jokerSum(team, "firstHitDoubles");
   for (let i = 0; i < units.length; i++) {
     if (units[i].team !== team) continue;
     // Roll ONCE per unit, now, rather than at the moment of death. Baking the outcome means a
     // unit's fate is fixed for the fight — the same reason Berserk and Bulwark bake their
     // numbers at round start — and it keeps the save from re-rolling every lethal hit.
     units[i].luckySave = (saveChance > 0 && Math.random() < Math.min(1, saveChance)) ? 1 : 0;
+    // The Shill's retrigger budget, spent by attackTarget. Baked per fight, so it refills
+    // every round rather than being a one-off for the whole game.
+    units[i].doubleTaps = taps;
   }
 
   const perChip = jokerSum(team, "atkPerChip");
