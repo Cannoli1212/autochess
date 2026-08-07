@@ -95,4 +95,7 @@ const FX_KITS = {
   warlordLevy:       { color: "#e8e8e8", icon: "⚔",  onRoundStart: "pulse" },
   // K♥ — his vow fires on his DEATH, the one moment nobody is looking at him.
   royalVow:          { color: "#ff8a8a", icon: "✦",  onDeath: "pulse" },
+  // A♦ — the kit already prints 🛡+N on the Ace (and, at quads, on the ally it covers);
+  // this is the icon naming the ability that banked it.
+  shieldOnKill:      { color: "#ffd54f", icon: "🛡", onKill: "pulse" },
 };

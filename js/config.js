@@ -443,8 +443,19 @@ const UNIQUE_CARDS = {
     name: "Ace of Spades",
     abilities: [
       { kind: "infiltrator", placement: "anywhere" },
+      // OF-A-KIND (face-card pass): a longer fade each rung; from TRIPS the first swing out
+      // of stealth is an ambush; and quads closes the hole the Vanish has always had —
+      // untargetableUntil is honored ONLY by nearestEnemy/farthestEnemy, so splash, poison
+      // and traps have always found a "hidden" Ace perfectly well. `ghost` adds invuln for
+      // the same window, which is the difference between shedding aggro and disappearing.
       { kind: "dropAggro", name: "Vanish", cast: true, castTargeting: "self",
-        manaMax: 100, manaPerAttack: 25, manaStart: 50, ticks: 4 },
+        manaMax: 100, manaPerAttack: 25, manaStart: 50, ticks: 4,
+        tiers: {
+          1: { ticks: 4 },
+          2: { ticks: 5 },
+          3: { ticks: 6, ambushMult: 1.5 },
+          4: { ticks: 8, ambushMult: 2.0, ghost: true },
+        } },
     ],
     blurb: "Infiltrator — place anywhere, even the enemy's side; Vanishes on cast to shed aggro (~2s untargetable)",
   },
@@ -466,8 +477,19 @@ const UNIQUE_CARDS = {
   "clubs-14": {
     name: "Ace of Clubs",
     abilities: [
+      // OF-A-KIND (face-card pass): a heavier round through trips, then quads makes it
+      // PIERCE instead of being body-blocked. spellPower deliberately HOLDS at 6.0 for the
+      // top rung — piercing already multiplies the damage by however many bodies stand on
+      // the line, exactly the reasoning behind rank 6's hitAll (see POKER_HANDS above):
+      // the rung buys reach, and charging for reach twice is how a card stops being fun.
       { kind: "sniperShot", name: "Sniper Round", cast: true, castTargeting: "self",
-        manaMax: 100, manaPerAttack: 34, manaStart: 34, spellPower: 3 },
+        manaMax: 100, manaPerAttack: 34, manaStart: 34, spellPower: 3,
+        tiers: {
+          1: { spellPower: 3.0 },
+          2: { spellPower: 4.2 },
+          3: { spellPower: 6.0 },
+          4: { spellPower: 6.0, pierce: true },
+        } },
     ],
     range: COLS + ROWS,
     attackSpeed: 0.5,
@@ -480,7 +502,16 @@ const UNIQUE_CARDS = {
   // it snowballs into a tankier and tankier body. fraction = the balance knob.
   "diamonds-14": {
     name: "Ace of Diamonds",
-    abilities: [{ kind: "shieldOnKill", fraction: 0.5 }],
+    // OF-A-KIND (face-card pass): a bigger bank per kill, then quads MIRRORS a share onto
+    // the nearest ally — the aegis stops being personal armour and starts being cover for
+    // whoever is fighting beside him.
+    abilities: [{ kind: "shieldOnKill", fraction: 0.5,
+      tiers: {
+        1: { fraction: 0.5 },
+        2: { fraction: 0.7 },
+        3: { fraction: 1.0 },
+        4: { fraction: 1.4, mirrorFrac: 0.5 },
+      } }],
     blurb: "Aegis — on a kill, gain a shield worth half the victim's HP",
   },
 
@@ -491,7 +522,22 @@ const UNIQUE_CARDS = {
   // free nearby. Turns a tanky bruiser into an army-in-a-can if it can keep killing.
   "hearts-14": {
     name: "Ace of Hearts",
-    abilities: [{ kind: "summonOnKill" }],
+    // OF-A-KIND (face-card pass). The ladder walks toward the name on the card: a pair
+    // raises a STURDIER body, trips raises TWO, and quads finally raises the enemy he just
+    // killed instead of rummaging through his own bench — which is what a necromancer is
+    // actually supposed to do, and is the one rung on any face card that changes whose
+    // army a unit belongs to.
+    //
+    // `statMult` is applied to the raised body directly rather than by re-running
+    // applySynergies: a summon is built mid-fight, long after synergies and every
+    // onRoundStart hook have finished, so there is no bake to re-run.
+    abilities: [{ kind: "summonOnKill",
+      tiers: {
+        1: { bodies: 1 },
+        2: { bodies: 1, statMult: 0.3 },
+        3: { bodies: 2, statMult: 0.3 },
+        4: { bodies: 1, statMult: 0.3, raiseSlain: true },
+      } }],
     blurb: "Necromancer — on a kill, summon a random bench card nearby",
   },
 

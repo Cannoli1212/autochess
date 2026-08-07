@@ -537,13 +537,32 @@ const ABILITIES = {
   // not its leftover HP, so the reward doesn't shrink just because you softened it
   // up first. Stacks across kills → a diamond Ace that keeps killing gets tanky.
   shieldOnKill: {
+    // OF-A-KIND (face-card pass). Baked, and the fallback matters here as much as anywhere:
+    // an Ace of Diamonds is exactly the sort of card the Ace of Hearts raises mid-fight.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.aegisFraction = t.fraction;
+      unit.aegisMirror = t.mirrorFrac || 0;
+    },
     onKill: function (unit, ctx, ability) {
-      const banked = Math.round(ctx.target.maxHp * ability.fraction);
+      const frac = (unit.aegisFraction !== undefined) ? unit.aegisFraction : ability.fraction;
+      const banked = Math.round(ctx.target.maxHp * frac);
       unit.shield = (unit.shield || 0) + banked;
       // The shield BAR already showed the total, but a bar that silently gets wider on a
       // kill doesn't connect the reward to the kill that earned it. "🛡+N" on the Ace's
       // own square, the same tick its victim dies, does.
       if (banked > 0) emitFx("shield", { x: unit.x, y: unit.y, amount: banked });
+
+      // QUADS: a share of the same aegis covers whoever is fighting closest to him.
+      const mirror = unit.aegisMirror || 0;
+      if (mirror <= 0) return;
+      const ally = nearestTeammate(unit);
+      if (!ally) return;
+      const shared = Math.round(banked * mirror);
+      if (shared <= 0) return;
+      ally.shield = (ally.shield || 0) + shared;
+      emitFx("shield", { x: ally.x, y: ally.y, amount: shared });
     },
   },
 
@@ -559,24 +578,67 @@ const ABILITIES = {
   // get a kill. Candidates are collected as INDEXES into the real bench so the splice still
   // removes the right card; filtering into a copy would splice the wrong one.
   summonOnKill: {
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.raiseBodies = t.bodies;
+      unit.raiseStatMult = t.statMult || 0;
+      unit.raiseSlain = !!t.raiseSlain;
+    },
     onKill: function (unit, ctx, ability) {
+      const bodies = (unit.raiseBodies !== undefined) ? unit.raiseBodies : 1;
+      const statMult = unit.raiseStatMult || 0;
+
+      // A raised body is built here, mid-fight, which means it has missed applySynergies
+      // and every onRoundStart hook — including its OWN. So the tier bonus is applied
+      // directly, and anything it would have baked for itself is simply absent (its kit's
+      // tiers[1] fallback covers that; see cleave).
+      const raise = function (card, keepCard) {
+        const cell = nearestEmptyCell(unit.x, unit.y);
+        if (cell === null) return false;                  // nowhere to put it
+        if (keepCard) played[unit.team].push(card);       // your card → tracked/discarded as usual
+        const body = buildUnit(card, cell.x, cell.y, unit.team);
+        if (statMult > 0) {
+          body.attack = Math.round(body.attack * (1 + statMult));
+          body.maxHp = Math.round(body.maxHp * (1 + statMult));
+          body.hp = body.maxHp;
+        }
+        units.push(body);
+        // Mark the square the body rose on. Without this a unit simply EXISTS next render,
+        // with nothing tying it to the kill that raised it — the most startling silent
+        // moment in the game, because a whole new fighter appears out of nowhere.
+        emitFx("summon", { x: cell.x, y: cell.y });
+        return true;
+      };
+
+      // QUADS — actual necromancy: the corpse gets up on YOUR side. Deliberately does NOT
+      // push to played[unit.team]: that list is discarded into your shoe at round end, so
+      // logging an enemy's card there would quietly steal it out of their deck for the rest
+      // of the game. The body is a loan, not a theft.
+      if (unit.raiseSlain && ctx.target && ctx.target.card && !ctx.target.fused) {
+        if (raise(ctx.target.card, false)) return;
+      }
+
       const bench = hands[unit.team];
       if (!bench || bench.length === 0) return;         // nothing left to raise
-      const raisable = [];
-      for (let i = 0; i < bench.length; i++) {
-        if (!cardIsJoker(bench[i])) raisable.push(i);
+      for (let n = 0; n < bodies; n++) {
+        const raisable = [];
+        for (let i = 0; i < bench.length; i++) {
+          // JOKERS ARE SKIPPED, and this is a crash fix rather than a nicety: a joker has no
+          // suit, so buildUnit's SUITS[card.suit].attackSpeed threw and killed the whole
+          // fight mid-tick. Reachable in ordinary play — hold the Ace of Hearts with any
+          // unclaimed joker in hand and get a kill. Candidates are collected as INDEXES into
+          // the real bench so the splice still removes the right card.
+          if (!cardIsJoker(bench[i])) raisable.push(i);
+        }
+        if (raisable.length === 0) return;              // bench is all jokers: nothing to raise
+        const idx = raisable[Math.floor(Math.random() * raisable.length)];
+        const card = bench.splice(idx, 1)[0];           // pull a random RAISABLE bench card
+        // Board full: put the card back exactly where it came from and stop. `raise` bails
+        // on the empty-cell check BEFORE it touches `played`, so there is nothing to undo
+        // there — popping it would take a real entry off the list.
+        if (!raise(card, true)) { bench.splice(idx, 0, card); return; }
       }
-      if (raisable.length === 0) return;                // bench is all jokers: nothing to raise
-      const cell = nearestEmptyCell(unit.x, unit.y);
-      if (cell === null) return;                        // nowhere to put it
-      const idx = raisable[Math.floor(Math.random() * raisable.length)];
-      const card = bench.splice(idx, 1)[0];             // pull a random RAISABLE bench card
-      played[unit.team].push(card);                     // now a board card (discarded at round end)
-      units.push(buildUnit(card, cell.x, cell.y, unit.team));
-      // Mark the square the body rose on. Without this a unit simply EXISTS next render,
-      // with nothing tying it to the kill that raised it — the most startling silent
-      // moment in the game, because a whole new fighter appears out of nowhere.
-      emitFx("summon", { x: cell.x, y: cell.y });
     },
   },
 
@@ -1125,8 +1187,31 @@ const ABILITIES = {
   // route through nearestEnemy, can still catch it). castTargeting "self" fires the instant the
   // bar fills, no aim needed. The blue cast-flash is its blink-out visual — no extra flash.
   dropAggro: {
+    // OF-A-KIND (face-card pass): baked, because both the cast and the ambush swing that
+    // follows it read these, and a sister Ace dying mid-fight must not shorten a fade the
+    // Infiltrator is already inside.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.vanishTicks = t.ticks;
+      unit.ambushMult = t.ambushMult || 0;
+      unit.vanishGhost = !!t.ghost;
+    },
     onCast: function (unit, ctx, ability) {
-      unit.untargetableUntil = tickCount + (ability.ticks || 4);
+      const ticks = (unit.vanishTicks !== undefined) ? unit.vanishTicks : (ability.ticks || 4);
+      unit.untargetableUntil = tickCount + ticks;
+      // Quads: actually untouchable, not merely un-aggroed. Same window, so the two never
+      // disagree about how long he is gone for.
+      if (unit.vanishGhost) unit.invulnUntil = Math.max(unit.invulnUntil || 0, tickCount + ticks);
+      // Arm the ambush. Consumed by the NEXT swing (see onAttack), not by a timer — the
+      // fantasy is "he steps out of nowhere and hits you", which is about the strike being
+      // the first one after the fade, not about it landing within some window.
+      if (unit.ambushMult > 0) unit.ambushArmed = true;
+    },
+    onAttack: function (unit, ctx, ability) {
+      if (!unit.ambushArmed) return;
+      unit.ambushArmed = false;                      // one swing only
+      ctx.damage = Math.round(ctx.damage * unit.ambushMult);
     },
   },
 
@@ -1138,9 +1223,38 @@ const ABILITIES = {
   // (shields/invuln/redirect + the victim's Thorns/Berserk, but no crit and no lifesteal — it's a
   // spell, not a swing). castTargeting "self" so the kit does its OWN farthest-not-nearest aim.
   sniperShot: {
+    // OF-A-KIND (face-card pass): a heavier round each rung, and at quads it stops being
+    // blockable and rakes the whole line instead.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.sniperPower = t.spellPower;
+      unit.sniperPierce = !!t.pierce;
+    },
     onCast: function (unit, ctx, ability) {
+      const power = (unit.sniperPower !== undefined) ? unit.sniperPower : (ability.spellPower || 2.5);
       const back = farthestEnemy(unit);
       if (!back) return;                                   // no enemies → hold the shot
+
+      // QUADS: the round punches through — the bodyguard that used to eat the shot now
+      // just dies first.
+      //
+      // The traversal is subtler than it looks. unitsAlongLine collects the bodies BEHIND
+      // its target, so handing it `back` (the farthest enemy) rakes off the far edge of the
+      // board and hits nothing but the backliner — everyone in between is in FRONT of it,
+      // not behind. Measured exactly that on the first attempt. So aim at the blocker
+      // firstEnemyOnLine already finds, and pierce from there to the back: the blocker, the
+      // bodies behind it, and the carry at the end of the column.
+      if (unit.sniperPierce) {
+        const hits = unitsAlongLine(unit, firstEnemyOnLine(unit, back), COLS + ROWS);
+        const last = hits[hits.length - 1];
+        emitAbilityShape(unit, "sniperShot", "line", { x: last.x, y: last.y });
+        for (let i = 0; i < hits.length; i++) {
+          dealSpellDamage(unit, hits[i], Math.round(unit.attack * power));
+        }
+        return;
+      }
+
       const hit = firstEnemyOnLine(unit, back);            // first body on the ray (block) or the target
       // Draw the line to whoever actually EATS the round, not to the backliner it was
       // aimed at. That one choice is what makes a body-block readable: you see the shot
@@ -1152,7 +1266,7 @@ const ABILITIES = {
       // this ability targets "self" — ctx.target is null and the real aim is worked out
       // inside this handler.
       emitAbilityShape(unit, "sniperShot", "line", { x: hit.x, y: hit.y });
-      dealSpellDamage(unit, hit, Math.round(unit.attack * (ability.spellPower || 2.5)));
+      dealSpellDamage(unit, hit, Math.round(unit.attack * power));
     },
   },
 
