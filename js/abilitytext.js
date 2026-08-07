@@ -309,7 +309,7 @@ const ABILITY_TEXT = {
           "pay for it.",
     rung: function (t) {
       return "mends for " + t.healPower + "× her attack" +
-             (t.splash ? " · and the allies beside the patient" : "");
+             (t.splash ? " · plus " + abilPct(t.splash) + " of it to the allies beside the patient" : "");
     },
   },
   houseTax: {
@@ -322,7 +322,7 @@ const ABILITY_TEXT = {
         return "no upside yet — held, she still costs you " + a.penalty + " chips a round";
       }
       return "fielded, the ENEMY bleeds " + t.enemyPenalty + " chips a round" +
-             (t.shootTheMoon ? " — doubled, and you pay no house tax at all" : "");
+             (t.shootTheMoon ? " — and shooting the moon, you pay no house tax at all" : "");
     },
   },
 

@@ -157,6 +157,21 @@ function enemiesNear(unit, radius) {
   return out;
 }
 
+// The living allies of `team` within `radius` cells of a POINT — the mirror of
+// enemiesNear, except it is centred on a cell rather than on the caster. The Queen of
+// Clubs' quads mend spills around the PATIENT, who is generally nowhere near her (her
+// castRange is the whole board), so "near the caster" would be the wrong question.
+function alliesNearCell(team, cx, cy, radius) {
+  const out = [];
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.team !== team || u.hp <= 0) continue;
+    const d = Math.max(Math.abs(u.x - cx), Math.abs(u.y - cy));
+    if (d <= radius) out.push(u);
+  }
+  return out;
+}
+
 // Drop ONE single-use trap for `team` on cell (tx, ty) — the shared placement primitive
 // for BOTH rank-8 trap casts: Trapline (a forward line, melee ♥/♦) and Caltrops (a self-ring,
 // ranged ♣/♠). Silently skips a cell that's off the board or already holds a same-team trap

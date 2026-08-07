@@ -83,4 +83,8 @@ const FX_KITS = {
   // you have looked at the board, so a whole suit just IS bigger. The kit's own ▲ bursts mark
   // who was touched; this marks the Jack that did it.
   bower:             { color: "#ffd54f", icon: "⚑",  onRoundStart: "pulse" },
+  // Q♥ — her Royal Guard is the least legible thing on the board: hits she "takes" land on
+  // her King with nothing linking the two. One ⛨ on her as the fight opens at least says
+  // whose ability the redirect belongs to.
+  royalGuard:        { color: "#ff8a8a", icon: "⛨",  onRoundStart: "pulse" },
 };

@@ -509,13 +509,26 @@ const UNIQUE_CARDS = {
   //   K♥ "Rally" — gives his Queen a temporary, refreshable attack buff each cast (attackBuffPartner).
   // A tight loop: her Royal Guard soaks her hits onto him, she keeps him shielded, he keeps her
   // hitting hard. Each cast fizzles harmlessly if the partner isn't fielded/alive.
+  // OF-A-KIND (face-card pass): the Queen's unlock is SPLIT ACROSS TWO RUNGS on purpose.
+  // Widening the bond is worth far more on the Royal Guard than on the cast, because
+  // royalSink runs on EVERY incoming hit — turning any King on the team into a sponge for
+  // her is a much bigger spike than banking a shield somewhere else. So trips widens the
+  // CAST (she may shield any King), and only quads widens the SINK. Note livingPartner
+  // still prefers her own K♥ whenever he is alive, so this only ever adds a fallback.
   "hearts-12": {
     name: "Queen of Hearts",
     rangeBonus: 1,
     abilities: [
-      { kind: "royalGuard", partnerRank: 13 },
+      { kind: "royalGuard", partnerRank: 13,
+        tiers: { 1: {}, 2: {}, 3: {}, 4: { anyRoyalSink: true } } },
       { kind: "shieldPartner", name: "Aegis Vow", cast: true, castTargeting: "self", partnerRank: 13,
-        manaMax: 80, manaPerAttack: 20, manaStart: 20, shieldFrac: 0.15 },
+        manaMax: 80, manaPerAttack: 20, manaStart: 20, shieldFrac: 0.15,
+        tiers: {
+          1: { shieldFrac: 0.15 },
+          2: { shieldFrac: 0.22 },
+          3: { shieldFrac: 0.30, anyRoyalCast: true },
+          4: { shieldFrac: 0.40, anyRoyalCast: true },
+        } },
     ],
     blurb: "Royal Guard — her King takes her hits (invuln when he falls); each cast shields him",
   },
@@ -641,9 +654,31 @@ const UNIQUE_CARDS = {
   // your next hand instead of going to the discard pile, so the ONLY way to be rid of
   // her is to FIELD her. Meanwhile houseTax bleeds you `penalty` chips to the house at
   // every round end she's still in hand (see handTax / finishRound). Play her or pay her.
+  // OF-A-KIND (face-card pass). She is the one legendary that is pure DOWNSIDE today, and an
+  // of-a-kind reward has to be a reward — so the ladder gives her an upside instead of making
+  // the curse worse. Straight out of the card game she comes from: you pass the Black Lady
+  // along. FIELD her with her sisters and it is the ENEMY who bleeds to the house each round;
+  // at quads that doubles and you stop paying house tax altogether, which is what "shooting
+  // the moon" means — take every penalty card and the penalty reverses onto everyone else.
+  //
+  // The HELD penalty stays flat 10 at every rung, on purpose. Scaling it would need a second
+  // definition of "of a kind" counted off your HAND rather than the poker pool — the pool has
+  // never contained hand cards — and an undocumented divergence there is exactly the kind of
+  // thing that rots. The curse doesn't scale; only the way out of it does.
   "spades-12": {
     name: "Queen of Spades",
-    abilities: [{ kind: "houseTax", penalty: 10, undiscardable: true }],
+    abilities: [{ kind: "houseTax", penalty: 10, undiscardable: true,
+      tiers: {
+        1: {},
+        2: { enemyPenalty: 10 },
+        3: { enemyPenalty: 18 },
+        // The quads bleed is written out as the FINAL number rather than as "18, doubled".
+        // A doubling rule would have to be applied by blackLadyDrain AND restated by the
+        // tooltip writer, which is two places to change one number — exactly the drift this
+        // file's split from abilitytext.js exists to prevent. `shootTheMoon` therefore means
+        // one thing only: her owner stops paying house tax.
+        4: { enemyPenalty: 36, shootTheMoon: true },
+      } }],
     blurb: "The Black Lady — you can't discard her; play her or bleed 10 chips a round to the house",
   },
 
@@ -652,9 +687,19 @@ const UNIQUE_CARDS = {
   // Enemy-side only, read by isSuitExtinguished in teamSynergyEffects. She only needs
   // to be FIELDED at round start (synergies bake before combat), so she needn't
   // survive. A hard counter: brutal vs that archetype, dead if they don't run it.
+  // OF-A-KIND (face-card pass): one more enemy suit goes dark per rung. Deliberately
+  // MONOTONE — the plan's first draft repeated ♥ at the pair, which would have made the
+  // second Queen do literally nothing and left the pair the dead decision this whole pass
+  // exists to fix. Rung 1 is the shipped single suit, so a lone Heartbreaker is unchanged.
   "diamonds-12": {
     name: "Queen of Diamonds",
-    abilities: [{ kind: "extinguish", suit: "hearts" }],
+    abilities: [{ kind: "extinguish", suit: "hearts",
+      tiers: {
+        1: { suits: ["hearts"] },
+        2: { suits: ["hearts", "diamonds"] },
+        3: { suits: ["hearts", "diamonds", "clubs"] },
+        4: { suits: ["hearts", "diamonds", "clubs", "spades"] },
+      } }],
     blurb: "Heartbreaker — shuts off the enemy's ♥ heart synergy (their team HP buff)",
   },
   // Queen of Clubs — "Cleric": a board-wide healer (casting Slice 2, Riley 2026-07-15).
@@ -668,8 +713,17 @@ const UNIQUE_CARDS = {
   "clubs-12": {
     name: "Queen of Clubs",
     abilities: [
+      // OF-A-KIND (face-card pass): the mend climbs, then quads changes its SHAPE — the heal
+      // spills to the allies standing beside the patient, turning a single-target medic into
+      // a field hospital. `splash` is the fraction of the mend each neighbour receives.
       { kind: "cleric", name: "Cleric", cast: true, castTargeting: "ally",
-        manaMax: 60, manaPerAttack: 20, castRange: COLS + ROWS, healPower: 5.0, attackMult: 0.4 },
+        manaMax: 60, manaPerAttack: 20, castRange: COLS + ROWS, healPower: 5.0, attackMult: 0.4,
+        tiers: {
+          1: { healPower: 5.0 },
+          2: { healPower: 7.0 },
+          3: { healPower: 9.5 },
+          4: { healPower: 13.0, splash: 0.5 },
+        } },
     ],
     blurb: "Cleric — a board-wide HEALER who mends her most-wounded ally each cast (she hits soft to pay for it)",
   },

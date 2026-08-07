@@ -68,13 +68,30 @@ function finishRound(winner) {
   // houseTax card) at round end is bled to the house. Clamped so chips never go
   // negative; applies to BOTH sides and recurs each round she's held. Runs after the
   // win/steal math so the results banner can tack the tax note on the end.
+  //
+  // OF-A-KIND (face-card pass): from a pair she also works in REVERSE once FIELDED — the
+  // enemy bleeds instead, and at quads ("shooting the moon") that doubles and her owner
+  // stops paying the house at all. Both directions drain to `house`, the same neutral sink
+  // the held penalty always used, so nothing is minted and no stack can go negative.
   let taxNote = "";
   ["player1", "player2"].forEach(function (team) {
-    const owed = Math.min(handTax(team), chips[team]);
+    const enemy = (team === "player1") ? "player2" : "player1";
+
+    const owed = houseTaxImmune(team) ? 0 : Math.min(handTax(team), chips[team]);
     if (owed > 0) {
       chips[team] = chips[team] - owed;
       house = house + owed;
       taxNote += "  ♠Q " + label(team) + " bled " + owed + " chips to the house!";
+    }
+
+    // Passing the Black Lady along. Reads `team`'s FIELDED queens and bills the enemy —
+    // clamped at the enemy's stack for the same reason the held penalty is clamped.
+    const passed = Math.min(blackLadyDrain(team), chips[enemy]);
+    if (passed > 0) {
+      chips[enemy] = chips[enemy] - passed;
+      house = house + passed;
+      taxNote += "  ♠Q " + label(team) + " passes the Black Lady — " + label(enemy) +
+                 " bleeds " + passed + " chips to the house!";
     }
   });
   turnStatus.textContent = turnStatus.textContent + taxNote;

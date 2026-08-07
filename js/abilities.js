@@ -837,12 +837,30 @@ const ABILITIES = {
       if (ability.attackMult !== undefined) {
         unit.attack = Math.round(unit.attack * ability.attackMult);
       }
+      // OF-A-KIND (face-card pass): a stronger mend each rung, and at quads it spills to
+      // whoever is standing beside the patient.
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.clericHeal = t.healPower;
+      unit.clericSplash = t.splash || 0;
     },
     onCast: function (unit, ctx, ability) {
       const target = ctx.target;
       if (!target) return;
-      const amount = Math.round(unit.attack * (ability.healPower || 1));
+      const power = (unit.clericHeal !== undefined) ? unit.clericHeal : (ability.healPower || 1);
+      const amount = Math.round(unit.attack * power);
       heal(unit, target, amount);
+
+      // The quads spill. Centred on the PATIENT, not on her — she heals across the whole
+      // board, so the wounded ally she just mended is usually far away from her, and the
+      // cluster that matters is the one around them.
+      const splash = unit.clericSplash || 0;
+      if (splash <= 0) return;
+      const spill = Math.round(amount * splash);
+      const near = alliesNearCell(unit.team, target.x, target.y, 1);
+      for (let i = 0; i < near.length; i++) {
+        if (near[i] !== target) heal(unit, near[i], spill);
+      }
     },
   },
 
@@ -1229,7 +1247,16 @@ const ABILITIES = {
   // King of Hearts lives, the damage pipeline (royalSink, read in attackTarget)
   // reroutes every hit she'd take onto him. Listed here so the ability is a real
   // kit and shows in tooltips; the redirect itself lives in the engine.
-  royalGuard: {},
+  royalGuard: {
+    // OF-A-KIND (face-card pass): at quads the redirect accepts ANY King on her team, not
+    // just her own suit's. Baked onto HER, because royalSink is handed the target — the
+    // unit being hit — and has nothing else to read the rung from. It also runs on every
+    // single incoming hit, which is why this is a stamp and not a packCount call.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      unit.royalSinkAnySuit = !!ability.tiers[Math.min(packCount(unit), 4)].anyRoyalSink;
+    },
+  },
 
   // King of Hearts — Royal Vow: on HIS death, grant his Queen of Hearts partner a
   // window of invulnerability (an invulnUntil tick-stamp the engine respects). The
@@ -1270,10 +1297,20 @@ const ABILITIES = {
   // of HER own max HP. Pairs with her Royal Guard: his body already soaks the hits SHE'd take, and
   // now she keeps that body shielded. Fizzles if her King isn't alive/fielded. castTargeting "self".
   shieldPartner: {
+    // OF-A-KIND (face-card pass): a fatter shield each rung, and from TRIPS she'll vow to
+    // any King on the team rather than only her own. Baked once — a sister Queen dying
+    // mid-fight must not shrink the vow the survivor is still casting.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.aegisFrac = t.shieldFrac;
+      unit.aegisAnySuit = !!t.anyRoyalCast;
+    },
     onCast: function (unit, ctx, ability) {
-      const partner = livingPartner(unit, ability.partnerRank);
+      const partner = livingPartner(unit, ability.partnerRank, unit.aegisAnySuit);
       if (!partner) return;
-      const banked = Math.round(unit.maxHp * (ability.shieldFrac || 0.15));
+      const frac = (unit.aegisFrac !== undefined) ? unit.aegisFrac : (ability.shieldFrac || 0.15);
+      const banked = Math.round(unit.maxHp * frac);
       emitAbilityShape(unit, "shieldPartner", "tether", { x: partner.x, y: partner.y, hasTarget: true });
       partner.shield = (partner.shield || 0) + banked;
       emitFx("shield", { x: partner.x, y: partner.y, amount: banked });
@@ -1586,7 +1623,9 @@ function royalSink(target) {
   const list = target.abilities || [];
   for (let i = 0; i < list.length; i++) {
     if (list[i].kind === "royalGuard") {
-      const guardian = livingPartner(target, list[i].partnerRank);
+      // `royalSinkAnySuit` is the quads rung, baked at round start. Undefined for a lone or
+      // paired Queen, which livingPartner reads as "same suit only" — today's behavior.
+      const guardian = livingPartner(target, list[i].partnerRank, target.royalSinkAnySuit);
       if (guardian) return guardian;
     }
   }
@@ -1596,6 +1635,14 @@ function royalSink(target) {
 // Total chips `team` owes the house right now for "detrimental to hold" cards still
 // in its HAND (Queen of Spades' houseTax). Reads each card's unique, so it's fully
 // data-driven and stacks (2 decks = up to two Black Ladies = double the bite).
+//
+// This SUMS per card while blackLadyDrain takes its best rung once, and the difference is
+// deliberate rather than an oversight: these are two different quantities. The held penalty
+// is a per-card cost — every Black Lady clogging your hand charges you her own 10, which is
+// why four of them hurt four times as much. The drain is the of-a-kind LADDER, and a tier
+// table already prices the extra copies. The held penalty is also flat at every rung on
+// purpose: scaling it would need a count taken off your HAND, and the poker pool has never
+// contained hand cards, so it would mean a second definition of "of a kind".
 function handTax(team) {
   let total = 0;
   const hand = hands[team] || [];
@@ -1608,6 +1655,51 @@ function handTax(team) {
     }
   }
   return total;
+}
+
+// OF-A-KIND (face-card pass) — the Black Lady's FIELDED reversal. Every houseTax card
+// `team` played this round is read at its rung; from a pair she stops being a cost you
+// carry and becomes one you hand over, and the ENEMY bleeds this many chips to the house
+// each round. The quads rung simply carries a bigger number; `shootTheMoon` is a separate
+// flag meaning only "her owner pays no house tax" (see houseTaxImmune).
+//
+// Best rung once, never summed: the tier table already prices the extra Queens, exactly
+// as with the Bower and the Highwayman. Counted off the FROZEN roundPool, because this
+// resolves in finishRound after the death filter has eaten the live one.
+function blackLadyDrain(team) {
+  let best = 0;
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    const uniq = uniqueOf(cards[i]);
+    if (!uniq) continue;
+    const list = uniq.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      const a = list[j];
+      if (a.kind !== "houseTax" || !a.tiers) continue;
+      const t = a.tiers[Math.min(packCountForRank(team, cards[i].rank, roundPool[team]), 4)];
+      best = Math.max(best, t.enemyPenalty || 0);
+    }
+  }
+  return best;
+}
+
+// Shooting the moon: with a quad Black Lady FIELDED, `team` pays the house nothing at all
+// — including for any other houseTax card still sitting in its hand. That is the whole
+// point of the phrase: take every penalty card and the penalty stops being yours.
+function houseTaxImmune(team) {
+  const cards = played[team] || [];
+  for (let i = 0; i < cards.length; i++) {
+    const uniq = uniqueOf(cards[i]);
+    if (!uniq) continue;
+    const list = uniq.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      const a = list[j];
+      if (a.kind !== "houseTax" || !a.tiers) continue;
+      const t = a.tiers[Math.min(packCountForRank(team, cards[i].rank, roundPool[team]), 4)];
+      if (t.shootTheMoon) return true;
+    }
+  }
+  return false;
 }
 
 // Does `team`'s ENEMY have a fielded queen that extinguishes `suit`? If so, that
