@@ -535,9 +535,26 @@ const UNIQUE_CARDS = {
   "hearts-13": {
     name: "King of Hearts",
     abilities: [
-      { kind: "royalVow", partnerRank: 12, invulnTicks: 4 },
+      // OF-A-KIND (face-card pass): a longer dying breath and a louder order each rung,
+      // then quads turns the Rally from a private bond into a COURT — every royal you
+      // field (ranks 11-14) swings harder, not only his Queen. `buffTicks` stays flat:
+      // it is a duration in ticks (Category B), and stretching the window as well as the
+      // multiplier would compound two things that already multiply each other.
+      { kind: "royalVow", partnerRank: 12, invulnTicks: 4,
+        tiers: {
+          1: { invulnTicks: 4 },
+          2: { invulnTicks: 5 },
+          3: { invulnTicks: 6 },
+          4: { invulnTicks: 8 },
+        } },
       { kind: "attackBuffPartner", name: "Rally", cast: true, castTargeting: "self", partnerRank: 12,
-        manaMax: 80, manaPerAttack: 20, manaStart: 20, mult: 1.5, buffTicks: 6 },
+        manaMax: 80, manaPerAttack: 20, manaStart: 20, mult: 1.5, buffTicks: 6,
+        tiers: {
+          1: { mult: 1.5, buffTicks: 6 },
+          2: { mult: 1.8, buffTicks: 6 },
+          3: { mult: 2.2, buffTicks: 6 },
+          4: { mult: 2.8, buffTicks: 6, allRoyals: true },
+        } },
     ],
     blurb: "Royal Vow — his death makes the Queen untouchable ~1.5s; each cast buffs her attack (+50%, ~3s)",
   },
@@ -547,7 +564,18 @@ const UNIQUE_CARDS = {
   // warlordLevy kit; perCard is the per-card attack bonus (0.10 = +10% each).
   "spades-13": {
     name: "King of Spades",
-    abilities: [{ kind: "warlordLevy", perCard: 0.10 }],
+    // OF-A-KIND (face-card pass): a bigger cut per body, and at quads the levy widens the
+    // BAND it conscripts from — 6s and 7s start counting too. Widening the INPUT rather
+    // than pushing the coefficient higher is the safer top rung on the most explosive
+    // uncapped scaler in the game: it roughly doubles how many cards qualify without
+    // touching how fast each one compounds. `ranks` is read by cardsPlayedIn (state.js).
+    abilities: [{ kind: "warlordLevy", perCard: 0.10,
+      tiers: {
+        1: { perCard: 0.10, ranks: [2, 3, 4, 5] },
+        2: { perCard: 0.14, ranks: [2, 3, 4, 5] },
+        3: { perCard: 0.19, ranks: [2, 3, 4, 5] },
+        4: { perCard: 0.26, ranks: [2, 3, 4, 5, 6, 7] },
+      } }],
     blurb: "Warlord's Levy — +10% attack for every 2-5 card you've played this game",
   },
 
@@ -558,7 +586,20 @@ const UNIQUE_CARDS = {
   // (reads this off fielded units) and resolveStrikes (applies it).
   "clubs-13": {
     name: "King of Clubs",
-    abilities: [{ kind: "airstrike", squares: 3 }],
+    // OF-A-KIND (face-card pass): more marks per rung, then quads makes the FIRST mark
+    // detonate as a 5-cell cross instead of a single square. Deliberately modest — each
+    // zone is only 3x8 = 24 cells and an army is at most 5 bodies, so marks convert to
+    // kills at roughly marks x 5/24. Six marks plus a cross covers 10 of 24 cells, which
+    // is a strong opening; the ladder was NOT taken further because a blind pre-fight
+    // execute that reliably takes half an army stops being an ability and starts being
+    // the whole round. See strikeAllowance for why the copies stopped summing.
+    abilities: [{ kind: "airstrike", squares: 3,
+      tiers: {
+        1: { squares: 3 },
+        2: { squares: 4 },
+        3: { squares: 5 },
+        4: { squares: 6, blastFirst: true },
+      } }],
     blurb: "Airstrike — mark 3 enemy squares; units caught there die before the fight",
   },
 
@@ -570,7 +611,17 @@ const UNIQUE_CARDS = {
   // See the midasKing kit. Balance is deliberately conservative — tune later.
   "diamonds-13": {
     name: "King of Diamonds",
-    abilities: [{ kind: "midasKing", perChip: 0.005, baseline: 100, floor: 0.25 }],
+    // OF-A-KIND (face-card pass): a steeper curve AND a higher floor each rung — more
+    // court means the gold works harder and a broke King is insulated from his own
+    // poverty. Quads plates his HEALTH with the same multiplier, so a chip lead stops
+    // making him merely dangerous and starts making him hard to remove.
+    abilities: [{ kind: "midasKing", perChip: 0.005, baseline: 100, floor: 0.25,
+      tiers: {
+        1: { perChip: 0.005, floor: 0.25 },
+        2: { perChip: 0.008, floor: 0.40 },
+        3: { perChip: 0.012, floor: 0.60 },
+        4: { perChip: 0.018, floor: 0.80, platesHp: true },
+      } }],
     blurb: "Midas King — attack scales with your chip stack (richer = deadlier)",
   },
 

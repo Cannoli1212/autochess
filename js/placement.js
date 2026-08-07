@@ -283,8 +283,10 @@ function playCard(team, index, x, y) {
   // Take the card out of the hand and turn it into a unit on the board.
   hands[team].splice(index, 1);              // remove 1 card at that position
   played[team].push(card);                   // track it as "on the board" this round
-  // King of Spades fuel: tally low cards (ranks 2-5) played across the whole game.
-  if (card.rank >= 2 && card.rank <= 5) weakCardsPlayed[team] = weakCardsPlayed[team] + 1;
+  // King of Spades fuel: tally EVERY card played, by rank, across the whole game. Which
+  // ranks actually feed his Levy is the ability's business (its tier table names them),
+  // not this line's — so widening the band never comes back here.
+  cardsPlayedByRank[team][card.rank] = (cardsPlayedByRank[team][card.rank] || 0) + 1;
   units.push(buildUnit(card, x, y, team));
 
   render();

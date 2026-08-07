@@ -1163,9 +1163,13 @@ const ABILITIES = {
   // already-buffed attack. `perCard` is the balance knob.
   warlordLevy: {
     onRoundStart: function (unit, ctx, ability) {
-      const count = weakCardsPlayed[unit.team] || 0;
+      // OF-A-KIND (face-card pass): the rung sets both the cut per body AND which ranks
+      // count as a body worth levying. Read inline — this ability IS its round-start pass,
+      // so there is no later hook to hand a stamp to.
+      const t = (ability.tiers && ability.tiers[Math.min(packCount(unit), 4)]) || ability;
+      const count = cardsPlayedIn(unit.team, t.ranks || [2, 3, 4, 5]);
       const before = unit.attack;
-      unit.attack = Math.round(unit.attack * (1 + ability.perCard * count));
+      unit.attack = Math.round(unit.attack * (1 + t.perCard * count));
       // Round-start buffs are the sneakiest silent abilities in the game: they finish
       // before you've even looked at the board, so the King just IS stronger and nothing
       // says the cheap bodies you fed him all game are the reason. One ▲ burst at the
@@ -1181,10 +1185,19 @@ const ABILITIES = {
   // round start AFTER synergies, so it multiplies the already-buffed attack.
   midasKing: {
     onRoundStart: function (unit, ctx, ability) {
+      const t = (ability.tiers && ability.tiers[Math.min(packCount(unit), 4)]) || ability;
       const gold = chips[unit.team] || 0;
-      const mult = Math.max(ability.floor, 1 + (gold - ability.baseline) * ability.perChip);
+      const mult = Math.max(t.floor, 1 + (gold - ability.baseline) * t.perChip);
       const before = unit.attack;
       unit.attack = Math.round(unit.attack * mult);
+      // Quads plates his HEALTH with the same multiplier. Applied to hp and maxHp together
+      // so the bar reads full rather than showing him arriving pre-wounded — and only
+      // upward, because Midas swings both ways and a broke King who also started the round
+      // missing most of his health would simply be dead on arrival.
+      if (t.platesHp && mult > 1) {
+        unit.maxHp = Math.round(unit.maxHp * mult);
+        unit.hp = Math.round(unit.hp * mult);
+      }
       // Midas swings BOTH ways — below the baseline he gets weaker. Show the loss too:
       // "my chip lead is making this King" and "my chip deficit is unmaking him" are the
       // same mechanic, and only seeing one of them would teach the wrong lesson.
@@ -1262,9 +1275,18 @@ const ABILITIES = {
   // window of invulnerability (an invulnUntil tick-stamp the engine respects). The
   // window covers ~1.5s — see the hearts-13 config note for the tick math.
   royalVow: {
+    // OF-A-KIND (face-card pass): a longer window per rung. Baked, because the hook that
+    // reads it is onDeath — by which time a sister King dying first must not have changed
+    // what this one's vow is worth.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      unit.vowTicks = ability.tiers[Math.min(packCount(unit), 4)].invulnTicks;
+    },
     onDeath: function (unit, ctx, ability) {
       const partner = livingPartner(unit, ability.partnerRank);
-      if (partner) partner.invulnUntil = tickCount + ability.invulnTicks;
+      if (!partner) return;
+      const ticks = (unit.vowTicks !== undefined) ? unit.vowTicks : ability.invulnTicks;
+      partner.invulnUntil = tickCount + ticks;
     },
   },
 
@@ -1276,7 +1298,34 @@ const ABILITIES = {
   // full bar and finds her via the royal bond (not a nearest-enemy aim). Pairs with her shield cast:
   // she keeps his body alive, he keeps her swings hitting hard.
   attackBuffPartner: {
+    // OF-A-KIND (face-card pass): a louder order per rung, and at quads it stops being a
+    // private bond — every royal on the team answers it.
+    onRoundStart: function (unit, ctx, ability) {
+      if (!ability.tiers) return;
+      const t = ability.tiers[Math.min(packCount(unit), 4)];
+      unit.rallyMult = t.mult;
+      unit.rallyTicks = t.buffTicks;
+      unit.rallyAllRoyals = !!t.allRoyals;
+    },
     onCast: function (unit, ctx, ability) {
+      const mult  = (unit.rallyMult  !== undefined) ? unit.rallyMult  : (ability.mult || 1.5);
+      const ticks = (unit.rallyTicks !== undefined) ? unit.rallyTicks : (ability.buffTicks || 6);
+
+      // The quads court. Every living royal on his team except himself — the King is
+      // giving the order, not taking it. Drawn as a tether to each so the burst of buffs
+      // still reads as one command rather than several unrelated events.
+      if (unit.rallyAllRoyals) {
+        for (let i = 0; i < units.length; i++) {
+          const o = units[i];
+          if (o === unit || o.team !== unit.team || o.hp <= 0) continue;
+          if (o.rank < 11 || o.rank > 14) continue;
+          emitAbilityShape(unit, "attackBuffPartner", "tether", { x: o.x, y: o.y, hasTarget: true });
+          o.atkBuffMult = mult;
+          o.atkBuffUntil = tickCount + ticks;
+        }
+        return;
+      }
+
       const partner = livingPartner(unit, ability.partnerRank);
       if (!partner) return;
       // The royal bond drawn as a line between the two of them. The cast used to show a
@@ -1285,8 +1334,8 @@ const ABILITIES = {
       // The partner is found by the bond, not by ctx.target, so only this handler knows
       // where the other end of the line is.
       emitAbilityShape(unit, "attackBuffPartner", "tether", { x: partner.x, y: partner.y, hasTarget: true });
-      partner.atkBuffMult = ability.mult || 1.5;
-      partner.atkBuffUntil = tickCount + (ability.buffTicks || 6);
+      partner.atkBuffMult = mult;
+      partner.atkBuffUntil = tickCount + ticks;
     },
   },
 
@@ -1791,15 +1840,45 @@ function teamLootSkim(team) {
 // How many enemy squares `team` may mark this round — the sum of `squares` from
 // every Airstrike ability on its FIELDED units (King of Clubs). 0 if it has none,
 // which also voids any marks it made and then removed the King before Round Start.
+// OF-A-KIND (face-card pass) — and note this now takes the BEST RUNG ONCE rather than
+// summing across fielded copies. Summing used to BE the "more Kings, more marks" rule;
+// with a tier table, a second King already lifts every King's rung, so summing on top
+// multiplies the ladder by the number of bodies. Three Kings would have marked 15 of the
+// 24 squares in a zone — about three of a five-unit army dead before the fight starts.
+// Same call as the Bower's `speaker` check and the Highwayman's best-rung loot.
+//
+// The tier is read INLINE, never baked: this runs during placement (for the marking UI)
+// and again from resolveStrikes at Round Start, both BEFORE the onRoundStart hook loop.
+function airstrikeTier(unit, ability) {
+  if (!ability.tiers) return ability;
+  return ability.tiers[Math.min(packCount(unit), 4)];
+}
+
 function strikeAllowance(team) {
-  let total = 0;
+  let best = 0;
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
     if (u.team !== team) continue;
     const list = u.abilities || [];
     for (let j = 0; j < list.length; j++) {
-      if (list[j].kind === "airstrike") total += list[j].squares;
+      if (list[j].kind !== "airstrike") continue;
+      best = Math.max(best, airstrikeTier(u, list[j]).squares || 0);
     }
   }
-  return total;
+  return best;
+}
+
+// Does `team`'s bombardment blow its FIRST mark into a 5-cell cross? The King of Clubs'
+// quads rung — see resolveStrikes, which is the only caller.
+function strikeBlastsFirst(team) {
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u.team !== team) continue;
+    const list = u.abilities || [];
+    for (let j = 0; j < list.length; j++) {
+      if (list[j].kind !== "airstrike") continue;
+      if (airstrikeTier(u, list[j]).blastFirst) return true;
+    }
+  }
+  return false;
 }

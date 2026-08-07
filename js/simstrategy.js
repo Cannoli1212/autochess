@@ -228,7 +228,7 @@ function strategyBattle(stratA, stratB, round, aIsP1) {
   resetRoundStats();
   roundNumber = round;                          // real round → real community size
   armyOverride = size;
-  weakCardsPlayed = { player1: 0, player2: 0 };
+  cardsPlayedByRank = { player1: {}, player2: {} };
   played = { player1: [], player2: [] };
   hands = { player1: [], player2: [] };
   hands[teamA] = strategyDraftHand(stratA, handSize, size, []);

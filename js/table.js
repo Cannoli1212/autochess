@@ -103,7 +103,7 @@ function tableMatch(seatA, seatB, armySizeThisRound, frames, communityRound) {
   resetRoundStats();
   roundNumber = (communityRound === undefined) ? armySizeThisRound : communityRound;
   armyOverride = armySizeThisRound;                // force aiPlaceUnits to place exactly this many units
-  weakCardsPlayed = { player1: 0, player2: 0 };
+  cardsPlayedByRank = { player1: {}, player2: {} };
   played = { player1: [], player2: [] };
   chips = { player1: seatA.chips, player2: seatB.chips };   // seat stacks drive gold abilities
   // Load each seat's JOKERS onto its side, the same way its chips are loaded above, so a

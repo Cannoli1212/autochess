@@ -87,4 +87,12 @@ const FX_KITS = {
   // her King with nothing linking the two. One ⛨ on her as the fight opens at least says
   // whose ability the redirect belongs to.
   royalGuard:        { color: "#ff8a8a", icon: "⛨",  onRoundStart: "pulse" },
+  // K♦/K♠ — both are silent round-start scalers, the sneakiest kind of ability: they
+  // finish before you have looked at the board, so the King just IS bigger and nothing
+  // says your chip lead (or the cheap bodies you have been feeding him) is the reason.
+  // Their kits already emit a ▲/▼ with the number; this names which King did it.
+  midasKing:         { color: "#ffd54f", icon: "💰", onRoundStart: "pulse" },
+  warlordLevy:       { color: "#e8e8e8", icon: "⚔",  onRoundStart: "pulse" },
+  // K♥ — his vow fires on his DEATH, the one moment nobody is looking at him.
+  royalVow:          { color: "#ff8a8a", icon: "✦",  onDeath: "pulse" },
 };

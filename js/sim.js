@@ -80,7 +80,7 @@ function simInstall() {
     units: units, tickCount: tickCount, inCombat: inCombat,
     placementOpen: placementOpen, dmgStats: dmgStats, chips: chips, comps: comps,
     jokers: jokers,
-    weakCardsPlayed: weakCardsPlayed, hands: hands, played: played,
+    cardsPlayedByRank: cardsPlayedByRank, hands: hands, played: played,
     flop: flop, strikeMarks: strikeMarks, traps: traps, roundNumber: roundNumber,
     communityDeck: communityDeck, flopRevealed: flopRevealed,
     armyOverride: armyOverride, jokerUsedThisRound: jokerUsedThisRound,
@@ -111,7 +111,7 @@ function simInstall() {
   // silently skewing both the balance scans and the AI seats' matchups.
   rankGrowth = { player1: {}, player2: {} };
   suitGrowth = { player1: {}, player2: {} };
-  weakCardsPlayed = { player1: 0, player2: 0 };  // neutral: Warlord's Levy adds nothing
+  cardsPlayedByRank = { player1: {}, player2: {} };  // neutral: Warlord's Levy adds nothing
   hands = { player1: [], player2: [] };      // empty bench: Necromancer can't summon
   played = { player1: [], player2: [] };
   flop = [];                                 // no community cards muddy the 1v1
@@ -130,7 +130,7 @@ function simRestore(s) {
   units = s.units; tickCount = s.tickCount; inCombat = s.inCombat;
   placementOpen = s.placementOpen; dmgStats = s.dmgStats; chips = s.chips; comps = s.comps;
   jokers = s.jokers;
-  weakCardsPlayed = s.weakCardsPlayed; hands = s.hands; played = s.played;
+  cardsPlayedByRank = s.cardsPlayedByRank; hands = s.hands; played = s.played;
   flop = s.flop; strikeMarks = s.strikeMarks; traps = s.traps; roundNumber = s.roundNumber;
   communityDeck = s.communityDeck; flopRevealed = s.flopRevealed;
   armyOverride = s.armyOverride; jokerUsedThisRound = s.jokerUsedThisRound;
@@ -220,7 +220,7 @@ function simAIBattle(teamSize) {
   resetRoundStats();
   roundNumber = teamSize;                    // sizes this battle's community deck (communityTarget)
   armyOverride = teamSize;                    // force aiPlaceUnits to place exactly teamSize units
-  weakCardsPlayed = { player1: 0, player2: 0 };
+  cardsPlayedByRank = { player1: {}, player2: {} };
   played = { player1: [], player2: [] };
   hands = { player1: simDraftHand(teamSize + 1), player2: simDraftHand(teamSize + 1) };  // hand = army + 1 (live HAND_SCHEDULE)
 

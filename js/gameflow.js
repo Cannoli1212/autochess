@@ -222,18 +222,29 @@ function resolveStrikes() {
   ["player1", "player2"].forEach(function (team) {
     const enemy = (team === "player1") ? "player2" : "player1";
     const marks = strikeMarks[team].slice(0, strikeAllowance(team));
-    marks.forEach(function (m) {
-      const u = findUnitAt(m.x, m.y);
-      if (u && u.team === enemy) {
+    const blastFirst = strikeBlastsFirst(team);
+    // The King of Clubs' quads rung widens the FIRST mark into a 5-cell cross. Expanded
+    // into cells here rather than inside strikeAllowance because the allowance is a count
+    // the marking UI needs during placement, while this is the shape it takes when it lands.
+    const cellsOf = function (m, idx) {
+      if (!blastFirst || idx !== 0) return [m];
+      return [m, { x: m.x + 1, y: m.y }, { x: m.x - 1, y: m.y },
+                  { x: m.x, y: m.y + 1 }, { x: m.x, y: m.y - 1 }];
+    };
+    marks.forEach(function (m, idx) {
+      cellsOf(m, idx).forEach(function (c) {
+        const u = findUnitAt(c.x, c.y);
+        if (u && u.team === enemy) {
         // Airstrike kills happen HERE, outside combatStep — which is why they were the one
         // kind of death in the game that left no ghost. The unit's HP went to zero and the
         // next render simply found an empty square, so a whole unit blinked out of
         // existence with nothing to say it had been bombed. Emit the same death event
         // combatStep does, so a struck unit topples and sinks like any other.
-        emitFx("death", { x: u.x, y: u.y, uid: u.uid, suit: u.suit, rank: u.rank, fused: u.fused, card: u.card });
-        u.hp = 0;
-        killed = killed + 1;
-      }
+          emitFx("death", { x: u.x, y: u.y, uid: u.uid, suit: u.suit, rank: u.rank, fused: u.fused, card: u.card });
+          u.hp = 0;
+          killed = killed + 1;
+        }
+      });
     });
   });
   if (killed > 0) units = units.filter(function (u) { return u.hp > 0; });
@@ -267,7 +278,7 @@ function startRound() {
     comps.player2 = seats[opponentSeat].comps;
     jokers.player2 = seats[opponentSeat].jokers;
     renderJokers();
-    weakCardsPlayed.player2 = 0;               // fresh opponent each round (your own tally persists)
+    cardsPlayedByRank.player2 = {};               // fresh opponent each round (your own tally persists)
   }
 
   // Part B step 1: if Player 2 is the computer, let the AI place its army now —
@@ -508,7 +519,7 @@ function resetGame() {
   packOffer = null;
   rerollsBought = { player1: 0, player2: 0 };
   house = 0;                                       // the casino's pot empties
-  weakCardsPlayed = { player1: 0, player2: 0 };   // King of Spades' scaling resets
+  cardsPlayedByRank = { player1: {}, player2: {} };   // King of Spades' scaling resets
   resetAllStats();                                 // clear round + session damage totals
   inCombat = false;
   placementOpen = true;

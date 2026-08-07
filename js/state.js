@@ -150,11 +150,25 @@ let rerollsBought = { player1: 0, player2: 0 };
 // don't exist — nothing to return anywhere. Cleared on pick, round change and reset.
 let packOffer = null;
 
-// Cumulative count of LOW cards (ranks 2-5) each team has PLAYED this game. Bumped
-// in playCard, never decremented, reset only on a new game (resetGame). Drives the
-// King of Spades' uncapped attack scaling — the more cheap bodies you've fielded
-// all game, the harder the King hits.
-let weakCardsPlayed = { player1: 0, player2: 0 };
+// Cumulative tally of every card each team has PLAYED this game, keyed by RANK:
+// { player1: { 2: 3, 7: 1, ... }, ... }. Bumped in playCard, never decremented, reset
+// only on a new game (resetGame). Drives the King of Spades' uncapped attack scaling —
+// the more cheap bodies you've fielded all game, the harder the King hits.
+//
+// It counts PER RANK rather than keeping one "cards of rank 2-5" total (which is all it
+// was until the face-card pass) because the Warlord's Levy now names the band it feeds
+// on in its tier table — his quads rung conscripts 6s and 7s as well. A second parallel
+// counter for the wider band would have meant two things to reset in seven places and
+// two ideas where there is really only one: what have I played, and how much of it.
+let cardsPlayedByRank = { player1: {}, player2: {} };
+
+// How many cards of the given RANKS `team` has played all game — the Levy's fuel gauge.
+function cardsPlayedIn(team, ranks) {
+  const tally = cardsPlayedByRank[team] || {};
+  let n = 0;
+  for (let i = 0; i < ranks.length; i++) n = n + (tally[ranks[i]] || 0);
+  return n;
+}
 
 // The "house" pot — a neutral chip sink (the casino). The Queen of Spades (Hearts'
 // Black Lady) bleeds chips here when a player ends a round still holding her. Only
